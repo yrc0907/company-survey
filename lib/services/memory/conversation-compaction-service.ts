@@ -112,7 +112,11 @@ export class ConversationCompactionService {
           : "summary_failed";
       // failed 检查点不能引用尚未原子提交的 summary；否则 PostgreSQL 外键会掩盖原始错误并留下 started 锁。
       checkpoint = { ...checkpoint, summaryId: null, tokenAfter: null, status: "failed", failureCode, completedAt: new Date().toISOString() };
-      await this.repository.updateCheckpoint(checkpoint);
+      try {
+        await this.repository.updateCheckpoint(checkpoint);
+      } catch {
+        // 数据库不可用时保留原始 Provider/事务错误；下一次压缩会按租期回收遗留 started 检查点。
+      }
       throw error;
     }
   }
