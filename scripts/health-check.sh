@@ -68,15 +68,21 @@ echo "PASS app internal /api/healthz"
 "${compose[@]}" exec -T postgres sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null
 echo "PASS postgres pg_isready"
 
-# Compose 只允许 app 通过 expose 提供 3000，PostgreSQL 不应发布 5432。
-if [[ -n "$("${compose[@]}" port app 3000 2>/dev/null || true)" ]]; then
-  echo "FAIL app: 3000 被发布到宿主机" >&2
-  exit 1
-fi
-if [[ -n "$("${compose[@]}" port postgres 5432 2>/dev/null || true)" ]]; then
-  echo "FAIL postgres: 5432 被发布到宿主机" >&2
-  exit 1
-fi
+# Compose 的 `port` 在部分版本会把 expose 误当成可发布端口；这里读取
+# Docker 容器真正的 HostConfig.PortBindings，只要存在 HostPort 才算对公网发布。
+assert_private_port() {
+  # 输入 Compose 服务名和容器端口，确保没有宿主机映射；只读 Docker 元数据。
+  local service="$1" container_port="$2" container published
+  container="$("${compose[@]}" ps -q "$service")"
+  published="$(docker inspect --format '{{json .HostConfig.PortBindings}}' "$container" | grep -Eo "\"${container_port}/(tcp|udp)\"" || true)"
+  if [[ -n "$published" ]]; then
+    echo "FAIL $service: $container_port 被发布到宿主机 ($published)" >&2
+    exit 1
+  fi
+}
+
+assert_private_port app 3000
+assert_private_port postgres 5432
 echo "PASS private ports: app 3000/postgres 5432 未发布"
 
 if [[ "$SKIP_EXTERNAL" == "true" ]]; then
