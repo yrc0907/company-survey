@@ -174,6 +174,47 @@ async function run(): Promise<void> {
   assert.ok(statements.some((statement) => statement.startsWith("INSERT INTO source")), "PostgreSQL 必须写入来源记录");
   assert.ok(statements.some((statement) => statement.startsWith("INSERT INTO source_chunk")), "PostgreSQL 必须在同一事务写入检索 Chunk");
 
+  // PostgreSQL FTS 契约：查询必须在数据库中执行，并把 active/报告范围作为 SQL 边界，而不是拉全量快照后再评分。
+  const ftsStatements: Array<{ query: string; parameters: readonly unknown[] }> = [];
+  const ftsSql = {
+    unsafe: async (query: string, parameters: readonly unknown[] = []) => {
+      ftsStatements.push({ query, parameters });
+      return [{ chunk_id: "chunk-plan-cross-border", source_id: "source-plan", lexical_score: "0.75" }];
+    },
+  } as unknown as Sql;
+  const ftsRepository = new PostgresResearchRepository(ftsSql);
+  const ftsRows = await ftsRepository.searchSourceChunks("跨境电商", { reportId: report.id, limit: 12 });
+  assert.deepEqual(ftsRows, [{ chunkId: "chunk-plan-cross-border", sourceId: "source-plan", lexicalScore: 0.75 }], "PostgreSQL FTS 行应映射为稳定的领域结果");
+  assert.equal(ftsStatements.length, 1, "一次 PostgreSQL FTS 检索只能执行一条参数化查询");
+  assert.match(ftsStatements[0]!.query, /to_tsvector\('simple'/, "FTS 必须构造 to_tsvector");
+  assert.match(ftsStatements[0]!.query, /plainto_tsquery\('simple', \$1\)/, "FTS 必须使用参数化 plainto_tsquery");
+  assert.match(ftsStatements[0]!.query, /source_record\.state = 'active'/, "FTS 必须在 SQL 内过滤 active 来源");
+  assert.match(ftsStatements[0]!.query, /source_record\.report_id = \$2/, "FTS 必须在 SQL 内限制报告范围");
+  assert.deepEqual(ftsStatements[0]!.parameters, ["跨境电商", report.id, 12], "查询词、报告 ID 和上限必须作为参数传入");
+
+  // SearchService 必须消费仓储 FTS 排名，并向调用方公开真实词法执行状态。
+  const ftsSearchSnapshot = createDemoSnapshot();
+  const ftsSearchRepository: ResearchRepository = {
+    getSnapshot: async () => structuredClone(ftsSearchSnapshot),
+    getReport: async (reportId) => ftsSearchSnapshot.reports.find((item) => item.id === reportId) ?? null,
+    createReport: async () => undefined,
+    saveReport: async () => undefined,
+    createTextSource: async () => undefined,
+    searchSourceChunks: async () => [{ chunkId: "chunk-plan-cross-border", sourceId: "source-plan", lexicalScore: 0.9 }],
+    health: async () => ({ ok: true, persistence: "postgres" }),
+  };
+  const ftsSearchHits = await new SearchService(ftsSearchRepository).search("跨境电商", { reportId: report.id, limit: 1 });
+  assert.equal(ftsSearchHits[0]?.lexical.status, "completed", "SearchService 应公开 PostgreSQL FTS 已完成状态");
+  assert.equal(ftsSearchHits[0]?.lexical.provider, "postgres_fts", "SearchService 应标记 PostgreSQL FTS Provider");
+  const failingFtsRepository: ResearchRepository = {
+    ...ftsSearchRepository,
+    searchSourceChunks: async () => { throw new Error("simulated FTS outage"); },
+  };
+  const degradedFtsHits = await new SearchService(failingFtsRepository).search("跨境电商", { reportId: report.id, limit: 1 });
+  assert.ok(degradedFtsHits.length > 0, "FTS 故障时必须保留确定性关键词结果");
+  assert.equal(degradedFtsHits[0]?.lexical.status, "degraded", "FTS 故障必须公开降级状态");
+  assert.equal(degradedFtsHits[0]?.lexical.provider, "keyword_fallback", "FTS 故障必须标记关键词降级 Provider");
+
   const healthStatements: string[] = [];
   const healthSql = Object.assign(
     async (strings: TemplateStringsArray) => {

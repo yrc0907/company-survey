@@ -174,6 +174,8 @@ export interface SearchHit {
   score: number;
   parentSection: ReportSection | null;
   adjacentChunks: SourceChunk[];
+  /** 词法召回的实际执行路径；degraded 表示本次未使用 PostgreSQL FTS。 */
+  lexical: { status: "completed" | "degraded"; provider: "postgres_fts" | "keyword_fallback"; reason: string | null };
   /** 当前请求的精排状态；degraded 表示保留 FTS/RRF 既有顺序，绝不伪称模型已精排。 */
   rerank: { status: "completed" | "degraded"; model: string | null; reason: string | null };
   /** dense=degraded 表示本次未使用语义结果，不能被 UI 或回答层误认为混合检索成功。 */

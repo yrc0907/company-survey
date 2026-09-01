@@ -87,7 +87,7 @@
 | 报告编辑 | 标题、目录、引用、结论标记和全文预览 | 章节编辑、目录、已有引用和结论状态已实现；非 Markdown 渲染 |
 | 来源导入 | URL、PDF、图片、粘贴文本均生成来源记录和解析状态 | 仅粘贴文本已实现：限制标题/正文、保存哈希/偏移/Chunk；URL/PDF/图片待实现 |
 | 多模态解析 | 文本 PDF 提取原生文字；扫描 PDF/图片可渲染页面后交给视觉模型 | 未实现 |
-| 全文检索 | 搜索报告、章节、来源和标签，结果能跳转到具体段落 | 当前为 active 来源的内存关键词评分；PostgreSQL FTS 尚未接入查询路径 |
+| 全文检索 | 搜索报告、章节、来源和标签，结果能跳转到具体段落 | PostgreSQL 模式使用 active 来源的参数化 FTS；内存演示或 FTS 异常时显式降级为确定性关键词评分 |
 | 选区 AI 助手 | AI 读取选中段落及相邻上下文，返回带引用的回答或 Diff | 受限上下文与 Provider 调用已实现；没有程序化引用校验或 Diff 生成 |
 | RAG 问答 | 仅从当前工作区的来源片段检索，并显示引用 | 有检索和证据投影；仅限已有 Chunk，外部模型/回答仍待服务器验收 |
 | 版本与导出 | 保存版本、查看 Diff、回滚、导出 Markdown/PDF | revision 与冲突拒绝已实现；Diff、回滚和导出未实现 |
@@ -129,7 +129,7 @@
   -> GraphRAG-lite + 必要的 RAG 证据
 ```
 
-当前实现尚未执行 PostgreSQL FTS、向量、RRF 或图查询 HTTP 路由：`SearchService` 从 repository 快照读取 Chunk，以关键词分数过滤 `active` 来源；`GraphService` 只在 Context Projection 内做有界 BFS。
+当前实现已执行 PostgreSQL FTS，并在有界范围内与 Dense RRF 融合；pgvector 持久化、向量索引和图查询 HTTP 路由仍未实现。`SearchService` 由仓储在 SQL 内过滤 `active` 来源，再从受限快照映射父章节与相邻 Chunk；`GraphService` 只在 Context Projection 内做有界 BFS。
 
 ### 5.2 关系模型
 

@@ -12,7 +12,7 @@ function queryTerms(rawQuery: string): string[] {
   return Array.from(new Set([normalized, ...normalized.split(/[\s,，。；;、!?！？]+/).filter((item) => item.length >= 2)]));
 }
 
-/** 为全文/关键词检索计算可解释的轻量分数，不假装已经接入向量或重排模型。 */
+/** 为内存演示或 PostgreSQL FTS 异常时计算可解释的轻量分数。 */
 function keywordScore(chunk: SourceChunk, terms: string[]): number {
   const haystack = `${chunk.contextualPrefix}\n${chunk.headingPath.join(" ")}\n${chunk.text}`.toLocaleLowerCase("zh-CN");
   return terms.reduce((score, term, index) => {
@@ -23,7 +23,8 @@ function keywordScore(chunk: SourceChunk, terms: string[]): number {
 }
 
 /**
- * V1 的确定性全文/关键词检索。
+ * 确定性全文检索与有界混合召回。
+ * PostgreSQL 仓储优先在数据库内执行 FTS；内存仓储或 FTS 暂时不可用时保留关键词降级。
  * 只从 active 来源召回，随后返回父章节和相邻片段以实现 Parent Retrieval 的安全子集。
  */
 export class SearchService {
@@ -45,11 +46,34 @@ export class SearchService {
 
     const limit = Math.min(Math.max(options.limit ?? 12, 1), 30);
     const activeChunks = snapshot.chunks.filter((chunk) => sourceMap.has(chunk.sourceId));
-    const keywordRanked = activeChunks
+    const fallbackKeywordRanked = () => activeChunks
       .map((chunk) => ({ chunk, source: sourceMap.get(chunk.sourceId)!, score: keywordScore(chunk, terms) }))
       .filter((candidate) => candidate.score > 0)
-      .sort((left, right) => right.score - left.score || left.chunk.position - right.chunk.position)
+      .sort((left, right) => right.score - left.score || left.chunk.position - right.chunk.position || left.chunk.id.localeCompare(right.chunk.id))
       .map((candidate, index) => ({ ...candidate, keywordRank: index + 1 }));
+
+    // 生产 PostgreSQL 模式由仓储执行参数化 FTS；任何数据库异常都保留确定性本地结果，不能让一次检索故障伪装成“无结果”。
+    let lexical: { status: "completed" | "degraded"; provider: "postgres_fts" | "keyword_fallback"; reason: string | null };
+    let keywordRanked: Array<{ chunk: SourceChunk; source: (typeof sources)[number]; score: number; keywordRank: number }>;
+    if (this.repository.searchSourceChunks) {
+      try {
+        const ftsResults = await this.repository.searchSourceChunks(terms[0]!, { reportId: options.reportId, limit: Math.min(limit * 5, 80) });
+        keywordRanked = ftsResults
+          .map((result, index) => {
+            const chunk = snapshot.chunks.find((item) => item.id === result.chunkId && item.sourceId === result.sourceId);
+            const source = chunk ? sourceMap.get(chunk.sourceId) : undefined;
+            return chunk && source ? { chunk, source, score: result.lexicalScore, keywordRank: index + 1 } : null;
+          })
+          .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null);
+        lexical = { status: "completed", provider: "postgres_fts", reason: null };
+      } catch {
+        keywordRanked = fallbackKeywordRanked();
+        lexical = { status: "degraded", provider: "keyword_fallback", reason: "PostgreSQL FTS 查询失败，已降级为本地关键词评分。" };
+      }
+    } else {
+      keywordRanked = fallbackKeywordRanked();
+      lexical = { status: "degraded", provider: "keyword_fallback", reason: "当前仓储未提供 PostgreSQL FTS，使用本地关键词评分。" };
+    }
     const dense = await this.denseRetrieval.rank(query, activeChunks);
 
     // RRF 只融合排名而不比较关键词分和余弦分。若 Dense 降级，候选仍来自确定性关键词排序。
@@ -82,6 +106,7 @@ export class SearchService {
       .map((candidate) => ({
         ...candidate.candidate,
         score: candidate.score,
+        lexical,
         parentSection: candidate.candidate.chunk.parentSectionId ? snapshot.sections.find((section) => section.id === candidate.candidate.chunk.parentSectionId) ?? null : null,
         adjacentChunks: (chunksBySource.get(candidate.candidate.chunk.sourceId) ?? []).filter((item) => Math.abs(item.position - candidate.candidate.chunk.position) === 1),
         rerank: { status: rerank.status, model: rerank.model, reason: rerank.reason },

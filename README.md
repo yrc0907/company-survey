@@ -12,7 +12,7 @@
 - 报告创建/保存 API，带输入校验、事务和乐观锁冲突拒绝；
 - 当前报告的手动文本资料导入：标题/正文校验、SHA-256、`active` 来源、连续 Chunk、PostgreSQL 原子写入和 memory_demo 明确拒绝；
 - PostgreSQL schema/repository、真实数据库健康检查，以及与其同接口的内存演示 repository；
-- 基于 active 来源的关键词 + 有界 Dense RRF 检索，返回父章节、相邻 Chunk 和显式降级状态；
+- 基于 active 来源的 PostgreSQL FTS + 有界 Dense RRF 检索，返回父章节、相邻 Chunk 和显式词法/语义降级状态；无 PostgreSQL FTS 的内存演示仍使用确定性关键词降级；
 - 有界 GraphRAG-lite 查询：关系边必须来自 active 来源，深度与返回路径数受限；
 - Context Projection：选区只传选区，检索问题只传当前报告的精简证据和规则；
 - 模型未配置或请求失败时显式降级，不伪造回答；
@@ -21,7 +21,7 @@
 尚未实现或未验证：
 
 - URL/PDF/图片导入、文件上传、PDF/视觉解析、来源刷新和变化检测；手动文本是当前唯一支持的导入类型；
-- 真正的 PostgreSQL FTS 查询、pgvector 持久化/ANN、检索评测；远程 Embedding、Dense RRF 与 Rerank 已有有界运行时实现；
+- pgvector 持久化/ANN、检索评测；远程 Embedding、Dense RRF 与 Rerank 已有有界运行时实现，PostgreSQL FTS 查询已接入；
 - 企业 CRUD、图谱写入/API/UI、版本 Diff/回滚、Markdown/PDF 导出；
 - 应用内会话认证已实现；旧版 Research API 仍依赖 Caddy Basic Auth，公开平台写操作依赖 Auth.js/RBAC；
 - 备份/发布/健康检查脚本和安全组只读计划已加入；异机恢复、磁盘/流量告警、SSH/RDP 安全组收紧，以及 ESA/ICP 公网 HTTPS 验收仍待人工变更和复跑。
@@ -31,7 +31,7 @@
 - 报告、来源、Chunk、引用、关系和版本是结构化记录；AI 只能在受限证据上下文中回答或提出建议。
 - 外部网页、PDF、图片和模型输出均是不可信输入，不能变成系统指令。
 - AI 不会直接写报告。用户确认的保存请求才会创建一个新的 `report_revision`。
-- `source_chunk_text_fts_idx` 已在 schema 中定义，但现有搜索服务尚未执行 PostgreSQL FTS；它在最多 48 个 active Chunk 的明确边界内执行远程 Dense + RRF，超限或 Provider 故障时返回 `degraded`，不能声称已经有生产级混合 RAG。
+- `source_chunk_contextual_fts_idx` 为正文、上下文前缀和标题路径建立 GIN 索引；PostgreSQL 模式由仓储执行参数化 `to_tsvector`/`plainto_tsquery`，只过滤 `active` 来源和指定报告。FTS 查询异常或内存演示仓储未提供该能力时，SearchService 返回确定性关键词降级状态；它仍在最多 48 个 active Chunk 的明确边界内执行远程 Dense + RRF，不能声称已经有生产级持久化混合 RAG。
 - BGE-M3 是本机 GPU 的可选离线 embedding worker。线上 2C2G 服务器不运行任何本地模型，只存向量、查询数据库并调用外部 API。
 
 ## 远程模型与检索配置

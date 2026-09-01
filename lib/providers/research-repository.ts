@@ -24,7 +24,19 @@ export interface ResearchRepository {
   createReport(report: Report, sections: ReportSection[], revision: ReportRevision): Promise<void>;
   saveReport(report: Report, sections: ReportSection[], revision: ReportRevision, expectedVersion: number): Promise<void>;
   createTextSource(source: Source, chunks: SourceChunk[]): Promise<void>;
+  /**
+   * 通过 PostgreSQL FTS 召回候选 Chunk；未实现该可选能力的仓储由领域服务确定性降级。
+   * 方法只返回 Chunk/来源 ID 与数据库词法分数，权限和 active 过滤必须在 SQL 内完成。
+   */
+  searchSourceChunks?(query: string, options: { reportId?: string; limit: number }): Promise<SourceChunkSearchResult[]>;
   health(): Promise<{ ok: boolean; persistence: "memory_demo" | "postgres" }>;
+}
+
+/** PostgreSQL 词法召回的最小结果，正文仍由受限快照映射，避免绕过领域边界泄漏数据。 */
+export interface SourceChunkSearchResult {
+  chunkId: string;
+  sourceId: string;
+  lexicalScore: number;
 }
 
 /** 演示数据的构造函数类型，防止每个请求共享可变对象引用。 */
@@ -244,6 +256,42 @@ export class PostgresResearchRepository implements ResearchRepository {
           VALUES (${chunk.id}, ${chunk.sourceId}, ${chunk.parentSectionId}, ${transaction.array(chunk.headingPath)}::text[], ${chunk.position}, ${chunk.page}, ${chunk.startOffset}, ${chunk.endOffset}, ${chunk.text}, ${chunk.contextualPrefix}, ${chunk.contentHash})`;
       }
     });
+  }
+
+  /**
+   * PostgreSQL `to_tsvector` + `plainto_tsquery` 词法检索。
+   * SQL 先过滤 active 来源和报告范围，再计算排名；参数化查询避免把查询词当作 SQL 片段。
+   * contextual_prefix 与 heading_path 纳入表达式索引，使上下文检索能力不退化为只查正文。
+   */
+  public async searchSourceChunks(query: string, options: { reportId?: string; limit: number }): Promise<SourceChunkSearchResult[]> {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) return [];
+    const boundedLimit = Math.min(Math.max(Math.trunc(options.limit), 1), 80);
+    const vectorExpression = "to_tsvector('simple', coalesce(chunk.text, '') || ' ' || coalesce(chunk.contextual_prefix, '') || ' ' || coalesce(array_to_string(chunk.heading_path, ' '), ''))";
+    const rows = options.reportId
+      ? await this.sql.unsafe<DatabaseRow[]>(`SELECT chunk.id AS chunk_id, chunk.source_id AS source_id,
+          ts_rank_cd(${vectorExpression}, plainto_tsquery('simple', $1)) AS lexical_score
+        FROM source_chunk AS chunk
+        JOIN source AS source_record ON source_record.id = chunk.source_id
+        WHERE source_record.state = 'active'
+          AND source_record.report_id = $2
+          AND ${vectorExpression} @@ plainto_tsquery('simple', $1)
+        ORDER BY lexical_score DESC, chunk.position ASC, chunk.id ASC
+        LIMIT $3`, [normalizedQuery, options.reportId, boundedLimit])
+      : await this.sql.unsafe<DatabaseRow[]>(`SELECT chunk.id AS chunk_id, chunk.source_id AS source_id,
+          ts_rank_cd(${vectorExpression}, plainto_tsquery('simple', $1)) AS lexical_score
+        FROM source_chunk AS chunk
+        JOIN source AS source_record ON source_record.id = chunk.source_id
+        WHERE source_record.state = 'active'
+          AND ${vectorExpression} @@ plainto_tsquery('simple', $1)
+        ORDER BY lexical_score DESC, chunk.position ASC, chunk.id ASC
+        LIMIT $2`, [normalizedQuery, boundedLimit]);
+
+    return rows.map((row) => ({
+      chunkId: String(row.chunk_id),
+      sourceId: String(row.source_id),
+      lexicalScore: Number(row.lexical_score) || 0,
+    }));
   }
 
   /** 真实数据库健康检查，不能只根据环境变量声称 PostgreSQL 可用。 */

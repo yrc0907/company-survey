@@ -89,7 +89,7 @@
 
 ## 3. 当前检索、GraphRAG-lite 与上下文
 
-- [~] PostgreSQL schema 已创建 FTS GIN 索引；`SearchService` 当前仍读取快照并做确定性关键词评分，未执行 PostgreSQL FTS 查询
+- [x] PostgreSQL schema 已创建正文/上下文 FTS GIN 索引；Postgres `SearchService` 通过仓储执行参数化 `to_tsvector`/`plainto_tsquery`，仅召回 `active` 来源并限制报告；异常时公开确定性关键词降级
 - [x] Parent Retrieval：搜索命中携带父章节和相邻 Chunk
 - [x] `contextual_prefix` 已进入领域模型、演示数据、关键词评分和手动文本导入；URL/PDF/图片导入时的上下文生成待实现
 - [~] `entity`/`relation_edge` schema 与有界 BFS 查询已实现；没有图谱写入、HTTP API、跨报告查询或图谱 UI
@@ -102,7 +102,7 @@
 
 - [~] 已实现最多 48 个 active Chunk 的远程 `gemini-embedding-2-preview` 临时 Dense 召回、余弦排名与 RRF；pgvector 持久化向量、模型版本、维度和文本哈希仍待实现
 - [ ] 加入 pgvector 扩展、向量字段和索引迁移；文本、上下文前缀、模型或维度变化后使旧向量失效并重建
-- [~] 当前内存快照可执行关键词 + Dense RRF；PostgreSQL FTS SQL 与 pgvector 并行召回、持久化缓存、ANN 索引仍待实现
+- [~] 当前内存快照可执行关键词 + Dense RRF；PostgreSQL FTS SQL 已与 Dense RRF 并行召回，pgvector 持久化缓存和 ANN 索引仍待实现
 - [x] 接入 `qwen3-rerank`：`429`、超时或 `5xx` 时依次尝试 `Pro/BAAI/bge-reranker-v2-m3`、`BAAI/bge-reranker-v2-m3`；均失败时确定性跳过重排
 - [x] 检测本机 GPU、CUDA、显存和 BGE-M3 权重，创建 `device=auto`、CUDA fp16、CPU 离线回退、仅 loopback 的 Embedding Worker；当前缓存仅有 refs 指针，未加载权重
 - [ ] BGE-M3 只在本机 GPU 作为可选离线 Worker 运行；线上 2C2G 服务器绝不加载模型权重，只保存向量、查询 PostgreSQL/pgvector 并调用外部 API
