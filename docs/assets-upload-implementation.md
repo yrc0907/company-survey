@@ -24,6 +24,8 @@ x-oss-meta-sha256: <预期 SHA-256>
 
 用户配额默认 500 MiB，可由 `PLATFORM_UPLOAD_USER_QUOTA_BYTES` 调整。相同用户、项目和 SHA 的未失败对象幂等返回，不重复创建对象或解析任务。
 
+首次启用浏览器直传前，Bucket CORS 需要允许实际站点 Origin（不要填 `*`）、方法 `PUT`/`GET`/`HEAD`、请求头 `Content-Type` 与 `x-oss-meta-sha256`，并暴露响应头 `ETag`。CORS 只控制浏览器跨域，不会改变 Bucket 私有读写权限；未配置 `ExposeHeader: ETag` 时前端会在上传后明确提示配置，而不是把对象误报为已确认。
+
 ### `POST /api/platform/uploads/{assetId}`
 
 直传完成后提交客户端 ETag、大小和 SHA-256。服务端调用私有 OSS `HeadObject`，比较 ETag、Content-Length 和对象 SHA 元数据；若没有可信 SHA 元数据，则流式读取对象重新计算 SHA-256。三项全部通过后，Asset 变为 `verified`，Job 进入 `queued`。

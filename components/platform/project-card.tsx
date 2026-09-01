@@ -39,14 +39,14 @@ export function ProjectCard({ project, onOpen }: ProjectCardProps) {
       <div className="project-list-footer">
         <div className="project-metrics" aria-label="项目统计">
           <span title="按用户或签名访客逐日去重"><BookOpen size={14} aria-hidden="true" />{formatCompactCount(project.uniqueReaders)} 阅读</span>
-          <span><Users size={14} aria-hidden="true" />{project.contributors.length} 贡献者</span>
+          <span><Users size={14} aria-hidden="true" />{project.contributorCount ?? project.contributors.length} 贡献者</span>
           <span><Library size={14} aria-hidden="true" />{project.sourceCount} 来源</span>
           <span><GitPullRequest size={14} aria-hidden="true" />{project.openMergeRequests} 待审核</span>
           <span><Clock3 size={14} aria-hidden="true" />更新 {dateLabel(project.updatedAt)}</span>
         </div>
         <div className="contributor-stack" aria-label={`${project.contributors.length} 位贡献者`}>
           {project.contributors.slice(0, 4).map((user) => <UserAvatar key={user.id} name={user.displayName} size="sm" />)}
-          {project.contributors.length > 4 ? <span className="contributor-more">+{project.contributors.length - 4}</span> : null}
+          {project.contributorCount && project.contributorCount > 4 ? <span className="contributor-more">+{project.contributorCount - 4}</span> : project.contributors.length > 4 ? <span className="contributor-more">+{project.contributors.length - 4}</span> : null}
         </div>
       </div>
       <p className="project-verification-note">{project.verificationNote}</p>

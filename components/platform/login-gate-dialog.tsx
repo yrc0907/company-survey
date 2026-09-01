@@ -21,7 +21,7 @@ const intentCopy: Record<LoginIntent, { title: string; description: string }> = 
 };
 
 function openLogin(intent: LoginIntent): void {
-  const callbackUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const callbackUrl = intent === "upload" ? "/upload" : `${window.location.pathname}${window.location.search}${window.location.hash}`;
   const params = new URLSearchParams({ callbackUrl, intent });
   window.location.assign(`/login?${params.toString()}`);
 }

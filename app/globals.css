@@ -129,6 +129,16 @@
 .search-empty { @apply grid place-items-center gap-1 py-24 text-center text-muted-foreground; }
 .search-empty h2 { @apply m-0 text-base font-semibold text-foreground; }
 .search-empty p { @apply m-0 text-sm; }
+.public-data-notice { @apply mb-4 flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800; }
+.public-data-notice button { @apply rounded border border-amber-300 bg-transparent px-2 py-1 font-medium hover:bg-amber-100; }
+.project-list-loading { @apply grid gap-3 py-8; }
+.project-list-loading p { @apply m-0 text-xs text-muted-foreground; }
+.loading-bar { @apply block h-3 w-full animate-pulse rounded bg-muted; }
+.loading-bar--short { @apply w-2/3; }
+.route-state { @apply grid min-h-screen place-content-center justify-items-center gap-3 bg-background px-6 text-center; }
+.route-state h1 { @apply m-0 text-xl font-semibold; }
+.route-state p { @apply m-0 max-w-md text-sm text-muted-foreground; }
+.route-state--loading { @apply content-center; }
 .discovery-rail { @apply space-y-7; }
 .discovery-rail section { @apply border-b pb-6; }
 .rail-heading { @apply mb-3 flex items-center justify-between text-sm font-semibold; }

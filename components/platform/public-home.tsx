@@ -7,18 +7,22 @@ import { ProjectCard } from "@/components/platform/project-card";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { matchesProjectSearch } from "@/lib/ui/platform-format";
+import { adaptPublicProjects } from "@/lib/ui/platform-api";
 import type { ProjectCategory, SeedProject } from "@/lib/ui/platform-seed";
 
 interface PublicHomeProps {
   projects: SeedProject[];
   onOpenProject: (projectId: string) => void;
   onRequireLogin: (intent: "login" | "create" | "upload") => void;
+  loading?: boolean;
+  error?: string;
+  onRetry?: () => void;
 }
 
 const categories: Array<"全部" | ProjectCategory> = ["全部", "企业", "政策", "行业", "技术"];
 
 /** 公开首页首屏以内容和搜索为主，不使用营销 Hero 或空占位。 */
-export function PublicHome({ projects, onOpenProject, onRequireLogin }: PublicHomeProps) {
+export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = false, error = "", onRetry }: PublicHomeProps) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<(typeof categories)[number]>("全部");
   const [sort, setSort] = useState<"recommended" | "latest" | "read">("recommended");
@@ -81,9 +85,11 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin }: PublicHo
             </div>
             <span>{visibleProjects.length} 个公开项目</span>
           </div>
-          <div className="project-list">
-            {visibleProjects.map((project) => <ProjectCard key={project.id} project={project} onOpen={onOpenProject} />)}
-            {visibleProjects.length === 0 ? <div className="search-empty"><Search size={22} /><h2>没有匹配的公开项目</h2><p>调整关键词或分类后再试。</p></div> : null}
+          {error ? <div className="public-data-notice" role="status"><span>线上项目列表暂时不可用，当前显示首发内容。</span>{onRetry ? <button type="button" onClick={onRetry}>重试</button> : null}</div> : null}
+          {loading ? <div className="project-list-loading" aria-live="polite" aria-busy="true"><span className="loading-bar" /><span className="loading-bar loading-bar--short" /><span className="loading-bar" /><p>正在读取公开项目…</p></div> : null}
+          <div className="project-list" aria-busy={loading}>
+            {!loading && visibleProjects.map((project) => <ProjectCard key={project.id} project={project} onOpen={onOpenProject} />)}
+            {!loading && visibleProjects.length === 0 ? <div className="search-empty"><Search size={22} /><h2>没有匹配的公开项目</h2><p>调整关键词或分类后再试。</p></div> : null}
           </div>
         </section>
 

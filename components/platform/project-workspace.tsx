@@ -1,8 +1,10 @@
 "use client";
 
-import { ArrowLeft, BookOpen, Bot, CheckCircle2, ChevronRight, CircleAlert, Eye, Files, GitBranch, GitPullRequest, History, LogIn, PanelLeftClose, Search, Share2, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ArrowLeft, BookOpen, Bot, CheckCircle2, ChevronRight, CircleAlert, Eye, Files, GitBranch, GitMerge, GitPullRequest, History, Loader2, LogIn, PanelLeftClose, Search, Share2, Users } from "lucide-react";
+import { getSession } from "next-auth/react";
+import { useEffect, useMemo, useState } from "react";
 
+import { CollaborationPanel } from "@/components/platform/collaboration-panel";
 import { AssistantPanel } from "@/components/platform/assistant-panel";
 import { ProjectFileTree } from "@/components/platform/file-tree";
 import { Button } from "@/components/ui/button";
@@ -11,6 +13,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from 
 import type { FileCommandId } from "@/lib/ui/file-commands";
 import type { SeedFileNode, SeedProject, SeedSection } from "@/lib/ui/platform-seed";
 import { formatCompactCount } from "@/lib/ui/platform-format";
+import type { BranchSummary } from "@/lib/domain/collaboration";
 
 interface ProjectWorkspaceProps {
   project: SeedProject;
@@ -79,9 +82,56 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
   const [activeNodeId, setActiveNodeId] = useState("doc-overview");
   const [treeCollapsed, setTreeCollapsed] = useState(false);
   const [activity, setActivity] = useState("");
+  const [activeTab, setActiveTab] = useState<"content" | "changes">("content");
+  const [authenticated, setAuthenticated] = useState(false);
+  const [canReview, setCanReview] = useState(false);
+  const [branches, setBranches] = useState<BranchSummary[]>([]);
+  const [branchLoading, setBranchLoading] = useState(false);
+  const [collaborationError, setCollaborationError] = useState("");
+  const [collaborationRefresh, setCollaborationRefresh] = useState(0);
   const activeNode = useMemo(() => findNode(project.files, activeNodeId), [activeNodeId, project.files]);
 
-  function runFileCommand(command: FileCommandId, node: SeedFileNode | null) {
+  useEffect(() => {
+    let mounted = true;
+    setBranches([]);
+    setCanReview(false);
+    setCollaborationError("");
+    void getSession().then(async (session) => {
+      if (!mounted) return;
+      const loggedIn = Boolean(session?.user?.id);
+      setAuthenticated(loggedIn);
+      if (!loggedIn) return;
+      try {
+        const response = await fetch(`/api/platform/projects/${encodeURIComponent(project.id)}/branches`, { cache: "no-store" });
+        const payload = await response.json() as { branches?: BranchSummary[]; error?: string };
+        if (!response.ok) throw new Error(payload.error ?? "草稿分支暂时无法加载");
+        if (mounted) setBranches(payload.branches ?? []);
+      } catch (error) { if (mounted) setCollaborationError(error instanceof Error ? error.message : "草稿分支暂时无法加载"); }
+      try {
+        const response = await fetch(`/api/platform/account/project-access?projectId=${encodeURIComponent(project.id)}&action=review_merge_request`, { cache: "no-store" });
+        if (mounted) setCanReview(response.ok);
+      } catch { if (mounted) setCanReview(false); }
+    }).catch(() => { if (mounted) setAuthenticated(false); });
+    return () => { mounted = false; };
+  }, [project.id]);
+
+  async function ensureDraftBranch(): Promise<BranchSummary | null> {
+    const existing = branches.find((branch) => !branch.isProtected && branch.ownerUserId);
+    if (existing) return existing;
+    if (!authenticated) { onRequireLogin("contribute"); return null; }
+    setBranchLoading(true); setCollaborationError("");
+    try {
+      const response = await fetch(`/api/platform/projects/${encodeURIComponent(project.id)}/branches`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({}) });
+      const payload = await response.json() as { branch?: BranchSummary; error?: string };
+      if (!response.ok || !payload.branch) throw new Error(payload.error ?? "创建草稿分支失败");
+      setBranches((current) => [...current.filter((branch) => branch.id !== payload.branch!.id), payload.branch!]);
+      setActivity(`已创建草稿分支 ${payload.branch.name}，公开 main 仍保持只读。`);
+      return payload.branch;
+    } catch (error) { setCollaborationError(error instanceof Error ? error.message : "创建草稿分支失败"); return null; }
+    finally { setBranchLoading(false); }
+  }
+
+  async function runFileCommand(command: FileCommandId, node: SeedFileNode | null) {
     if (command === "upload") {
       onRequireLogin("upload");
       return;
@@ -90,17 +140,48 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
       onRequireLogin("contribute");
       return;
     }
-    const localDraftCommands: FileCommandId[] = ["create_document", "create_markdown", "create_folder", "paste_text", "add_web_source", "rename", "move", "duplicate", "trash"];
-    if (localDraftCommands.includes(command)) {
-      setActivity(`“${node?.name ?? project.title}”的${command.replaceAll("_", " ")}将在游客本地草稿中执行；IndexedDB 持久化尚未接入。`);
+    const unsupportedCommands: FileCommandId[] = ["paste_text", "add_web_source"];
+    if (unsupportedCommands.includes(command)) {
+      setActivity("该操作需要内容解析模块；当前先通过上传入口提交文件。");
       return;
     }
-    if (command === "copy_link") {
-      void navigator.clipboard?.writeText(window.location.href);
-      setActivity("项目链接已复制。正式版会生成文件级永久链接。");
-      return;
-    }
-    setActivity(`已选择“${node?.name ?? project.title}”的${command}操作；对应版本视图正在接入。`);
+    const draft = await ensureDraftBranch();
+    if (!draft) return;
+    const commandInput = command === "create_folder" || command === "create_document" || command === "create_markdown"
+      ? { type: "create_node" as const, parentId: node?.kind === "folder" ? node.id : null, kind: command === "create_folder" ? "folder" as const : "document" as const, name: window.prompt("请输入名称", command === "create_folder" ? "新文件夹" : "新文档")?.trim() ?? "" }
+      : command === "rename"
+        ? { type: "rename_node" as const, nodeId: node?.id ?? "", name: window.prompt("请输入新名称", node?.name ?? "")?.trim() ?? "" }
+        : command === "move"
+          ? { type: "move_node" as const, nodeId: node?.id ?? "", parentId: window.prompt("请输入目标文件夹 ID（留空表示根目录）", "")?.trim() || null }
+          : command === "duplicate"
+            ? { type: "duplicate_node" as const, nodeId: node?.id ?? "", parentId: null, name: window.prompt("请输入副本名称", `${node?.name ?? "文档"} 副本`)?.trim() || undefined }
+            : { type: "delete_node" as const, nodeId: node?.id ?? "" };
+    if (!commandInput.name && ["create_node", "rename_node"].includes(commandInput.type)) { setActivity("已取消操作。"); return; }
+    setBranchLoading(true); setCollaborationError("");
+    try {
+      const response = await fetch(`/api/platform/branches/${encodeURIComponent(draft.id)}/commands`, { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ command: commandInput, expectedVersion: draft.version, message: `UI: ${command}`, aiAssisted: false }) });
+      const payload = await response.json() as { commit?: { id: string }; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "草稿命令提交失败");
+      setBranches((current) => current.map((branch) => branch.id === draft.id ? { ...branch, version: branch.version + 1, headCommitId: payload.commit?.id ?? branch.headCommitId, updatedAt: new Date().toISOString() } : branch));
+      setActivity(`已将“${node?.name ?? project.title}”的操作写入草稿 Commit${payload.commit?.id ? ` ${payload.commit.id.slice(0, 8)}` : ""}。`);
+    } catch (error) { setCollaborationError(error instanceof Error ? error.message : "草稿命令提交失败"); }
+    finally { setBranchLoading(false); }
+  }
+
+  async function submitMergeRequest() {
+    if (!authenticated) { onRequireLogin("contribute"); return; }
+    const draft = await ensureDraftBranch(); if (!draft) return;
+    const target = branches.find((branch) => branch.isProtected);
+    if (!target) { setCollaborationError("没有找到受保护的 main 分支，暂时无法提交审核。"); return; }
+    const title = window.prompt("修改申请标题", `补充：${project.title}`)?.trim(); if (!title) return;
+    setBranchLoading(true); setCollaborationError("");
+    try {
+      const response = await fetch("/api/platform/changes", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ projectId: project.id, sourceBranchId: draft.id, targetBranchId: target.id, title, description: "由项目工作台提交的草稿修改" }) });
+      const payload = await response.json() as { mergeRequest?: { id: string }; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "提交修改申请失败");
+      setActivity(`修改申请已提交${payload.mergeRequest?.id ? ` #${payload.mergeRequest.id.slice(0, 8)}` : ""}，等待项目维护者审核。`); setCollaborationRefresh((value) => value + 1); setActiveTab("changes");
+    } catch (error) { setCollaborationError(error instanceof Error ? error.message : "提交修改申请失败"); }
+    finally { setBranchLoading(false); }
   }
 
   return (
@@ -124,28 +205,28 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
             </Sheet>
             <Sheet>
               <SheetTrigger asChild><Button size="icon" variant="outline" aria-label="打开 AI 助手"><Bot size={16} /></Button></SheetTrigger>
-              <SheetContent className="mobile-assistant-sheet"><SheetTitle className="sr-only">AI 研究助手</SheetTitle><AssistantPanel project={project} activeFileName={activeNode?.name ?? "研究结论"} /></SheetContent>
+              <SheetContent className="mobile-assistant-sheet"><SheetTitle className="sr-only">AI 研究助手</SheetTitle><AssistantPanel project={project} activeFileName={activeNode?.name ?? "研究结论"} activeFileId={activeNode?.id} /></SheetContent>
             </Sheet>
           </div>
           <Button variant="ghost" size="sm"><Share2 size={15} />分享</Button>
-          <Button variant="outline" size="sm" onClick={() => onRequireLogin("contribute")}><GitBranch size={15} />创建草稿</Button>
-          <Button size="sm" onClick={() => onRequireLogin("contribute")}><GitPullRequest size={15} />提交修改</Button>
-          <Button variant="ghost" size="sm" onClick={() => onRequireLogin("login")}><LogIn size={15} />登录</Button>
+          <Button variant="outline" size="sm" onClick={() => void ensureDraftBranch()} disabled={branchLoading}><GitBranch size={15} />创建草稿</Button>
+          <Button size="sm" onClick={() => void submitMergeRequest()} disabled={branchLoading}>{branchLoading ? <Loader2 size={15} className="animate-spin" /> : <GitPullRequest size={15} />}提交修改</Button>
+          {!authenticated ? <Button variant="ghost" size="sm" onClick={() => onRequireLogin("login")}><LogIn size={15} />登录</Button> : <span className="text-xs text-muted-foreground">已登录</span>}
         </div>
       </header>
 
-      <nav className="project-tabs" aria-label="项目导航"><button className="is-active" type="button"><BookOpen size={15} />内容</button><button type="button"><GitPullRequest size={15} />修改申请 <span>{project.openMergeRequests}</span></button><button type="button"><CircleAlert size={15} />问题</button><button type="button"><History size={15} />历史</button><button type="button"><Users size={15} />贡献者</button></nav>
+      <nav className="project-tabs" aria-label="项目导航"><button className={activeTab === "content" ? "is-active" : undefined} type="button" onClick={() => setActiveTab("content")}><BookOpen size={15} />内容</button><button className={activeTab === "changes" ? "is-active" : undefined} type="button" onClick={() => setActiveTab("changes")}><GitPullRequest size={15} />修改申请 <span>{project.openMergeRequests}</span></button><button type="button" onClick={() => setActivity("问题面板将在有可追踪争议后显示。") }><CircleAlert size={15} />问题</button><button type="button" onClick={() => setActivity("历史版本请通过修改申请详情查看。") }><History size={15} />历史</button><button type="button" onClick={() => setActivity("贡献者列表将在首个真实合并后显示。") }><Users size={15} />贡献者</button></nav>
 
       <aside className="file-sidebar">
         <div className="file-sidebar__tools"><label><Search size={14} /><input placeholder="搜索当前项目" /></label><Button size="icon" variant="ghost" onClick={() => setTreeCollapsed(true)} aria-label="收起文件树"><PanelLeftClose size={16} /></Button></div>
-        <div className="branch-row"><GitBranch size={14} /><span>main</span><span>v{project.version}</span><ChevronRight size={14} /></div>
+        <div className="branch-row"><GitBranch size={14} /><span>{branches.find((branch) => branch.isProtected)?.name ?? "main"}</span><span>v{project.version}</span><ChevronRight size={14} /></div>
         <ProjectFileTree nodes={project.files} activeNodeId={activeNodeId} onActiveNodeChange={setActiveNodeId} onCommand={runFileCommand} />
         <div className="sidebar-collaboration"><p>公开主版本为只读</p><span>编辑会进入个人草稿，通过维护者审核后合并并保留署名。</span></div>
       </aside>
 
       {treeCollapsed ? <Button className="tree-reopen" size="icon" variant="outline" onClick={() => setTreeCollapsed(false)} aria-label="展开文件树"><ChevronRight size={17} /></Button> : null}
-      <main className="document-pane"><ProjectDocument project={project} />{activity ? <div className="workspace-activity" role="status"><span>{activity}</span><button type="button" onClick={() => setActivity("")}>关闭</button></div> : null}</main>
-      <AssistantPanel project={project} activeFileName={activeNode?.name ?? "研究结论"} />
+      <main className="document-pane">{activeTab === "content" ? <ProjectDocument project={project} /> : <CollaborationPanel projectId={project.id} authenticated={authenticated} canReview={canReview} onRequireLogin={() => onRequireLogin("login")} refreshToken={collaborationRefresh} />}{collaborationError ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{collaborationError}</span><button type="button" onClick={() => setCollaborationError("")}>关闭</button></div> : null}{activity ? <div className="workspace-activity" role="status"><span>{activity}</span><button type="button" onClick={() => setActivity("")}>关闭</button></div> : null}</main>
+      <AssistantPanel project={project} activeFileName={activeNode?.name ?? "研究结论"} activeFileId={activeNode?.id} />
     </div>
   );
 }

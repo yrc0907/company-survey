@@ -70,6 +70,15 @@ export class CollaborationService {
     return this.repository.createMergeRequest(input, actor);
   }
 
+  /** 公开申请列表只返回非草稿状态；详情和 Diff 仍需项目草稿读取权限。 */
+  public async listMergeRequests(projectId: string, actor: AuthenticatedActor | null): Promise<MergeRequestSummary[]> {
+    const project = await this.repository.getProject(projectId);
+    if (!project || project.visibility !== "public" || project.status !== "published") throw new CollaborationNotFoundError("公开项目不存在");
+    const requests = await this.repository.listMergeRequests(projectId);
+    if (!actor) return requests.filter((item) => item.status !== "closed");
+    return requests.filter((item) => item.status !== "closed" || item.authorUserId === actor.userId);
+  }
+
   public async getMergeRequest(id: string, actor: AuthenticatedActor): Promise<{ mergeRequest: MergeRequestSummary; reviews: ReviewSummary[] }> {
     const mergeRequest = await this.repository.getMergeRequest(id); if (!mergeRequest) throw new CollaborationNotFoundError("合并申请不存在");
     await this.assertMergeProjectAction(actor, mergeRequest, "read_draft");

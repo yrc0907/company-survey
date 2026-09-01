@@ -151,6 +151,10 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
   public async getMergeRequest(mergeRequestId: string): Promise<MergeRequestSummary | null> {
     const rows = await this.sql<Row[]>`${this.sql.unsafe(MERGE_SELECT)} WHERE id = ${mergeRequestId} LIMIT 1`; return rows[0] ? mapMerge(rows[0]) : null;
   }
+  public async listMergeRequests(projectId: string): Promise<MergeRequestSummary[]> {
+    const rows = await this.sql<Row[]>`${this.sql.unsafe(MERGE_SELECT)} WHERE project_id = ${projectId} AND status <> 'draft' ORDER BY updated_at DESC LIMIT 100`;
+    return rows.map(mapMerge);
+  }
   public async listReviews(mergeRequestId: string): Promise<ReviewSummary[]> {
     const rows = await this.sql<Row[]>`SELECT id, merge_request_id, reviewer_user_id, verdict, body, node_id, block_id, created_at FROM merge_review WHERE merge_request_id = ${mergeRequestId} ORDER BY created_at ASC`; return rows.map(mapReview);
   }

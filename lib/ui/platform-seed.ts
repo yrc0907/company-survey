@@ -40,6 +40,8 @@ export interface SeedProject {
   updatedAt: string;
   uniqueReaders: number;
   contributors: SeedUser[];
+  /** 数据库摘要可能只有聚合计数，展示时优先使用该服务端计数。 */
+  contributorCount?: number;
   sourceCount: number;
   openMergeRequests: number;
   version: number;

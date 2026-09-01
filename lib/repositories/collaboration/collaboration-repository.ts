@@ -28,6 +28,7 @@ export interface CollaborationRepository {
   getCommit(branchId: string, commitId: string): Promise<CommitSummary | null>;
   getSnapshot(branchId: string): Promise<CollaborationSnapshot>;
   createMergeRequest(input: CreateMergeRequestInput, actor: AuthenticatedActor): Promise<MergeRequestSummary>;
+  listMergeRequests(projectId: string): Promise<MergeRequestSummary[]>;
   getMergeRequest(mergeRequestId: string): Promise<MergeRequestSummary | null>;
   listReviews(mergeRequestId: string): Promise<ReviewSummary[]>;
   addReview(input: CreateReviewInput, actor: AuthenticatedActor): Promise<ReviewSummary>;
