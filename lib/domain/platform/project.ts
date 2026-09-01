@@ -1,6 +1,8 @@
 export type ProjectVisibility = "private" | "public" | "unlisted";
 export type ProjectStatus = "draft" | "published" | "archived" | "suspended";
 export type ProjectMemberRole = "owner" | "maintainer" | "contributor";
+/** 分支状态来自数据库；非 active 分支只能读取历史，不能继续提交或发起合并。 */
+export type KnowledgeBranchStatus = "active" | "submitted" | "merged" | "closed";
 export type KnowledgeNodeKind = "folder" | "document" | "markdown" | "source" | "data";
 export type ChangeOperation = "create_node" | "update_content" | "rename_node" | "move_node" | "delete_node" | "restore_node" | "duplicate_node";
 export type MergeRequestStatus = "draft" | "open" | "changes_requested" | "approved" | "merged" | "closed";
@@ -53,6 +55,7 @@ export interface KnowledgeBranchAccess {
   projectId: string;
   ownerUserId: string | null;
   isProtected: boolean;
+  status: KnowledgeBranchStatus;
 }
 
 /** 不可变内容版本，正式事实通过分支与 Commit 定位。 */

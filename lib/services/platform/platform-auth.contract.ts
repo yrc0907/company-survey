@@ -43,9 +43,10 @@ async function run(): Promise<void> {
 
   repository.seedProject({ id: "public-project", ownerUserId: alice.id, visibility: "public", status: "published", memberRole: null });
   repository.seedProject({ id: "private-project", ownerUserId: "different-owner", visibility: "private", status: "draft", memberRole: null });
-  repository.seedBranch({ id: "main", projectId: "public-project", ownerUserId: null, isProtected: true });
-  repository.seedBranch({ id: "alice-draft", projectId: "public-project", ownerUserId: alice.id, isProtected: false });
-  repository.seedBranch({ id: "foreign-draft", projectId: "private-project", ownerUserId: "different-owner", isProtected: false });
+  repository.seedBranch({ id: "main", projectId: "public-project", ownerUserId: null, isProtected: true, status: "active" });
+  repository.seedBranch({ id: "alice-draft", projectId: "public-project", ownerUserId: alice.id, isProtected: false, status: "active" });
+  repository.seedBranch({ id: "foreign-draft", projectId: "private-project", ownerUserId: "different-owner", isProtected: false, status: "active" });
+  repository.seedBranch({ id: "closed-draft", projectId: "public-project", ownerUserId: alice.id, isProtected: false, status: "closed" });
   repository.seedNodeState({
     projectId: "public-project", branchId: "main", nodeId: "node-1", parentNodeId: null, name: "公开名称", position: 0,
     deletedAt: null, updatedAt: "2026-09-01T00:00:00.000Z",
@@ -66,6 +67,11 @@ async function run(): Promise<void> {
     authorization.assertBranchAction({ userId: alice.id, role: "user" }, "public-project", "main", "write_branch"),
     PermissionDeniedError,
     "保护分支即使是项目所有者也不能走普通写命令",
+  );
+  await assert.rejects(
+    authorization.assertBranchAction({ userId: alice.id, role: "user" }, "public-project", "closed-draft", "write_branch"),
+    PermissionDeniedError,
+    "已关闭草稿不能继续写入",
   );
   await authorization.assertProjectAction({ userId: alice.id, role: "user" }, "public-project", "manage_project");
   const branchStateService = new BranchStateService(repository);

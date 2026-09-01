@@ -31,7 +31,7 @@ async function run(): Promise<void> {
   } as unknown as CollaborationRepository;
   const platform = {
     getProjectAccess: async (_id: string, userId: string | null) => ({ id: "p1", ownerUserId: "alice", visibility: "public" as const, status: "published" as const, memberRole: userId === "maintainer" ? "maintainer" as const : null }),
-    getBranchAccess: async (_projectId: string, branchId: string) => ({ id: branchId, projectId: "p1", ownerUserId: branchId === "alice-draft" ? "alice" : null, isProtected: branchId === "main" }),
+    getBranchAccess: async (_projectId: string, branchId: string) => ({ id: branchId, projectId: "p1", ownerUserId: branchId === "alice-draft" ? "alice" : null, isProtected: branchId === "main", status: "active" as const }),
   } as unknown as PlatformRepository;
   const service = new CollaborationService(fakeRepository, platform);
   const input = { projectId: "p1", sourceBranchId: "alice-draft", targetBranchId: "main", title: "补充数据", idempotencyKey: "same-request" };

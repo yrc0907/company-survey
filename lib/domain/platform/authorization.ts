@@ -49,6 +49,8 @@ export function canPerformBranchAction(
   if (!canPerformProjectAction(actor, project, action)) return false;
   const projectRole = project.ownerUserId === actor.userId ? "owner" : project.memberRole;
   if (action === "read_draft") return branch.ownerUserId === actor.userId || projectRole === "owner" || projectRole === "maintainer";
+  // submitted/merged/closed 分支是不可继续写入的历史；即使仍是 owner 也必须新建分支。
+  if (branch.status !== "active") return false;
   if (branch.isProtected) return false;
   if (action === "write_branch") return branch.ownerUserId === actor.userId || projectRole === "owner" || projectRole === "maintainer";
   return branch.ownerUserId === actor.userId || projectRole === "owner" || projectRole === "maintainer";

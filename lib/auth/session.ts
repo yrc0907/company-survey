@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/lib/auth/options";
 import { AuthenticationRequiredError, type AuthenticatedActor } from "@/lib/domain/platform";
+import { getPlatformRepository } from "@/lib/repositories/platform/platform-repository-factory";
 
 let actorResolverOverride: (() => Promise<AuthenticatedActor | null>) | null = null;
 
@@ -9,7 +10,19 @@ let actorResolverOverride: (() => Promise<AuthenticatedActor | null>) | null = n
 export async function getAuthenticatedActor(): Promise<AuthenticatedActor | null> {
   if (actorResolverOverride) return actorResolverOverride();
   const session = await getServerSession(authOptions);
-  return session?.user?.id && session.user.role ? { userId: session.user.id, role: session.user.role } : null;
+  const sessionUser = session?.user;
+  if (!sessionUser?.id || !sessionUser.role) return null;
+
+  // JWT 只证明“曾经登录过”；每个受保护请求都回源数据库确认账户仍 active，
+  // 这样暂停/删除账户、角色变更会立即撤销旧会话，而不是等待 JWT 过期。
+  try {
+    const account = await getPlatformRepository().findAccountById(sessionUser.id);
+    if (!account || account.status !== "active" || account.role !== sessionUser.role) return null;
+    return { userId: account.id, role: account.role };
+  } catch {
+    // 身份事实无法确认时 fail closed，不能把数据库故障降级为可写的 JWT 身份。
+    return null;
+  }
 }
 
 /** 写接口的规范入口：返回可信 actor；无会话时抛出可映射为 401 的领域错误。 */

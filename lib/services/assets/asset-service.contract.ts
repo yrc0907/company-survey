@@ -20,7 +20,7 @@ async function run(): Promise<void> {
   const alice = await new AccountService(platform, argon2idPasswordHasher).register({ email: "asset-alice@example.com", username: "asset-alice", password: "securePass123" });
   const bob = await new AccountService(platform, argon2idPasswordHasher).register({ email: "asset-bob@example.com", username: "asset-bob", password: "securePass123" });
   platform.seedProject({ id: "asset-project", ownerUserId: alice.id, visibility: "public", status: "published", memberRole: null });
-  platform.seedBranch({ id: "asset-branch", projectId: "asset-project", ownerUserId: alice.id, isProtected: false });
+  platform.seedBranch({ id: "asset-branch", projectId: "asset-project", ownerUserId: alice.id, isProtected: false, status: "active" });
   const config = getOssConfig({ OSS_AUTH_MODE: "ecs_ram_role", OSS_RAM_ROLE_NAME: "research-oss", OSS_BUCKET: "reaserch", OSS_REGION: "cn-shanghai", OSS_ENDPOINT: "https://oss-cn-shanghai.aliyuncs.com" });
   if (!config.configured) throw new Error(config.reason);
   let head = { etag: "e".repeat(32), contentLength: 12, sha256: "a".repeat(64) };

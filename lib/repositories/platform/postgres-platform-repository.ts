@@ -172,12 +172,12 @@ export class PostgresPlatformRepository implements PlatformRepository {
 
   /** 分支查询同时限定 project_id，避免攻击者用其他项目的 branch id 穿透作用域。 */
   public async getBranchAccess(projectId: string, branchId: string): Promise<KnowledgeBranchAccess | null> {
-    const rows = await this.sql<DatabaseRow[]>`SELECT id, project_id, owner_user_id, is_protected
+    const rows = await this.sql<DatabaseRow[]>`SELECT id, project_id, owner_user_id, is_protected, status
       FROM knowledge_branch WHERE project_id = ${projectId} AND id = ${branchId} LIMIT 1`;
     const row = rows[0];
     return row ? {
       id: String(row.id), projectId: String(row.project_id), ownerUserId: row.owner_user_id ? String(row.owner_user_id) : null,
-      isProtected: Boolean(row.is_protected),
+      isProtected: Boolean(row.is_protected), status: row.status as KnowledgeBranchAccess["status"],
     } : null;
   }
 
