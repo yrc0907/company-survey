@@ -8,6 +8,7 @@ interface ProjectCardProps {
   project: SeedProject;
   onOpen: (projectId: string) => void;
   onSearch?: (query: string) => void;
+  onOpenOwner?: (username: string) => void;
 }
 
 function dateLabel(value: string): string {
@@ -15,12 +16,16 @@ function dateLabel(value: string): string {
 }
 
 /** 首页列表项只展示可解释统计，Seed 核验状态不冒充实时生产数据。 */
-export function ProjectCard({ project, onOpen, onSearch }: ProjectCardProps) {
+export function ProjectCard({ project, onOpen, onSearch, onOpenOwner }: ProjectCardProps) {
   const verificationLabel = project.verification === "verified" ? "Seed 已核验" : "Seed 待核验";
+  function openOwner(): void {
+    if (onOpenOwner) { onOpenOwner(project.owner.username); return; }
+    if (typeof window !== "undefined") window.location.assign(`/u/${encodeURIComponent(project.owner.username)}`);
+  }
   return (
     <article className="project-list-item">
       <div className="project-owner-line">
-          <button type="button" className="project-owner-link" onClick={() => onSearch?.(project.owner.username)} aria-label={`查看${project.owner.displayName}的项目`}>
+          <button type="button" className="project-owner-link" onClick={openOwner} aria-label={`查看${project.owner.displayName}的作者主页`}>
           <UserAvatar name={project.owner.displayName} size="sm" />
           <span className="font-medium text-foreground">{project.owner.displayName}</span>
           </button>

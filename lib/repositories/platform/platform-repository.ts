@@ -5,6 +5,8 @@ import type {
   OAuthIdentityInput,
   PasswordAccount,
   PlatformAccount,
+  PublicAuthorRecord,
+  AuthorFollowState,
 } from "@/lib/domain/platform";
 
 /** 公开项目所有者的最小资料；不包含邮箱、权限或任何私有字段。 */
@@ -94,6 +96,19 @@ export interface SetPublicProjectStarInput {
   starred: boolean;
 }
 
+/** 作者主页读取参数；匿名请求不携带 follower 身份。 */
+export interface PublicAuthorInput {
+  username: string;
+  followerUserId: string | null;
+}
+
+/** 关注切换参数；follower 身份必须来自已验证 Session。 */
+export interface SetAuthorFollowInput {
+  username: string;
+  followerUserId: string;
+  following: boolean;
+}
+
 export interface CreatePrivateProjectRecordInput {
   id: string;
   ownerUserId: string;
@@ -127,5 +142,8 @@ export interface PlatformRepository {
   recordPublicProjectView(input: RecordPublicProjectViewInput): Promise<PublicProjectViewResult | null>;
   getPublicProjectStarState(projectIdOrSlug: string, userId: string | null): Promise<PublicProjectStarState | null>;
   setPublicProjectStar(input: SetPublicProjectStarInput): Promise<PublicProjectStarState | null>;
+  getPublicAuthor(input: PublicAuthorInput): Promise<PublicAuthorRecord | null>;
+  getAuthorFollowState(input: PublicAuthorInput): Promise<AuthorFollowState | null>;
+  setAuthorFollow(input: SetAuthorFollowInput): Promise<AuthorFollowState | null>;
   createPrivateProject(input: CreatePrivateProjectRecordInput): Promise<PublicProjectRecord>;
 }

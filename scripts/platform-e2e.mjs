@@ -76,6 +76,17 @@ try {
     await page.getByText("登录后可在这里搜索历史对话。", { exact: true }).waitFor();
   });
 
+  await check("E2E-AUTHOR-001", async () => {
+    await page.goto(`${baseUrl}/u/yu-research`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Yu" }).waitFor();
+    await page.getByRole("heading", { name: "公开项目" }).waitFor();
+    await page.getByRole("button", { name: "关注" }).click();
+    await page.getByRole("heading", { name: "登录开放知识平台" }).waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: /打开慧策掌上先机/ }).click();
+    await page.getByRole("heading", { name: /慧策掌上先机/ }).waitFor();
+  });
+
   await check("E2E-MOBILE-001", async () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.reload({ waitUntil: "domcontentloaded" });

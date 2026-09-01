@@ -1,8 +1,9 @@
 import postgres, { type Sql, type TransactionSql } from "postgres";
 
 import { AccountConflictError } from "@/lib/domain/platform/errors";
-import type { KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PlatformRole } from "@/lib/domain/platform";
-import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, RecordPublicProjectViewInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
+import { ValidationError } from "@/lib/domain/errors";
+import type { AuthorFollowState, KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PlatformRole, PublicAuthorRecord } from "@/lib/domain/platform";
+import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicAuthorInput, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
 
 type DatabaseRow = Record<string, unknown>;
 type Queryable = Sql | TransactionSql;
@@ -311,6 +312,77 @@ export class PostgresPlatformRepository implements PlatformRepository {
         EXISTS (SELECT 1 FROM project_star mine WHERE mine.project_id = ${projectId} AND mine.user_id = ${input.userId} AND mine.active = TRUE) AS starred`;
       const row = rows[0];
       return { projectId, starred: Boolean(row?.starred), starCount: Number(row?.star_count ?? 0) };
+    });
+  }
+
+  /** 读取作者主页；仅聚合 active/public 项目与关注关系，不返回邮箱或草稿。 */
+  public async getPublicAuthor(input: PublicAuthorInput): Promise<PublicAuthorRecord | null> {
+    const rows = await this.sql<DatabaseRow[]>`SELECT u.id, p.username, p.display_name, p.bio, p.avatar_asset_id,
+        u.created_at,
+        (SELECT COUNT(*) FROM knowledge_project kp WHERE kp.owner_user_id = u.id AND kp.visibility = 'public' AND kp.status = 'published') AS project_count,
+        (SELECT COUNT(*) FROM author_follow af JOIN platform_user fu ON fu.id = af.follower_user_id AND fu.status = 'active'
+          WHERE af.followed_user_id = u.id AND af.active = TRUE) AS follower_count,
+        (SELECT COUNT(*) FROM author_follow af JOIN platform_user tu ON tu.id = af.followed_user_id AND tu.status = 'active'
+          WHERE af.follower_user_id = u.id AND af.active = TRUE) AS following_count,
+        (${input.followerUserId}::text IS NOT NULL AND EXISTS (
+          SELECT 1 FROM author_follow mine WHERE mine.follower_user_id = ${input.followerUserId}
+            AND mine.followed_user_id = u.id AND mine.active = TRUE
+        )) AS followed_by_current_user
+      FROM platform_user u JOIN platform_profile p ON p.user_id = u.id
+      WHERE LOWER(p.username) = LOWER(${input.username}) AND u.status = 'active' LIMIT 1`;
+    const row = rows[0];
+    if (!row) return null;
+    const projects = await this.sql.unsafe<DatabaseRow[]>(`${PUBLIC_PROJECT_SELECT}
+      WHERE p.owner_user_id = $1 AND p.visibility = 'public' AND p.status = 'published'
+      ORDER BY p.updated_at DESC LIMIT 100`, [String(row.id)]);
+    return {
+      id: String(row.id), username: String(row.username), displayName: String(row.display_name), bio: String(row.bio ?? ""),
+      avatarAssetId: row.avatar_asset_id ? String(row.avatar_asset_id) : null, createdAt: iso(row.created_at),
+      projectCount: Number(row.project_count ?? 0), followerCount: Number(row.follower_count ?? 0),
+      followingCount: Number(row.following_count ?? 0), followedByCurrentUser: Boolean(row.followed_by_current_user),
+      projects: projects.map(mapPublicProject),
+    };
+  }
+
+  /** 读取关注按钮状态；匿名只能看到公开 follower 数量。 */
+  public async getAuthorFollowState(input: PublicAuthorInput): Promise<AuthorFollowState | null> {
+    const rows = await this.sql<DatabaseRow[]>`SELECT u.id, p.username,
+        (SELECT COUNT(*) FROM author_follow af JOIN platform_user fu ON fu.id = af.follower_user_id AND fu.status = 'active'
+          WHERE af.followed_user_id = u.id AND af.active = TRUE) AS follower_count,
+        (${input.followerUserId}::text IS NOT NULL AND EXISTS (
+          SELECT 1 FROM author_follow mine WHERE mine.follower_user_id = ${input.followerUserId}
+            AND mine.followed_user_id = u.id AND mine.active = TRUE
+        )) AS following
+      FROM platform_user u JOIN platform_profile p ON p.user_id = u.id
+      WHERE LOWER(p.username) = LOWER(${input.username}) AND u.status = 'active' LIMIT 1`;
+    const row = rows[0];
+    return row ? { authorUserId: String(row.id), username: String(row.username), following: Boolean(row.following), followerCount: Number(row.follower_count ?? 0) } : null;
+  }
+
+  /** 事务内幂等切换关注关系，并以数据库聚合结果返回最新计数。 */
+  public async setAuthorFollow(input: SetAuthorFollowInput): Promise<AuthorFollowState | null> {
+    return this.sql.begin(async (tx) => {
+      const authorRows = await tx<DatabaseRow[]>`SELECT u.id, p.username FROM platform_user u JOIN platform_profile p ON p.user_id = u.id
+        WHERE LOWER(p.username) = LOWER(${input.username}) AND u.status = 'active' LIMIT 1`;
+      const author = authorRows[0];
+      if (!author) return null;
+      const authorId = String(author.id);
+      if (authorId === input.followerUserId) throw new ValidationError("不能关注自己");
+      const followerRows = await tx<DatabaseRow[]>`SELECT id FROM platform_user WHERE id = ${input.followerUserId} AND status = 'active' LIMIT 1`;
+      if (!followerRows[0]) throw new ValidationError("用户身份无效");
+      if (input.following) {
+        await tx`INSERT INTO author_follow (follower_user_id, followed_user_id, active)
+          VALUES (${input.followerUserId}, ${authorId}, TRUE)
+          ON CONFLICT (follower_user_id, followed_user_id)
+          DO UPDATE SET active = TRUE, updated_at = CURRENT_TIMESTAMP`;
+      } else {
+        await tx`UPDATE author_follow SET active = FALSE, updated_at = CURRENT_TIMESTAMP
+          WHERE follower_user_id = ${input.followerUserId} AND followed_user_id = ${authorId}`;
+      }
+      const countRows = await tx<DatabaseRow[]>`SELECT COUNT(*) AS follower_count FROM author_follow af
+        JOIN platform_user fu ON fu.id = af.follower_user_id AND fu.status = 'active'
+        WHERE af.followed_user_id = ${authorId} AND af.active = TRUE`;
+      return { authorUserId: authorId, username: String(author.username), following: input.following, followerCount: Number(countRows[0]?.follower_count ?? 0) };
     });
   }
 

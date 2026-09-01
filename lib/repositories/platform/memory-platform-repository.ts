@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 
 import { AccountConflictError } from "@/lib/domain/platform/errors";
-import type { KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount } from "@/lib/domain/platform";
-import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, RecordPublicProjectViewInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
+import { ValidationError } from "@/lib/domain/errors";
+import type { AuthorFollowState, KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PublicAuthorRecord } from "@/lib/domain/platform";
+import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicAuthorInput, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
 
 /** 契约测试使用的内存仓储；复制所有返回值，避免测试误改内部事实。 */
 export class MemoryPlatformRepository implements PlatformRepository {
@@ -15,6 +16,7 @@ export class MemoryPlatformRepository implements PlatformRepository {
   private readonly projectReaders = new Map<string, Set<string>>();
   private readonly projectDailyViews = new Set<string>();
   private readonly projectStars = new Map<string, Map<string, boolean>>();
+  private readonly authorFollows = new Map<string, Map<string, boolean>>();
 
   public async createPasswordAccount(record: CreatePasswordAccountRecord): Promise<PlatformAccount> {
     const email = record.account.email.toLowerCase();
@@ -133,6 +135,64 @@ export class MemoryPlatformRepository implements PlatformRepository {
     const starCount = Array.from(stars.values()).filter(Boolean).length;
     this.publicProjects.set(project.id, structuredClone({ ...project, starCount }));
     return { projectId: project.id, starred: input.starred, starCount };
+  }
+
+  /** 内存仓储复刻公开作者主页，供契约测试验证匿名读取边界。 */
+  public async getPublicAuthor(input: PublicAuthorInput): Promise<PublicAuthorRecord | null> {
+    const account = this.findAuthor(input.username);
+    if (!account || account.status !== "active") return null;
+    const projects = Array.from(this.publicProjects.values()).filter((project) => project.owner.id === account.id && project.visibility === "public" && project.status === "published");
+    const followerCount = this.activeFollowerCount(account.id);
+    const followingCount = this.activeFollowingCount(account.id);
+    const followedByCurrentUser = input.followerUserId ? this.authorFollows.get(input.followerUserId)?.get(account.id) === true : false;
+    return {
+      id: account.id, username: account.username, displayName: account.displayName, bio: "", avatarAssetId: account.avatarAssetId,
+      createdAt: account.createdAt, projectCount: projects.length, followerCount, followingCount, followedByCurrentUser,
+      projects: structuredClone(projects.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))),
+    };
+  }
+
+  /** 内存仓储复刻匿名可读、登录可识别的关注状态。 */
+  public async getAuthorFollowState(input: PublicAuthorInput): Promise<AuthorFollowState | null> {
+    const account = this.findAuthor(input.username);
+    if (!account || account.status !== "active") return null;
+    return {
+      authorUserId: account.id, username: account.username,
+      following: input.followerUserId ? this.authorFollows.get(input.followerUserId)?.get(account.id) === true : false,
+      followerCount: this.activeFollowerCount(account.id),
+    };
+  }
+
+  /** 内存仓储只用于测试，但保持数据库唯一关系、自关注拒绝和幂等语义。 */
+  public async setAuthorFollow(input: SetAuthorFollowInput): Promise<AuthorFollowState | null> {
+    const account = this.findAuthor(input.username);
+    if (!account || account.status !== "active") return null;
+    if (account.id === input.followerUserId) throw new ValidationError("不能关注自己");
+    const follower = await this.findAccountById(input.followerUserId);
+    if (!follower || follower.status !== "active") throw new ValidationError("用户身份无效");
+    const follows = this.authorFollows.get(input.followerUserId) ?? new Map<string, boolean>();
+    follows.set(account.id, input.following);
+    this.authorFollows.set(input.followerUserId, follows);
+    return { authorUserId: account.id, username: account.username, following: input.following, followerCount: this.activeFollowerCount(account.id) };
+  }
+
+  private findAuthor(username: string): PlatformAccount | null {
+    const normalized = username.trim().toLowerCase();
+    const account = Array.from(this.accounts.values()).find((item) => item.username.toLowerCase() === normalized);
+    if (account) return account;
+    const projectOwner = Array.from(this.publicProjects.values()).find((project) => project.owner.username.toLowerCase() === normalized)?.owner;
+    return projectOwner ? {
+      id: projectOwner.id, email: "", username: projectOwner.username, displayName: projectOwner.displayName, avatarAssetId: projectOwner.avatarAssetId,
+      role: "user", status: "active", emailVerifiedAt: null, createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString(),
+    } : null;
+  }
+
+  private activeFollowerCount(authorId: string): number {
+    return Array.from(this.authorFollows.entries()).filter(([followerId, follows]) => this.accounts.get(followerId)?.status === "active" && follows.get(authorId) === true).length;
+  }
+
+  private activeFollowingCount(followerId: string): number {
+    return Array.from(this.authorFollows.get(followerId)?.entries() ?? []).filter(([authorId, active]) => active && this.accounts.get(authorId)?.status === "active").length;
   }
 
   public async createPrivateProject(input: CreatePrivateProjectRecordInput): Promise<PublicProjectRecord> {

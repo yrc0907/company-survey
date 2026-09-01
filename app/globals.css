@@ -157,6 +157,34 @@
 .rail-clarification strong { @apply text-xs; }
 .rail-clarification p { @apply mb-0 mt-1.5 text-xs leading-5 text-muted-foreground; }
 
+/* Author profile */
+.author-page { @apply min-h-screen bg-background; }
+.author-page__header { @apply sticky top-0 z-20 grid h-14 grid-cols-[1fr_auto_1fr] items-center border-b bg-background/95 px-5 backdrop-blur-md; }
+.author-page__header > :first-child { @apply justify-self-start; }
+.author-page__header > :last-child { @apply justify-self-end; }
+.author-page__brand { @apply text-sm font-semibold tracking-tight; }
+.author-page__layout { @apply mx-auto grid max-w-5xl gap-8 px-5 py-8; }
+.author-profile-card { @apply border-b pb-7; }
+.author-profile-card__top { @apply flex items-start gap-4; }
+.author-profile-card__identity { @apply min-w-0 flex-1; }
+.author-profile-card__identity h1 { @apply m-0 truncate text-2xl font-semibold; }
+.author-profile-card__identity p { @apply mb-0 mt-1 text-sm text-muted-foreground; }
+.author-profile-card__bio { @apply mb-0 mt-5 max-w-2xl text-sm leading-6; }
+.author-profile-card__meta { @apply mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground; }
+.author-profile-card__meta span { @apply inline-flex items-center gap-1.5; }
+.author-feedback { @apply mt-4 flex items-center gap-3 text-xs text-muted-foreground; }
+.author-feedback--error { @apply text-destructive; }
+.author-feedback button { @apply border-0 bg-transparent p-0 font-medium underline; }
+.author-projects__heading { @apply flex items-end justify-between border-b pb-3; }
+.author-projects__heading h2 { @apply m-0 text-base font-semibold; }
+.author-projects__heading p { @apply mb-0 mt-1 text-xs text-muted-foreground; }
+.author-projects__heading > span { @apply font-mono text-xs text-muted-foreground; }
+.author-projects__list { @apply divide-y; }
+.author-projects__empty { @apply grid place-items-center gap-2 py-20 text-sm text-muted-foreground; }
+.author-projects__empty p { @apply m-0; }
+.author-page__loading { @apply mx-auto grid max-w-5xl justify-items-start gap-4 px-5 py-12; }
+.author-page__loading p { @apply m-0 text-xs text-muted-foreground; }
+
 /* Project workspace */
 .workspace-layout { @apply grid h-screen min-h-[640px] overflow-hidden bg-background; grid-template-columns: 260px minmax(520px,1fr) 348px; grid-template-rows: 56px 42px minmax(0,1fr); grid-template-areas: "header header header" "tabs tabs tabs" "files document assistant"; }
 .workspace-layout.tree-is-collapsed { grid-template-columns: 0 minmax(520px,1fr) 348px; }
