@@ -37,6 +37,8 @@ function mapArtifact(row: Row): IngestionArtifactRecord {
 
 const ASSET_COLUMNS = `id, owner_user_id, project_id, branch_id, original_asset_id, asset_kind, filename, extension, mime_type, object_key, expected_size, expected_sha256, etag, actual_size, actual_sha256, status, created_at, uploaded_at, verified_at, updated_at`;
 const JOB_COLUMNS = `id, asset_id, idempotency_key, status, attempt, error_code, error_message, derived_asset_id, created_at, started_at, completed_at, updated_at, lease_owner, lease_expires_at`;
+// claimNextIngestion 使用 UPDATE ... FROM；RETURNING 必须限定目标别名，避免与 candidate.id 冲突。
+const JOB_COLUMNS_FOR_UPDATE = `j.id AS id, j.asset_id AS asset_id, j.idempotency_key AS idempotency_key, j.status AS status, j.attempt AS attempt, j.error_code AS error_code, j.error_message AS error_message, j.derived_asset_id AS derived_asset_id, j.created_at AS created_at, j.started_at AS started_at, j.completed_at AS completed_at, j.updated_at AS updated_at, j.lease_owner AS lease_owner, j.lease_expires_at AS lease_expires_at`;
 
 /** PostgreSQL 上传仓储；所有状态变化使用条件 UPDATE，重复确认和重试不会重复创建 Job。 */
 export class PostgresAssetsRepository implements AssetRepository {
@@ -138,7 +140,7 @@ export class PostgresAssetsRepository implements AssetRepository {
             updated_at = CURRENT_TIMESTAMP
         FROM candidate c
         WHERE j.id = c.id
-        RETURNING ${JOB_COLUMNS}`, [workerId, boundedLease]);
+          RETURNING ${JOB_COLUMNS_FOR_UPDATE}`, [workerId, boundedLease]);
       const row = jobs[0];
       if (!row) return null;
       const assets = await tx<Row[]>`SELECT ${tx.unsafe(ASSET_COLUMNS)} FROM uploaded_asset WHERE id = ${String(row.asset_id)} LIMIT 1`;
