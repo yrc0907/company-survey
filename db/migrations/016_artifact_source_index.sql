@@ -13,6 +13,11 @@ BEGIN
     ALTER TABLE source ADD CONSTRAINT source_scope_pair_check
       CHECK ((project_id IS NULL AND branch_id IS NULL) OR (project_id IS NOT NULL AND branch_id IS NOT NULL));
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'source_project_branch_fk') THEN
+    -- 复合外键阻止把合法 branch ID 错配到另一项目；历史手工来源两列均为 NULL，不受影响。
+    ALTER TABLE source ADD CONSTRAINT source_project_branch_fk
+      FOREIGN KEY (project_id, branch_id) REFERENCES knowledge_branch(project_id, id) ON DELETE CASCADE;
+  END IF;
 END $$;
 
 -- 一个解析产物最多对应一个 source；重复消费、重试或并发索引都只能命中同一来源。
