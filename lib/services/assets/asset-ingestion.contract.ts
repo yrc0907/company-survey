@@ -55,6 +55,13 @@ async function run(): Promise<void> {
   assert.equal(imageResult?.outcome.kind, "needs_review");
   assert.equal(imageResult?.outcome.code, "PARSER_REQUIRES_VISION");
 
+  const spoofedImageBytes = Buffer.from("not-a-png", "utf8");
+  const spoofedImage = await seedVerified(repo, owner, "spoofed.png", "image/png", spoofedImageBytes);
+  objects.set(spoofedImage.asset.objectKey, spoofedImageBytes);
+  const spoofedImageResult = await worker.processNext("worker-a");
+  assert.equal(spoofedImageResult?.job.status, "failed", "图片扩展名不能绕过 magic bytes 校验");
+  assert.equal(spoofedImageResult?.job.errorCode, "PARSER_FAILED");
+
   const broken = await seedVerified(repo, owner, "broken.txt", "text/plain", Buffer.from("expected", "utf8"));
   objects.set(broken.asset.objectKey, Buffer.from("tampered", "utf8"));
   const brokenResult = await worker.processNext("worker-a");
