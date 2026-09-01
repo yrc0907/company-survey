@@ -19,8 +19,8 @@
 
 - [x] 完成开放知识平台产品、权限、版本、合并、署名和技术架构文档
 - [x] 完成 shadcn/ui 页面、组件、响应式、状态和动效规范文档
-- [ ] 建立 Auth.js、GitHub OAuth、邮箱密码注册、验证与找回密码
-- [ ] 将 Caddy 全站 Basic Auth 改为公开读 + 应用会话保护写接口
+- [~] Auth.js 邮箱/密码注册、登录和 Session/RBAC 校验已实现；GitHub OAuth、邮箱验证与找回密码待实现
+- [~] Caddy 已只保护旧版 `/api/research/*`，公开读与平台写接口由应用会话/权限处理；完整公网身份治理仍待补齐
 - [ ] 建立用户、项目、成员、文件树、Branch、Commit、Revision、MR、Review、Attribution schema 与迁移
 - [ ] 建立 `uploaded_asset`、`ingestion_job`、`project_view_daily`、`project_stats` schema 与聚合任务
 - [ ] 接入 TipTap，正文 Block 使用稳定 ID，支持 Markdown 导入导出
