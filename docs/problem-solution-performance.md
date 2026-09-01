@@ -19,6 +19,14 @@
 - **复验**：`public-project.contract.ts` 覆盖匿名读取、匿名写入 401、重复 POST、GET 当前用户状态、DELETE 和重复 DELETE；`pnpm typecheck`、`pnpm lint`、公开项目契约均通过。
 - **性能影响**：写入只更新单个主键关系并做一次有索引的聚合计数，不扫描项目正文；软删除保留关系审计而不增加重复行。
 
+## VECTOR-OPTIONAL-001：标准 PostgreSQL 未安装 pgvector
+
+- **场景**：香港 ECS 使用标准 `postgres:16.4-alpine` 镜像执行迁移和语义检索。
+- **现象**：数据库没有 `vector` 扩展，不能创建真实向量列或 ANN 索引。
+- **方案**：迁移只无条件写入向量元数据并动态捕获扩展缺失；运行时能力探测返回 `available=false`，SearchService 保留 PostgreSQL FTS、临时 Dense（有界）和确定性降级。`PGVECTOR_WRITE_ENABLED` 默认关闭。
+- **复验**：香港 `retrieval_vector_capability` 返回 `extension_available=false`、`vector_column_available=false`、`index_kind=none`，迁移 `011` 仍成功。
+- **性能影响**：无扩展时不占用向量列/索引空间；检索继续受 48 个 active Chunk 的临时 Dense 上限约束。
+
 ## DEPLOY-FTS-001：表达式索引迁移失败
 
 - **场景**：香港 ECS 执行迁移 `007_source_chunk_fts.sql`。
