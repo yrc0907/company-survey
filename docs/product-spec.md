@@ -156,7 +156,7 @@
 | --- | --- |
 | `company` | 已实现：名称、类型、摘要、标签和时间 |
 | `report` / `report_section` | 已实现：归属、标题、版本、章节、锚点、位置和结论状态 |
-| `source` / `source_chunk` | 已实现 schema 和手动文本导入；文件 Worker 先写独立 `ingestion_artifact`（含哈希/解析器/页数元数据），转换为来源 Chunk 待接入 |
+| `source` / `source_chunk` | 已实现 schema、手动文本导入和 `ingestion_artifact` -> 来源 Chunk 受控索引；索引保留产物哈希与项目分支血缘，不覆盖原件 |
 | `citation` | 已实现 schema 和展示读取；没有新建/编辑 API |
 | `entity` / `relation_edge` | 已实现 schema 和只读有界遍历；没有写入、HTTP API 或图谱 UI |
 | `report_revision` | 已实现：报告快照、版本、作者和时间；没有 Diff 记录或回滚 API |

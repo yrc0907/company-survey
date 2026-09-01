@@ -26,7 +26,7 @@
 
 当前已实现的是该链路的受限子集，而不是完整混合检索：
 
-- `source_chunk` schema 有正文/上下文 FTS GIN 索引；PostgreSQL `SearchService` 通过仓储执行参数化 `to_tsvector`/`plainto_tsquery`，在 SQL 内过滤 `active` 来源和报告范围，内存仓储或查询异常时确定性降级为关键词评分；
+- `source_chunk` schema 有正文/上下文 FTS GIN 索引；PostgreSQL `SearchService` 通过仓储执行参数化 `to_tsvector`/`plainto_tsquery`，在 SQL 内过滤 `active` 来源和报告范围，内存仓储或查询异常时确定性降级为关键词评分。`ArtifactSourceIndexService` 已将 ready 文本解析产物按 owner/project/branch 权限和内容哈希写入 `source`/`source_chunk`，索引可重建且不覆盖原件；
 - 命中会带 Parent Section 与相邻 Chunk；`contextual_prefix` 参与 PostgreSQL FTS 表达式，`heading_path` 继续由应用层关键词层补充，没有导入流水线自动生成它们；
 - `GraphService` 只做报告内、有来源边、深度 2、最多 12 条路径的 BFS；没有图谱写入 API 或图谱 UI；
 - `ContextProjectionService` 在每次助手请求重组当前报告、规则、选区或检索证据；无命中时返回拒答原因；

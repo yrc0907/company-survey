@@ -127,8 +127,17 @@ export class WorkbenchService {
     const snapshot = await this.repository.getSnapshot();
     return {
       ...snapshot,
+      // source 的项目/分支/owner/产物血缘仅供服务端索引与授权；公开工作台只返回阅读所需字段。
       sources: snapshot.sources.map((source) => ({
-        ...source,
+        id: source.id,
+        reportId: source.reportId,
+        title: source.title,
+        kind: source.kind,
+        url: source.url,
+        language: source.language,
+        state: source.state,
+        capturedAt: source.capturedAt,
+        contentHash: source.contentHash,
         snapshot: source.snapshot.length > 320 ? `${source.snapshot.slice(0, 320)}…` : source.snapshot,
       })),
       chunks: [],

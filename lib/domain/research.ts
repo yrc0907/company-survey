@@ -75,6 +75,11 @@ export interface Source {
   capturedAt: string;
   contentHash: string;
   snapshot: string;
+  /** 文件解析产物的血缘与项目范围；手工/历史来源没有这些字段。 */
+  ingestionArtifactId?: string | null;
+  ownerUserId?: string | null;
+  projectId?: string | null;
+  branchId?: string | null;
 }
 
 /** 适合检索和引用的来源片段，并保留父章节和原始定位。 */

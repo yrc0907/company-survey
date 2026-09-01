@@ -81,3 +81,9 @@ pnpm asset:ingestion
 ```
 
 默认只领取一个任务；批量排空可设置 `ASSET_INGESTION_DRAIN=true` 和 `ASSET_INGESTION_MAX_JOBS=100`。脚本无任务时以成功状态退出并输出处理数量；错误日志只包含资产/任务 ID、错误码和可读原因，不输出 OSS 凭据或对象内容。生产容器应以独立 one-shot/定时 Worker 运行该入口，不要把它暴露成公开 HTTP 接口。
+
+## 解析产物进入 RAG 索引
+
+`ArtifactSourceIndexService.indexReadyArtifact` 是解析与检索之间的受控边界。它只接受当前登录用户在指定项目/分支拥有的 `ready` 文本产物，并再次校验产物内容哈希、目标报告存在性和分支 `write_branch` 权限；图片或 `needs_review` 产物不会生成可检索正文。服务按自然段（超长段落每 1200 字符）生成 `source_chunk`，保留文件名、标题路径、偏移和每个 Chunk 的 SHA-256。
+
+迁移 `016_artifact_source_index.sql` 为 `source` 增加 `ingestion_artifact_id`、`owner_user_id`、`project_id`、`branch_id` 血缘字段，并以产物 ID 和报告内容哈希建立幂等索引。`source`/`source_chunk` 是可重建的派生检索数据：重复消费只返回既有来源，不覆盖来源快照、解析产物或 OSS 原件；旧的手工来源没有项目血缘，也不会被改写。索引服务不接受浏览器传入 owner，所有 owner 由资产记录和 Auth.js Session 决定。

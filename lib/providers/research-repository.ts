@@ -181,6 +181,10 @@ export class PostgresResearchRepository implements ResearchRepository, PgVectorS
         id: String(row.id), reportId: String(row.report_id), title: String(row.title), kind: row.kind as Source["kind"],
         url: row.url ? String(row.url) : null, language: row.language as Source["language"], state: row.state as Source["state"],
         capturedAt: toIso(row.captured_at), contentHash: String(row.content_hash), snapshot: String(row.snapshot),
+        ingestionArtifactId: row.ingestion_artifact_id ? String(row.ingestion_artifact_id) : null,
+        ownerUserId: row.owner_user_id ? String(row.owner_user_id) : null,
+        projectId: row.project_id ? String(row.project_id) : null,
+        branchId: row.branch_id ? String(row.branch_id) : null,
       })),
       chunks: chunks.map((row) => ({
         id: String(row.id), sourceId: String(row.source_id), parentSectionId: row.parent_section_id ? String(row.parent_section_id) : null,
@@ -264,13 +268,22 @@ export class PostgresResearchRepository implements ResearchRepository, PgVectorS
    */
   public async createTextSource(source: Source, chunks: SourceChunk[]): Promise<void> {
     await this.sql.begin(async (transaction) => {
-      await transaction`INSERT INTO source
-        (id, report_id, title, kind, url, language, state, captured_at, content_hash, snapshot)
-        VALUES (${source.id}, ${source.reportId}, ${source.title}, ${source.kind}, ${source.url}, ${source.language}, ${source.state}, ${source.capturedAt}, ${source.contentHash}, ${source.snapshot})`;
+      // 同一报告的相同内容只保留一份来源；冲突时只读取既有记录，不覆盖原来源的标题、快照或归属。
+      const sourceRows = await transaction<DatabaseRow[]>`INSERT INTO source
+        (id, report_id, title, kind, url, language, state, captured_at, content_hash, snapshot,
+         ingestion_artifact_id, owner_user_id, project_id, branch_id)
+        VALUES (${source.id}, ${source.reportId}, ${source.title}, ${source.kind}, ${source.url}, ${source.language}, ${source.state}, ${source.capturedAt}, ${source.contentHash}, ${source.snapshot},
+          ${source.ingestionArtifactId ?? null}, ${source.ownerUserId ?? null}, ${source.projectId ?? null}, ${source.branchId ?? null})
+        ON CONFLICT (report_id, content_hash) DO NOTHING
+        RETURNING id`;
+      const sourceId = sourceRows[0]?.id
+        ? String(sourceRows[0].id)
+        : String((await transaction<DatabaseRow[]>`SELECT id FROM source WHERE report_id = ${source.reportId} AND content_hash = ${source.contentHash} LIMIT 1`)[0]?.id ?? source.id);
       for (const chunk of chunks) {
         await transaction`INSERT INTO source_chunk
           (id, source_id, parent_section_id, heading_path, position, page, start_offset, end_offset, text, contextual_prefix, content_hash)
-          VALUES (${chunk.id}, ${chunk.sourceId}, ${chunk.parentSectionId}, ${transaction.array(chunk.headingPath)}::text[], ${chunk.position}, ${chunk.page}, ${chunk.startOffset}, ${chunk.endOffset}, ${chunk.text}, ${chunk.contextualPrefix}, ${chunk.contentHash})`;
+          VALUES (${chunk.id}, ${sourceId}, ${chunk.parentSectionId}, ${transaction.array(chunk.headingPath)}::text[], ${chunk.position}, ${chunk.page}, ${chunk.startOffset}, ${chunk.endOffset}, ${chunk.text}, ${chunk.contextualPrefix}, ${chunk.contentHash})
+          ON CONFLICT (source_id, content_hash) DO NOTHING`;
       }
     });
   }
