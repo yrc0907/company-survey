@@ -19,7 +19,7 @@ Internet
 
 ## 1.1 实际部署记录（2026-09-01）
 
-本次部署使用提交 `20229c7`，服务器目录为 `/srv/research-workbench`。以下为实际命令与运行结果，不包含任何密码、Key 或 Basic Auth 凭据：
+本次部署使用提交 `c8cf64d`，服务器目录为 `/srv/research-workbench`。以下为实际命令与运行结果，不包含任何密码、Key 或 Basic Auth 凭据：
 
 | 项目 | 实际结果 |
 | --- | --- |
@@ -27,7 +27,7 @@ Internet
 | 资源 | 约 `1.6 GiB` 内存、已启用 `1 GiB` swap；应用构建后根盘约 `31 GiB` 可用 |
 | 构建 | `docker compose build app` 成功完成 Next.js 生产构建 |
 | 容器 | `postgres`、`app`、`caddy` 三个容器均为 `healthy` |
-| 数据库 | `/api/healthz` 返回 `200` 和 `persistence: "postgres"`；默认研究库、默认报告均已写入，public schema 共有 9 张表 |
+| 数据库 | `/api/healthz` 返回 `200` 和 `persistence: "postgres"`；默认研究库、默认报告及 `project-huice` 首发样例均已写入，`006_public_seed.sql` 可重复运行 |
 | 持久化 | PostgreSQL 和上传目录均使用 Compose named volume，不向公网发布 `5432` |
 | 模型链路 | 服务器受限 `.env` 的模型、Embedding、Rerank 三个 Provider 已做连通性验证；Key 不在 Git、文档或日志中 |
 | Caddy | 配置校验通过，服务器本机已监听 `80` 与 `443`；应用 `3000` 仅在 Compose 内部暴露 |
@@ -44,6 +44,16 @@ HTTPS /healthz             -> 200, certificate verified
 HTTPS / without auth       -> 401
 HTTPS / with Basic Auth    -> 200
 App / PostgreSQL / Caddy   -> healthy
+```
+
+公开平台补充验收：
+
+```text
+GET /api/platform/projects                         -> 200, project-huice 可匿名读取
+GET /api/platform/projects/project-huice            -> 200, 文件树与贡献署名可读取
+POST /api/research/assistant                        -> 200, 返回受限上下文、引用 ID 和待核验边界
+GET /api/research/workbench                         -> 401, 旧版个人接口仍受 Basic Auth 保护
+POST /api/platform/uploads（未登录）                -> 401, 上传不允许匿名
 ```
 
 完整界面流程通过 SSH 隧道连接实际服务器 App 验收：浏览器写入资料后来源数立即更新，语义搜索返回新资料，AI 使用 `gemini-embedding-2-preview -> qwen3-rerank -> gpt-5.6-terra` 生成带来源回答。服务器 API 另行验证了版本从 1 保存到 2，以及旧版本写入被 `409 VERSION_CONFLICT` 拒绝。
