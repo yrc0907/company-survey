@@ -41,7 +41,7 @@ async function run(): Promise<void> {
   assertStorageObjectKey(key);
   assert.throws(() => assertStorageObjectKey("../other-user/private.pdf"), /无效/);
 
-  const signedCalls: Array<{ name: string; options: { method?: string; expires?: number; "Content-Type"?: string } }> = [];
+  const signedCalls: Array<{ name: string; options: { method?: string; expires?: number; "Content-Type"?: string; "x-oss-meta-sha256"?: string } }> = [];
   const deletedKeys: string[] = [];
   const provider = new OssObjectStorageProvider(configured.value, {
     asyncSignatureUrl: async (name, options) => {
@@ -50,9 +50,12 @@ async function run(): Promise<void> {
     },
     asyncDeleteObject: async (name) => { deletedKeys.push(name); },
   });
-  const upload = await provider.createUploadGrant({ objectKey: key, contentType: "application/pdf", contentLength: 1024 });
+  const uploadHash = "0".repeat(64);
+  const upload = await provider.createUploadGrant({ objectKey: key, contentType: "application/pdf", contentLength: 1024, sha256: uploadHash });
   assert.equal(upload.method, "PUT");
   assert.equal(upload.requiredHeaders["content-type"], "application/pdf");
+  assert.equal(signedCalls[0]?.options["x-oss-meta-sha256"], uploadHash, "签名选项必须包含 SHA-256 用户元数据");
+  assert.equal(upload.requiredHeaders["x-oss-meta-sha256"], uploadHash, "客户端必须携带与签名一致的 SHA-256 用户元数据");
   assert.equal(signedCalls[0]?.options.expires, 900);
   assert.equal((await provider.createDownloadGrant(key)).method, "GET");
   await provider.deleteObject(key);
