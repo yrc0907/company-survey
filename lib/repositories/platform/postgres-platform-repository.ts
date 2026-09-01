@@ -2,7 +2,7 @@ import postgres, { type Sql, type TransactionSql } from "postgres";
 
 import { AccountConflictError } from "@/lib/domain/platform/errors";
 import type { KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PlatformRole } from "@/lib/domain/platform";
-import type { CreatePasswordAccountRecord, PlatformRepository } from "@/lib/repositories/platform/platform-repository";
+import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord } from "@/lib/repositories/platform/platform-repository";
 
 type DatabaseRow = Record<string, unknown>;
 type Queryable = Sql | TransactionSql;
@@ -29,6 +29,50 @@ const ACCOUNT_SELECT = `
 function isUniqueViolation(error: unknown): error is { code: string; constraint_name?: string } {
   return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "23505";
 }
+
+function projectStatus(value: unknown): PublicProjectRecord["status"] {
+  return value as PublicProjectRecord["status"];
+}
+
+function projectVisibility(value: unknown): PublicProjectRecord["visibility"] {
+  return value as PublicProjectRecord["visibility"];
+}
+
+/** 将公开项目 SQL 投影映射为 API 可返回的最小资料；永远不带邮箱或草稿正文。 */
+function mapPublicProject(row: DatabaseRow): PublicProjectRecord {
+  return {
+    id: String(row.id), slug: String(row.slug), title: String(row.title), summary: String(row.summary ?? ""),
+    visibility: projectVisibility(row.visibility), status: projectStatus(row.status),
+    owner: { id: String(row.owner_id), username: String(row.owner_username), displayName: String(row.owner_display_name), avatarAssetId: row.owner_avatar ? String(row.owner_avatar) : null },
+    publishedAt: row.published_at ? iso(row.published_at) : null, updatedAt: iso(row.updated_at),
+    uniqueReaders: Number(row.unique_readers ?? 0), contributorCount: Number(row.contributor_count ?? 0),
+    sourceCount: Number(row.source_count ?? 0), openMergeRequests: Number(row.open_merge_requests ?? 0),
+    version: Math.max(1, Number(row.version ?? 1)), license: String(row.license ?? "all-rights-reserved"),
+    category: row.category === "企业" || row.category === "政策" || row.category === "行业" || row.category === "技术" ? row.category : "行业",
+    tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
+    verification: row.verification === "verified" ? "verified" : "needs_verification",
+    verificationNote: "数据库项目的核验状态由维护者在公开版本中维护。",
+  };
+}
+
+const PUBLIC_PROJECT_SELECT = `
+  SELECT p.id, p.slug, p.title, p.summary, p.visibility, p.status, p.license,
+         p.published_at, p.updated_at,
+         u.id AS owner_id, pr.username AS owner_username, pr.display_name AS owner_display_name,
+         pr.avatar_asset_id AS owner_avatar,
+         0::bigint AS unique_readers,
+         (SELECT COUNT(DISTINCT ca.contributor_user_id) FROM content_attribution ca
+            WHERE ca.project_id = p.id AND ca.active = TRUE) AS contributor_count,
+         (SELECT COUNT(*) FROM knowledge_node source_node
+            WHERE source_node.project_id = p.id AND source_node.kind = 'source') AS source_count,
+         (SELECT COUNT(*) FROM merge_request mr
+            WHERE mr.project_id = p.id AND mr.status IN ('open', 'changes_requested', 'approved')) AS open_merge_requests,
+         (SELECT COUNT(*) FROM knowledge_commit kc
+            WHERE kc.project_id = p.id AND kc.branch_id = main_branch.id) AS version
+    FROM knowledge_project p
+    JOIN platform_user u ON u.id = p.owner_user_id
+    JOIN platform_profile pr ON pr.user_id = u.id
+    LEFT JOIN knowledge_branch main_branch ON main_branch.project_id = p.id AND main_branch.name = p.default_branch_name`;
 
 /** PostgreSQL 实现只使用固定 SQL，并通过事务保证账户与身份不会半写入。 */
 export class PostgresPlatformRepository implements PlatformRepository {
@@ -149,5 +193,66 @@ export class PostgresPlatformRepository implements PlatformRepository {
       parentNodeId: row.parent_node_id ? String(row.parent_node_id) : null, name: String(row.name), position: Number(row.position),
       deletedAt: row.deleted_at ? iso(row.deleted_at) : null, updatedAt: iso(row.updated_at),
     } : null;
+  }
+
+  /** 公开首页只查询 published/public 项目；搜索字段固定，避免将私有草稿暴露给匿名用户。 */
+  public async listPublicProjects(input: PublicProjectListInput): Promise<PublicProjectRecord[]> {
+    const limit = Math.min(100, Math.max(1, Math.trunc(input.limit ?? 50)));
+    const offset = Math.max(0, Math.trunc(input.offset ?? 0));
+    const query = input.query?.trim() ?? "";
+    const order = input.sort === "read" ? "p.updated_at DESC" : input.sort === "recommended" ? "p.published_at DESC NULLS LAST, p.updated_at DESC" : "p.updated_at DESC";
+    const rows = await this.sql.unsafe<DatabaseRow[]>(`${PUBLIC_PROJECT_SELECT}
+      WHERE p.visibility = 'public' AND p.status = 'published'
+        AND ($1 = '' OR p.title ILIKE '%' || $1 || '%' OR p.summary ILIKE '%' || $1 || '%' OR p.slug ILIKE '%' || $1 || '%' OR pr.username ILIKE '%' || $1 || '%')
+      ORDER BY ${order} LIMIT $2 OFFSET $3`, [query, limit, offset]);
+    return rows.map(mapPublicProject);
+  }
+
+  /** 公开详情同时返回 main 分支的非删除文件树和最新文档正文片段。 */
+  public async getPublicProject(projectIdOrSlug: string): Promise<PublicProjectRecord | null> {
+    const rows = await this.sql.unsafe<DatabaseRow[]>(`${PUBLIC_PROJECT_SELECT}
+      WHERE p.visibility = 'public' AND p.status = 'published' AND (p.id = $1 OR p.slug = $1) LIMIT 1`, [projectIdOrSlug]);
+    if (!rows[0]) return null;
+    const project = mapPublicProject(rows[0]);
+    const branchRows = await this.sql.unsafe<DatabaseRow[]>(`SELECT id FROM knowledge_branch WHERE project_id = $1 AND name = (SELECT default_branch_name FROM knowledge_project WHERE id = $1) LIMIT 1`, [project.id]);
+    const branchId = branchRows[0] ? String(branchRows[0].id) : null;
+    if (!branchId) return { ...project, files: [], sections: [] };
+
+    const files = await this.sql.unsafe<DatabaseRow[]>(`SELECT ns.node_id, ns.name, n.kind, ns.parent_node_id, ns.position
+      FROM knowledge_node_state ns JOIN knowledge_node n ON n.id = ns.node_id AND n.project_id = ns.project_id
+      WHERE ns.project_id = $1 AND ns.branch_id = $2 AND ns.deleted_at IS NULL ORDER BY ns.parent_node_id NULLS FIRST, ns.position, ns.name`, [project.id, branchId]);
+    const revisions = await this.sql.unsafe<DatabaseRow[]>(`SELECT DISTINCT ON (ns.node_id) ns.node_id, ns.name, dr.content_text, dr.created_at
+      FROM knowledge_node_state ns JOIN knowledge_node n ON n.id = ns.node_id AND n.project_id = ns.project_id
+      LEFT JOIN document_revision dr ON dr.project_id = ns.project_id AND dr.node_id = ns.node_id AND dr.branch_id = ns.branch_id
+      WHERE ns.project_id = $1 AND ns.branch_id = $2 AND ns.deleted_at IS NULL AND n.kind IN ('document', 'markdown')
+      ORDER BY ns.node_id, dr.created_at DESC NULLS LAST`, [project.id, branchId]);
+    return {
+      ...project,
+      files: files.map((row) => ({ id: String(row.node_id), name: String(row.name), kind: row.kind as PublicProjectFileRecord["kind"], parentId: row.parent_node_id ? String(row.parent_node_id) : null, position: Number(row.position) })),
+      sections: revisions.map((row) => ({ id: `section-${String(row.node_id)}`, nodeId: String(row.node_id), heading: String(row.name), content: String(row.content_text ?? ""), evidenceState: "needs_verification" as const, updatedAt: row.created_at ? iso(row.created_at) : project.updatedAt })),
+    };
+  }
+
+  /** 创建空白私有项目与 owner/main 分支同事务写入；不接受客户端 userId。 */
+  public async createPrivateProject(input: CreatePrivateProjectRecordInput): Promise<PublicProjectRecord> {
+    try {
+      return await this.sql.begin(async (tx) => {
+        await tx`INSERT INTO knowledge_project (id, owner_user_id, slug, title, summary, visibility, status, license, published_at, created_at, updated_at)
+          VALUES (${input.id}, ${input.ownerUserId}, ${input.slug}, ${input.title}, ${input.summary}, 'private', 'draft', ${input.license}, NULL, ${input.createdAt}, ${input.createdAt})`;
+        await tx`INSERT INTO project_member (project_id, user_id, role, created_at) VALUES (${input.id}, ${input.ownerUserId}, 'owner', ${input.createdAt})`;
+        await tx`INSERT INTO knowledge_branch (id, project_id, name, owner_user_id, is_protected, created_at, updated_at)
+          VALUES (${crypto.randomUUID()}, ${input.id}, 'main', NULL, TRUE, ${input.createdAt}, ${input.createdAt})`;
+        const ownerRows = await tx.unsafe<DatabaseRow[]>(`SELECT p.id, p.slug, p.title, p.summary, p.visibility, p.status, p.license, p.published_at, p.updated_at,
+          u.id AS owner_id, pr.username AS owner_username, pr.display_name AS owner_display_name, pr.avatar_asset_id AS owner_avatar,
+          0::bigint AS unique_readers, 1::bigint AS contributor_count, 0::bigint AS source_count, 0::bigint AS open_merge_requests, 0::bigint AS version
+          FROM knowledge_project p JOIN platform_user u ON u.id = p.owner_user_id JOIN platform_profile pr ON pr.user_id = u.id WHERE p.id = $1 LIMIT 1`, [input.id]);
+        const row = ownerRows[0];
+        if (!row) throw new Error("项目创建后读取失败");
+        return mapPublicProject(row);
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new AccountConflictError("username", "项目 slug 已被当前用户使用");
+      throw error;
+    }
   }
 }

@@ -72,6 +72,7 @@ Internet
 - [开放知识协作平台产品与架构规格](docs/open-knowledge-platform-spec.md)
 - [开放知识平台 shadcn/ui 前端与动效规范](docs/open-knowledge-ui-motion.md)
 - [AI 助手记忆、上下文压缩与会话架构](docs/ai-memory-context-architecture.md)
+- [私有 OSS 上传与解析实现边界](docs/assets-upload-implementation.md)
 - [产品规格与当前范围](docs/product-spec.md)
 - [检索、GraphRAG-lite 与上下文投影](docs/retrieval-architecture.md)
 - [本地 BGE-M3 worker 的离线边界与启动方式](docs/local-bge-m3-worker.md)

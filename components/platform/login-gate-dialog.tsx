@@ -20,7 +20,13 @@ const intentCopy: Record<LoginIntent, { title: string; description: string }> = 
   contribute: { title: "登录后提交贡献", description: "游客可以阅读和使用 AI；创建合并申请与永久署名需要登录。" },
 };
 
-/** 当前只展示明确的认证门槛；Auth.js 后端完成前不伪造登录成功。 */
+function openLogin(intent: LoginIntent): void {
+  const callbackUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const params = new URLSearchParams({ callbackUrl, intent });
+  window.location.assign(`/login?${params.toString()}`);
+}
+
+/** 登录门槛保留用户原动作，跳转真实 Auth.js 页面；不在弹窗内伪造会话。 */
 export function LoginGateDialog({ open, intent, onOpenChange }: LoginGateDialogProps) {
   const copy = intentCopy[intent];
   return (
@@ -30,10 +36,10 @@ export function LoginGateDialog({ open, intent, onOpenChange }: LoginGateDialogP
         <DialogTitle>{copy.title}</DialogTitle>
         <DialogDescription>{copy.description}</DialogDescription>
         <div className="login-options">
-          <Button disabled><Github size={17} />使用 GitHub 登录</Button>
-          <Button variant="outline" disabled><Mail size={17} />使用邮箱和密码</Button>
+          <Button onClick={() => openLogin(intent)}><Github size={17} />登录或注册</Button>
+          <Button variant="outline" onClick={() => openLogin(intent)}><Mail size={17} />使用邮箱和密码</Button>
         </div>
-        <p className="login-status">认证后端正在接入。当前页面不会创建虚假会话，也不会收集密码。</p>
+        <p className="login-status">登录后会返回你刚才的操作；游客的公开阅读和 AI 体验不受影响。</p>
       </DialogContent>
     </Dialog>
   );
