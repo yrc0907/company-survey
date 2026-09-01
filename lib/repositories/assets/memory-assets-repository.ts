@@ -69,7 +69,8 @@ export class MemoryAssetsRepository implements AssetRepository {
     candidate.status = "processing";
     candidate.attempt += 1;
     candidate.leaseOwner = leaseOwner;
-    candidate.leaseExpiresAt = new Date(now + Math.max(5, Math.min(900, Math.trunc(leaseSeconds))) * 1_000).toISOString();
+    const boundedLease = Number.isFinite(leaseSeconds) ? Math.max(5, Math.min(900, Math.trunc(leaseSeconds))) : 120;
+    candidate.leaseExpiresAt = new Date(now + boundedLease * 1_000).toISOString();
     candidate.startedAt = candidate.startedAt ?? claimedAt;
     candidate.updatedAt = claimedAt;
     this.jobs.set(candidate.id, candidate);

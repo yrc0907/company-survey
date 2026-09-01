@@ -117,7 +117,7 @@ export class PostgresAssetsRepository implements AssetRepository {
    * 同一任务同一时刻只能被一个 Worker 持有。attempt 在领取时递增，手动 retry 只重新排队。
    */
   public async claimNextIngestion(workerId: string, leaseSeconds: number): Promise<IngestionClaim | null> {
-    const boundedLease = Math.min(Math.max(Math.trunc(leaseSeconds), 5), 900);
+    const boundedLease = Number.isFinite(leaseSeconds) ? Math.min(Math.max(Math.trunc(leaseSeconds), 5), 900) : 120;
     return this.sql.begin(async (tx) => {
       const jobs = await tx.unsafe<Row[]>(`WITH candidate AS (
           SELECT j.id
