@@ -51,6 +51,16 @@
 - **复验**：香港 ECS 临时对象真实 Put/Head/Delete 通过，未保留对象或签名 URL。
 - **性能影响**：正常路径只读 HEAD 元数据；缺失元数据时才流式读取对象，受 25 MiB 上限约束。
 
+## ASSET-WORKER-002：one-shot Worker 使用旧镜像或无法退出
+
+- **场景**：源码修复后直接执行 `docker compose --profile ingestion run --rm ingestion`。
+- **现象**：若未传 `--build`，Compose 复用旧 ingestion 镜像，继续报告已修复前的 SQL 错误；修复后即使输出 `asset_ingestion_idle`，STS/OSS 刷新定时器仍可能让进程挂起。
+- **根因**：Worker 镜像与 App 镜像使用不同 target/tag，`run` 不会因工作树变化自动重建；one-shot 进程还继承了长生命周期凭据刷新定时器。
+- **方案**：发布/验收显式使用 `docker compose --profile ingestion run --build --rm ingestion`；Worker 完成数据库关闭和日志写出后显式 `process.exit(0/1)`，常驻 App 不采用该退出路径。
+- **修复**：`3773a23`（领取 SQL）、`90cfd7d`（one-shot 生命周期）。
+- **复验**：香港 ECS Worker 输出 `asset_ingestion_idle`、`processed=0` 后正常退出；未留下 ingestion 容器。
+- **性能影响**：按需构建耗时约数分钟但不增加常驻内存；空队列运行不调用模型、不读取大对象。
+
 ## COLLAB-IDEMP-001：重试幂等键携带不同内容
 
 - **场景**：网络超时后，客户端使用同一 `Idempotency-Key` 重试，但修改了命令、MR 描述或 Review 内容。
