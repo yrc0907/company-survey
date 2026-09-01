@@ -33,6 +33,14 @@
 - [ ] 默认头像使用用户名首字符和稳定背景色；用户头像完成 MIME/大小校验、EXIF 清理、WebP 派生和私有 OSS 受控访问
 - [ ] PostgreSQL FTS + pgvector + RRF + Reranker 持久化检索和后台索引 Worker
 - [ ] 权限拒绝、游客迁移、版本冲突、署名一致性、移动端、Reduced Motion 和公网 E2E
+- [x] 审查 Codex、Claude Code、DeepSeek Harness、Headroom 与 Billion Context 本地快照，并形成记忆/压缩/会话架构文档
+- [ ] 建立 conversation/message/part/tool/checkpoint/summary/context_snapshot/ai_patch schema 和迁移
+- [ ] 新对话、自动命名、历史列表、搜索、重命名、置顶、归档、删除与匿名 IndexedDB 迁移
+- [ ] 实现当前选区/文件/文件夹/项目/全站 Scope 选择、权限过滤和上下文查看器
+- [ ] 实现最近窗口、确定性 Tool Result 裁剪、结构化摘要检查点、工具配对保护、压缩失败回滚和连续失败熔断
+- [ ] 建立 memory_item/version/source、候选确认、supersession、有效期、混合检索、时间加权和注入 token 上限
+- [ ] 实现项目 Scope fail-closed、跨用户/项目/分支泄漏测试、记忆删除和敏感信息脱敏
+- [ ] 建立 Memory Recall/Precision、Stale Injection、Compression Fact Retention、Resume Fidelity 和成本 Golden Set
 
 ## 0. 项目与交付
 
