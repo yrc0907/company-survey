@@ -12,6 +12,7 @@ import {
   ConversationService,
   MemoryManagementService,
   MemoryRetrievalService,
+  DeterministicSummaryProvider,
   type ConversationSummaryProvider,
 } from "@/lib/services/memory";
 
@@ -212,6 +213,21 @@ async function run(): Promise<void> {
   assert.equal(await repository.getLatestSummary(factConversation.id, "user-a"), null, "事实校验失败不得写入摘要");
   assert.equal((await repository.listCheckpoints(factConversation.id, "user-a")).at(-1)?.failureCode, "critical_fact_drift", "事实漂移必须可审计分类");
   assert.equal((await repository.listMessages(factConversation.id, "user-a")).length, 4, "压缩失败必须保留全部原始消息");
+
+  const goodFactCompactor = new ConversationCompactionService(repository, new DeterministicSummaryProvider());
+  const goodFactConversation = await conversations.create({ ownerUserId: "user-a", title: "关键事实成功压缩", projectId: "project-a", branchId: "branch-a" });
+  await conversations.appendMessage({ ownerUserId: "user-a", conversationId: goodFactConversation.id, role: "user", content: "订单号: ORD-OK-1 金额: ¥88 交付日期: 2026-10-01\n待办: 确认舱位" });
+  await conversations.appendMessage({ ownerUserId: "user-a", conversationId: goodFactConversation.id, role: "assistant", content: "已记录。".repeat(80) });
+  await conversations.appendMessage({ ownerUserId: "user-a", conversationId: goodFactConversation.id, role: "user", content: "保留最近问题" });
+  await conversations.appendMessage({ ownerUserId: "user-a", conversationId: goodFactConversation.id, role: "assistant", content: "保留最近回答" });
+  const goodFactResult = await goodFactCompactor.compact({ ownerUserId: "user-a", conversationId: goodFactConversation.id, protectRecentMessages: 2 });
+  assert.ok((goodFactResult.summary.structured.criticalFacts ?? []).some((fact) => fact.kind === "amount" && fact.value === "¥88"), "成功摘要必须保留金额事实");
+  assert.ok(goodFactResult.summary.structured.criticalFactsHash, "成功摘要必须持久化事实哈希");
+  const projected = await new ContextAssemblyService(repository).assemble({
+    ownerUserId: "user-a", conversationId: goodFactConversation.id, query: "订单", scope: { scope: "project", actorUserId: "user-a", projectId: "project-a", branchId: "branch-a", fileId: null, folderId: null, selectedText: null },
+    totalTokenBudget: 2_048, recentMessageBudget: 256, summaryBudget: 64, evidenceBudget: 512, memoryBudget: 128, factsBudget: 256,
+  });
+  assert.ok(projected.criticalFacts.some((fact) => fact.kind === "identifier"), "摘要被预算挤出时仍需单独投影关键 ID");
 
   const commitRepository = new CommitFailRepository();
   const commitConversations = new ConversationService(commitRepository);

@@ -110,7 +110,8 @@ export class ConversationCompactionService {
         : error instanceof Error && (error.message.startsWith("压缩摘要丢失关键事实") || error.message.startsWith("上下文摘要关键事实校验失败"))
           ? "critical_fact_drift"
           : "summary_failed";
-      checkpoint = { ...checkpoint, status: "failed", failureCode, completedAt: new Date().toISOString() };
+      // failed 检查点不能引用尚未原子提交的 summary；否则 PostgreSQL 外键会掩盖原始错误并留下 started 锁。
+      checkpoint = { ...checkpoint, summaryId: null, tokenAfter: null, status: "failed", failureCode, completedAt: new Date().toISOString() };
       await this.repository.updateCheckpoint(checkpoint);
       throw error;
     }
