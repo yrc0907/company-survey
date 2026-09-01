@@ -63,3 +63,7 @@ RUN groupadd --system --gid 1001 nodejs \
 USER worker
 
 CMD ["node_modules/.bin/tsx", "scripts/run-asset-ingestion-worker.ts"]
+
+# 保证不指定 target 的 `docker build .` 仍得到 Next.js runner，而不是可选 Worker。
+# Compose 的 app/migrate 也显式指定 runner；ingestion 只能通过 profile 使用。
+FROM runner AS default
