@@ -19,7 +19,7 @@ Internet
 
 ## 1.1 实际部署记录（2026-09-02）
 
-本次香港迁移使用分支提交 `0ebcd30`（工作树后续 OSS/运维脚本改动尚未推远端），服务器目录为 `/srv/research-workbench`。以下为实际命令与运行结果，不包含任何密码、Key 或 Basic Auth 凭据：
+本次香港迁移使用分支提交 `4d611d9`，服务器目录为 `/srv/research-workbench`。以下为实际命令与运行结果，不包含任何密码、Key 或 Basic Auth 凭据：
 
 | 项目 | 实际结果 |
 | --- | --- |
@@ -46,14 +46,14 @@ ESA HTTPS /healthz         -> 525, origin certificate not ready
 App / PostgreSQL / Caddy   -> healthy inside ECS
 ```
 
-公开平台补充验收（源站容器/API 已具备，ESA 公网入口待切换后复跑）：
+公开平台补充验收（通过 SSH 隧道直连源站容器/API 已完成；ESA 公网入口待切换后复跑）：
 
 ```text
-GET /api/platform/projects（源站）                  -> 待在证书/ESA 切换后复跑
-GET /api/platform/projects/project-huice（源站）     -> 待在证书/ESA 切换后复跑
-POST /api/research/assistant（源站）                 -> 待在证书/ESA 切换后复跑
-GET /api/research/workbench（源站）                  -> 待在证书/ESA 切换后复跑
-POST /api/platform/uploads（未登录，源站）           -> 待在证书/ESA 切换后复跑
+GET /api/platform/projects（源站隧道）               -> 200，`project-huice` 可匿名读取
+GET /api/platform/projects/project-huice（源站隧道）  -> 200，文件树可读取
+POST /api/research/assistant（源站隧道）              -> 受限上下文链路可调用
+GET /api/research/workbench（源站隧道）               -> Basic Auth 边界按配置返回
+POST /api/platform/uploads（未登录，源站隧道）        -> 401，上传不允许匿名
 ```
 
 完整界面流程通过 SSH 隧道连接实际服务器 App 验收：浏览器写入资料后来源数立即更新，语义搜索返回新资料，AI 使用 `gemini-embedding-2-preview -> qwen3-rerank -> gpt-5.6-terra` 生成带来源回答。服务器 API 另行验证了版本从 1 保存到 2，以及旧版本写入被 `409 VERSION_CONFLICT` 拒绝。公网入口因 ESA ICP/源站证书链路尚未切换，不能把上述源站验收写成公网验收。

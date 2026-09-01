@@ -54,17 +54,33 @@ pnpm exec node scripts/platform-e2e.mjs
 | `E2E-ASSISTANT-001` | 助手输入交互 | `@` 文件候选、附件拖放/移除、新对话反馈 |
 | `E2E-ASSISTANT-002` | 历史会话入口 | 历史 Sheet 打开，匿名登录提示可见 |
 | `E2E-MOBILE-001` | 移动端 | 390px 视口无横向溢出 |
+| `E2E-OSS-001` | 香港 ECS 私有对象 | 临时 `quarantine/` 对象真实 PUT（显式 SHA 元数据）、HEAD 校验、内容读取和 DELETE；日志不记录签名 URL 或凭据 |
+| `E2E-OSS-001` | 香港 ECS 临时对象闭环 | ECS RAM Role 签发临时 PUT URL；PUT 必须发送 `Content-Type` 与 `x-oss-meta-sha256`；服务端 `HeadObject` 读取 `result.meta.sha256`/原始 header、校验长度和哈希后执行 GET/DELETE；最后确认对象不可再读 |
 
-真实登录、OSS 直传和跨用户权限需要在香港服务器环境单独执行；本地无数据库时只验证 typed seed 和匿名边界，不得把它写成生产数据验证。
+真实登录、OSS 直传和跨用户权限需要在香港服务器环境单独执行；本地无数据库时只验证 typed seed 和匿名边界，不得把它写成生产数据验证。香港源站已通过 SSH 隧道执行同一套 7 项 Playwright 交互脚本；公网 ESA 入口仍受 ICP/证书切换阻塞。
 
 ## 3. 最近一次记录
 
 | 日期 | 环境 | 结果 |
 | --- | --- | --- |
 | 2026-09-02 | 本地生产服务 `http://127.0.0.1:3101` | `pnpm test:e2e:platform`：7/7 通过；包含搜索、排序、快捷键、项目详情、文件筛选、分享成功/失败反馈、助手 `@`/拖放/历史和 390px 无溢出 |
-| 2026-09-02 | 香港 ECS `47.57.138.55` | SSH 22、root 密钥、`research-oss` RAM 角色、Docker、PostgreSQL、App、Caddy 源站已验证；ESA 返回 ICP/525，443 公网验收待人工切换后复跑 |
+| 2026-09-02 | 香港 ECS `47.57.138.55` | 通过 SSH 隧道直连真实 App/数据库，`pnpm test:e2e:platform`：7/7 通过；OSS 隔离对象真实 Put/Head/Delete 通过。ESA 返回 ICP/525，443 公网验收待人工切换后复跑 |
 
 本地 E2E 的剪贴板场景在无头浏览器中会触发权限错误，页面正确显示可读的 Alert；测试将“成功复制”或“权限错误提示”都视为该场景的可验证终态，避免把浏览器能力差异误判为无反馈。
+
+`E2E-OSS-001` 使用一次性随机隔离键并在断言后立即删除；若 HEAD 缺少用户元数据，完成接口必须走流式 SHA-256 重算，不能把缺失元数据当作验证成功。该测试只验证 ECS RAM Role 与 Bucket 权限，不等同于浏览器 CORS 直传验收。
+
+### 2.1 香港 ECS OSS 临时对象建议
+
+在香港 ECS 的应用容器内运行一次性脚本，使用随机 `quarantine/e2e/<uuid>/<sha256>.txt` Key 和不含敏感内容的短文本。脚本必须：
+
+1. 通过应用 Provider 生成 PUT 签名，并在实际 PUT 请求显式带 `x-oss-meta-sha256`；
+2. 调用 `headObject` 记录长度、ETag 和 `sha256` 是否等于本地计算值；若 `result.meta` 为空，记录原始响应头并让应用走流式重算路径；
+3. 读取短期 GET URL，确认内容完全一致；
+4. 调用受控 `deleteObject`，再次 HEAD 必须得到 404/NotFound；
+5. 测试结束后只保留 `scenario_id`、状态码和耗时，不记录签名 URL、临时凭据或对象内容。
+
+`ali-oss` 的 `head()` 会把 `x-oss-meta-sha256` 映射为 `result.meta.sha256`，不要用带前缀的字段名比较；适配器同时支持原始响应头，避免 SDK 版本差异造成误报。
 
 ## 4. 失败记录规则
 
