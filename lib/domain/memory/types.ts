@@ -69,6 +69,19 @@ export interface ConversationMessage {
   createdAt: string;
 }
 
+/**
+ * 压缩前后必须保持的关键事实；只保存最小值和来源消息 ID，不复制完整消息正文。
+ * key 用于识别同一个字段（例如同一条待办），status 只对待办事实有意义。
+ */
+export interface CriticalFact {
+  id: string;
+  kind: "identifier" | "amount" | "date" | "conflict" | "todo";
+  key: string | null;
+  value: string;
+  status: "open" | "done" | "blocked" | null;
+  sourceMessageIds: string[];
+}
+
 /** 工具执行显式关联 call/result，压缩区间不得拆开这一对。 */
 export interface ToolExecution {
   id: string;
@@ -93,6 +106,10 @@ export interface StructuredConversationSummary {
   citationIds: string[];
   todos: Array<{ id: string; text: string; status: "open" | "done" | "blocked" }>;
   conflicts: Array<{ id: string; description: string }>;
+  /** 由压缩服务计算并校验；旧摘要没有该字段时按 legacy 处理。 */
+  criticalFacts?: CriticalFact[];
+  /** criticalFacts 的规范 JSON SHA-256，用于 Resume 时检测持久化摘要篡改或截断。 */
+  criticalFactsHash?: string;
 }
 
 export interface ConversationSummary {
@@ -206,4 +223,3 @@ export interface AiPatch {
   createdAt: string;
   confirmedAt: string | null;
 }
-

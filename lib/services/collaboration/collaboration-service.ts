@@ -1,9 +1,10 @@
 import { KnowledgeCommandRegistry } from "@/lib/commands/knowledge";
-import { CollaborationInvalidStateError, CollaborationNotFoundError, type BranchSummary, type CollaborationDiffEntry, type CommitSummary, type CreateBranchInput, type CreateMergeRequestInput, type CreateProjectInput, type CreateReviewInput, type MergeRequestSummary, type ProjectSummary, type ReviewSummary } from "@/lib/domain/collaboration";
+import { CollaborationConflictError, CollaborationInvalidStateError, CollaborationNotFoundError, type BranchSummary, type CollaborationDiffEntry, type CommitSummary, type CreateBranchInput, type CreateMergeRequestInput, type CreateProjectInput, type CreateReviewInput, type MergeRequestSummary, type ProjectSummary, type ReviewSummary } from "@/lib/domain/collaboration";
 import type { AuthenticatedActor } from "@/lib/domain/platform";
 import type { PlatformRepository } from "@/lib/repositories/platform/platform-repository";
 import type { CollaborationRepository } from "@/lib/repositories/collaboration/collaboration-repository";
 import { AuthorizationService } from "@/lib/services/platform/authorization-service";
+import { collaborationIdempotencyFingerprint } from "@/lib/services/collaboration/idempotency";
 
 /** 协作应用服务：先做项目/分支授权，再调用领域仓储；不接受客户端声明的 userId。 */
 export class CollaborationService {
@@ -51,13 +52,27 @@ export class CollaborationService {
   public async executeCommand(input: import("@/lib/domain/collaboration").ExecuteCommandInput, actor: AuthenticatedActor): Promise<{ commit: CommitSummary | null; replayed: boolean }> {
     const branch = await this.repository.getBranch(input.branchId); if (!branch) throw new CollaborationNotFoundError("分支不存在");
     await this.authorization.assertBranchAction(actor, branch.projectId, input.branchId, "write_branch");
+    const idempotencyFingerprint = input.idempotencyKey
+      ? collaborationIdempotencyFingerprint("knowledge-command", { branchId: input.branchId, actorId: actor.userId, command: input.command, message: input.message ?? "", aiAssisted: input.aiAssisted ?? false })
+      : undefined;
     if (input.idempotencyKey) {
-      const prior = await this.repository.getCommitByIdempotency(input.branchId, input.idempotencyKey);
+      const prior = await this.repository.getCommitByIdempotency(input.branchId, input.idempotencyKey, idempotencyFingerprint);
       if (prior) return { commit: prior, replayed: true };
     }
-    const store = this.repository.createCommandStore({ branchId: input.branchId, expectedVersion: input.expectedVersion, idempotencyKey: input.idempotencyKey, message: input.message, aiAssisted: input.aiAssisted });
+    const store = this.repository.createCommandStore({ branchId: input.branchId, expectedVersion: input.expectedVersion, idempotencyKey: input.idempotencyKey, idempotencyFingerprint, message: input.message, aiAssisted: input.aiAssisted });
     const registry = new KnowledgeCommandRegistry(store);
-    const result = await registry.execute(input.branchId, { userId: actor.userId }, input.command);
+    let result: Awaited<ReturnType<typeof registry.execute>>;
+    try {
+      result = await registry.execute(input.branchId, { userId: actor.userId }, input.command);
+    } catch (error) {
+      // 另一个请求可能在本次校验后先完成提交；此时 Registry 的业务校验可能看到已存在节点。
+      // 回查同一指纹可把并发重试还原为幂等响应，真正的同名/非法命令仍原样抛出。
+      if (input.idempotencyKey) {
+        const prior = await this.repository.getCommitByIdempotency(input.branchId, input.idempotencyKey, idempotencyFingerprint);
+        if (prior) return { commit: prior, replayed: true };
+      }
+      throw error;
+    }
     const commit = input.idempotencyKey ? await this.repository.getCommitByIdempotency(input.branchId, input.idempotencyKey) : await this.repository.getCommit(input.branchId, result.change.id);
     return { commit, replayed: false };
   }
@@ -67,6 +82,8 @@ export class CollaborationService {
     if (!source || !target || source.projectId !== input.projectId || target.projectId !== input.projectId) throw new CollaborationNotFoundError("源或目标分支不存在");
     await this.authorization.assertBranchAction(actor, input.projectId, input.sourceBranchId, "submit_merge_request");
     if (!target.isProtected) throw new CollaborationInvalidStateError("目标分支必须是保护分支");
+    if (source.status !== "active") throw new CollaborationInvalidStateError("该草稿分支已提交或关闭，请基于最新版本新建分支");
+    if (target.status !== "active") throw new CollaborationInvalidStateError("目标主分支当前不可接受新的修改申请");
     return this.repository.createMergeRequest(input, actor);
   }
 
@@ -95,6 +112,8 @@ export class CollaborationService {
     const mergeRequest = await this.repository.getMergeRequest(input.mergeRequestId); if (!mergeRequest) throw new CollaborationNotFoundError("合并申请不存在");
     await this.authorization.assertProjectAction(actor, mergeRequest.projectId, "review_merge_request");
     if (mergeRequest.authorUserId === actor.userId) throw new CollaborationInvalidStateError("提交者不能审核自己的合并申请");
+    if (input.verdict === "comment" && !input.body?.trim()) throw new CollaborationInvalidStateError("逐段评论必须填写内容");
+    if (input.verdict === "approve" && mergeRequest.conflictStatus === "conflict") throw new CollaborationConflictError("存在未解决冲突，不能批准合并申请", mergeRequest.conflictDetails);
     return this.repository.addReview(input, actor);
   }
 

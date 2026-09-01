@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { GET as listConversationRoute, POST as createConversationRoute } from "@/app/api/ai/conversations/route";
 import { setAuthenticatedActorResolverForTest } from "@/lib/auth/session";
 import { ValidationError } from "@/lib/domain/errors";
-import type { ConversationMessage, StructuredConversationSummary } from "@/lib/domain/memory";
+import type { Conversation, ConversationMessage, ConversationSummary, StructuredConversationSummary } from "@/lib/domain/memory";
 import { InMemoryMemoryRepository, setMemoryRepositoryForTest } from "@/lib/repositories/memory";
-import { authorizeAiScope } from "@/lib/services/context";
+import { authorizeAiScope, ContextAssemblyService, ContextIntegrityError } from "@/lib/services/context";
 import {
   CompactionCircuitOpenError,
   ConversationCompactionService,
@@ -32,6 +32,23 @@ class FailingSummaryProvider implements ConversationSummaryProvider {
 
   public async summarize(): Promise<StructuredConversationSummary> {
     throw new Error("provider failed");
+  }
+}
+
+/** 注入提交失败，验证摘要/检查点/会话版本不会半提交。 */
+class CommitFailRepository extends InMemoryMemoryRepository {
+  public async commitCompaction(_input: { conversation: Conversation; summary: ConversationSummary; checkpoint: import("@/lib/domain/memory").ConversationCheckpoint }): Promise<void> {
+    throw new Error("commit injected");
+  }
+}
+
+/** 故意丢弃关键事实，验证压缩服务不会把不完整摘要标记为成功。 */
+class MissingFactsSummaryProvider implements ConversationSummaryProvider {
+  public readonly name = "contract";
+  public readonly model = "missing-facts";
+
+  public async summarize(): Promise<StructuredConversationSummary> {
+    return { goal: ["摘要"], decisions: [], constraints: [], entities: [], claims: [], citationIds: [], todos: [], conflicts: [] };
   }
 }
 
@@ -158,6 +175,12 @@ async function run(): Promise<void> {
     ownerUserId: "user-a", projectId: "project-b", scope: "project", category: "decision", content: "另一个项目使用本地文件", state: "active",
     sources: [{ sourceType: "message", sourceId: "message-other", extractionMode: "manual_review" }],
   });
+  const conversationMemory = await memoryService.create({
+    ownerUserId: "user-a", projectId: "project-a", conversationId: conversation.id, scope: "conversation", category: "decision",
+    content: "仅当前会话可见的临时决定", state: "active",
+    sources: [{ sourceType: "message", sourceId: "conversation-private", extractionMode: "manual_review" }],
+  });
+  const otherConversation = await conversations.create({ ownerUserId: "user-a", title: "另一个会话", projectId: "project-a", branchId: "branch-a" });
   await assert.rejects(() => memoryService.create({
     ownerUserId: "user-a", scope: "user", category: "identity", content: "模型猜测的身份", state: "active",
     sources: [{ sourceType: "message", sourceId: "message-guess", extractionMode: "automatic_candidate" }],
@@ -168,6 +191,8 @@ async function run(): Promise<void> {
   assert.ok(retrieved.some((entry) => entry.item.id === preference.item.id), "用户偏好应跨项目按需召回");
   assert.ok(retrieved.some((entry) => entry.item.id === projectMemory.item.id), "当前项目记忆应被召回");
   assert.ok(retrieved.every((entry) => entry.item.projectId !== "project-b"), "其他项目记忆不能串入当前 Scope");
+  assert.equal((await new MemoryRetrievalService(repository).retrieve({ ownerUserId: "user-a", projectId: "project-a", conversationId: otherConversation.id, query: "临时 决定" })).some((entry) => entry.item.id === conversationMemory.item.id), false, "其他会话不能召回会话级记忆");
+  await assert.rejects(() => new MemoryRetrievalService(repository).retrieve({ ownerUserId: "user-a", projectId: "project-a", conversationId: "missing-conversation", query: "OSS" }), /作用域无法确认/, "不存在的会话 ID 必须 fail closed");
   const updated = await memoryService.supersede({
     ownerUserId: "user-a", memoryId: preference.item.id, content: "回答默认使用简体中文", reason: "用户修正偏好",
     sources: [{ sourceType: "explicit_user", sourceId: "message-pref-2", extractionMode: "explicit" }],
@@ -176,6 +201,35 @@ async function run(): Promise<void> {
   assert.equal(updated.version.supersedesVersionId, preference.version.id, "新版本必须链接被替代版本");
   await memoryService.setState("user-a", projectMemory.item.id, "disabled");
   assert.equal((await new MemoryRetrievalService(repository).retrieve({ ownerUserId: "user-a", projectId: "project-a", conversationId: null, query: "OSS" })).some((entry) => entry.item.id === projectMemory.item.id), false, "禁用记忆不得注入");
+
+  const factConversation = await conversations.create({ ownerUserId: "user-a", title: "关键事实压缩", projectId: "project-a", branchId: "branch-a" });
+  await conversations.appendMessage({ ownerUserId: "user-a", conversationId: factConversation.id, role: "user", content: "订单号: ORD-20260902 金额: ¥1200 交付日期: 2026-09-30\n待办: 确认船期" });
+  await conversations.appendMessage({ ownerUserId: "user-a", conversationId: factConversation.id, role: "assistant", content: "已记录关键事实。".repeat(80) });
+  await conversations.appendMessage({ ownerUserId: "user-a", conversationId: factConversation.id, role: "user", content: "保留最近问题" });
+  await conversations.appendMessage({ ownerUserId: "user-a", conversationId: factConversation.id, role: "assistant", content: "保留最近回答" });
+  const factCompactor = new ConversationCompactionService(repository, new MissingFactsSummaryProvider());
+  await assert.rejects(() => factCompactor.compact({ ownerUserId: "user-a", conversationId: factConversation.id, protectRecentMessages: 2 }), /丢失关键事实/, "摘要遗漏 ID/金额/日期/待办必须失败");
+  assert.equal(await repository.getLatestSummary(factConversation.id, "user-a"), null, "事实校验失败不得写入摘要");
+  assert.equal((await repository.listCheckpoints(factConversation.id, "user-a")).at(-1)?.failureCode, "critical_fact_drift", "事实漂移必须可审计分类");
+  assert.equal((await repository.listMessages(factConversation.id, "user-a")).length, 4, "压缩失败必须保留全部原始消息");
+
+  const commitRepository = new CommitFailRepository();
+  const commitConversations = new ConversationService(commitRepository);
+  const commitConversation = await commitConversations.create({ ownerUserId: "user-a", title: "原子提交失败", projectId: "project-a", branchId: "branch-a" });
+  for (let index = 0; index < 4; index += 1) {
+    await commitConversations.appendMessage({ ownerUserId: "user-a", conversationId: commitConversation.id, role: index % 2 === 0 ? "user" : "assistant", content: `消息 ${index} ${"原子提交".repeat(120)}` });
+  }
+  await assert.rejects(() => new ConversationCompactionService(commitRepository, new TinySummaryProvider()).compact({ ownerUserId: "user-a", conversationId: commitConversation.id, protectRecentMessages: 2 }), /commit injected/, "原子提交失败应向上游报告");
+  assert.equal(await commitRepository.getLatestSummary(commitConversation.id, "user-a"), null, "原子提交失败不能留下孤儿摘要");
+  assert.equal((await commitRepository.listCheckpoints(commitConversation.id, "user-a")).at(-1)?.status, "failed", "原子提交失败检查点必须落失败终态");
+
+  const contextService = new ContextAssemblyService(repository);
+  const projectScope = { scope: "project" as const, actorUserId: "user-a", projectId: "project-a", branchId: "branch-a", fileId: null, folderId: null, selectedText: null };
+  await assert.rejects(() => contextService.assemble({ ownerUserId: "user-a", conversationId: conversation.id, query: "OSS", scope: { ...projectScope, projectId: "project-b" } }), ContextIntegrityError, "会话与 Scope 项目不一致必须拒绝");
+  const publicContext = await contextService.assemble({
+    ownerUserId: "user-a", conversationId: conversation.id, query: "中文", scope: { scope: "public", actorUserId: null, projectId: null, branchId: null, fileId: null, folderId: null, selectedText: null },
+  });
+  assert.equal(publicContext.memories.length, 0, "公开 Scope 不能注入登录用户的私人记忆");
 
   setMemoryRepositoryForTest(repository);
   setAuthenticatedActorResolverForTest(async () => null);

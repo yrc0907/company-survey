@@ -6,12 +6,14 @@ import type { KnowledgeBranchContext, KnowledgeCommandStore, KnowledgeNodeRecord
 import { calculateDiff, CollaborationConflictError, CollaborationInvalidStateError, CollaborationNotFoundError, type BranchSummary, type CollaborationNodeSnapshot, type CollaborationSnapshot, type CommitSummary, type CreateBranchInput, type CreateMergeRequestInput, type CreateProjectInput, type CreateReviewInput, type MergeRequestSummary, type ProjectSummary, type ReviewSummary, applyDiff } from "@/lib/domain/collaboration";
 import type { AuthenticatedActor, KnowledgeNodeKind } from "@/lib/domain/platform";
 import type { CollaborationRepository, CollaborationQueryable } from "@/lib/repositories/collaboration/collaboration-repository";
+import { collaborationIdempotencyFingerprint } from "@/lib/services/collaboration/idempotency";
 
 type Row = Record<string, unknown>;
 const text = (value: unknown): string => String(value ?? "");
 const nullable = (value: unknown): string | null => value == null ? null : String(value);
 const iso = (value: unknown): string => value instanceof Date ? value.toISOString() : text(value);
 const bool = (value: unknown): boolean => value === true || value === "t";
+const isUniqueViolation = (error: unknown): boolean => typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "23505";
 
 function mapProject(row: Row): ProjectSummary {
   return {
@@ -40,7 +42,7 @@ function mapReview(row: Row): ReviewSummary {
 const PROJECT_SELECT = `SELECT p.id, p.owner_user_id, p.slug, p.title, p.summary, p.visibility, p.status, p.license, p.published_at, p.created_at, p.updated_at,
   pr.username AS owner_username, pr.display_name AS owner_display_name, pr.avatar_asset_id AS owner_avatar_asset_id
   FROM knowledge_project p JOIN platform_profile pr ON pr.user_id = p.owner_user_id`;
-const MERGE_SELECT = `SELECT id, project_id, source_branch_id, target_branch_id, author_user_id, title, description, status, base_commit_id, head_commit_id, merged_commit_id, merged_by_user_id, target_version, conflict_status, conflict_details, created_at, updated_at, merged_at FROM merge_request`;
+const MERGE_SELECT = `SELECT id, project_id, source_branch_id, target_branch_id, author_user_id, title, description, status, base_commit_id, head_commit_id, merged_commit_id, merged_by_user_id, target_version, conflict_status, conflict_details, idempotency_fingerprint, created_at, updated_at, merged_at FROM merge_request`;
 
 /** PostgreSQL 协作仓储：事务负责锁定 Branch/MR，所有结果经过固定 SQL 映射。 */
 export class PostgresCollaborationRepository implements CollaborationRepository {
@@ -103,11 +105,15 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
     const branch = await this.getBranch(id); if (!branch) throw new CollaborationNotFoundError("分支创建后无法读取"); return branch;
   }
 
-  public createCommandStore(options: { branchId: string; expectedVersion?: number; idempotencyKey?: string; message?: string; aiAssisted?: boolean }): KnowledgeCommandStore {
+  public createCommandStore(options: { branchId: string; expectedVersion?: number; idempotencyKey?: string; idempotencyFingerprint?: string; message?: string; aiAssisted?: boolean }): KnowledgeCommandStore {
     return new PostgresKnowledgeCommandStore(this.sql, options);
   }
-  public async getCommitByIdempotency(branchId: string, idempotencyKey: string): Promise<CommitSummary | null> {
-    const rows = await this.sql<Row[]>`SELECT id, project_id, branch_id, parent_commit_id, author_user_id, message, ai_assisted, idempotency_key, created_at FROM knowledge_commit WHERE branch_id = ${branchId} AND idempotency_key = ${idempotencyKey} LIMIT 1`;
+  public async getCommitByIdempotency(branchId: string, idempotencyKey: string, idempotencyFingerprint?: string): Promise<CommitSummary | null> {
+    const rows = await this.sql<Row[]>`SELECT id, project_id, branch_id, parent_commit_id, author_user_id, message, ai_assisted, idempotency_key, idempotency_fingerprint, created_at FROM knowledge_commit WHERE branch_id = ${branchId} AND idempotency_key = ${idempotencyKey} LIMIT 1`;
+    if (rows[0] && idempotencyFingerprint) {
+      if (!rows[0].idempotency_fingerprint) throw new CollaborationInvalidStateError("历史幂等记录缺少请求指纹，请使用新的幂等键");
+      if (text(rows[0].idempotency_fingerprint) !== idempotencyFingerprint) throw new CollaborationInvalidStateError("幂等键已用于另一条不同的提交");
+    }
     return rows[0] ? mapCommit(rows[0]) : null;
   }
   public async getCommit(branchId: string, commitId: string): Promise<CommitSummary | null> {
@@ -122,15 +128,28 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
   public async createMergeRequest(input: CreateMergeRequestInput, actor: AuthenticatedActor): Promise<MergeRequestSummary> {
     if (input.sourceBranchId === input.targetBranchId) throw new CollaborationInvalidStateError("源分支和目标分支不能相同");
     const id = randomUUID();
-    const result = await this.sql.begin(async (tx: TransactionSql) => {
+    let result: MergeRequestSummary;
+    try {
+      result = await this.sql.begin(async (tx: TransactionSql) => {
+      const idempotencyFingerprint = input.idempotencyKey
+        ? collaborationIdempotencyFingerprint("merge-request", { actorId: actor.userId, projectId: input.projectId, sourceBranchId: input.sourceBranchId, targetBranchId: input.targetBranchId, title: input.title, description: input.description ?? "" })
+        : null;
+      // 幂等重试必须先于状态校验返回原结果；否则 MR 合并后网络重试会被错误地报告为失败。
       if (input.idempotencyKey) {
         const prior = await tx<Row[]>`${tx.unsafe(MERGE_SELECT)} WHERE source_branch_id = ${input.sourceBranchId} AND target_branch_id = ${input.targetBranchId} AND idempotency_key = ${input.idempotencyKey} LIMIT 1`;
-        if (prior[0]) return mapMerge(prior[0]);
+        if (prior[0]) {
+          if (idempotencyFingerprint && !prior[0].idempotency_fingerprint) throw new CollaborationInvalidStateError("历史幂等记录缺少请求指纹，请使用新的幂等键");
+          if (prior[0].idempotency_fingerprint && text(prior[0].idempotency_fingerprint) !== idempotencyFingerprint) throw new CollaborationInvalidStateError("幂等键已用于另一条不同的合并申请");
+          return mapMerge(prior[0]);
+        }
       }
-      const branches = await tx<Row[]>`SELECT id, project_id, base_branch_id, base_commit_id, base_snapshot, head_commit_id, version, is_protected, owner_user_id FROM knowledge_branch WHERE project_id = ${input.projectId} AND id IN (${input.sourceBranchId}, ${input.targetBranchId}) FOR SHARE`;
+      // 源/目标分支一起加行锁，串行化“检查 active -> 创建 MR -> 标记 submitted”，避免同一草稿产生两个不同 MR。
+      const branches = await tx<Row[]>`SELECT id, project_id, base_branch_id, base_commit_id, base_snapshot, head_commit_id, version, is_protected, owner_user_id, status FROM knowledge_branch WHERE project_id = ${input.projectId} AND id IN (${input.sourceBranchId}, ${input.targetBranchId}) FOR UPDATE`;
       const source = branches.find((row) => text(row.id) === input.sourceBranchId); const target = branches.find((row) => text(row.id) === input.targetBranchId);
       if (!source || !target) throw new CollaborationNotFoundError("源或目标分支不存在");
       if (bool(source.is_protected) || !bool(target.is_protected)) throw new CollaborationInvalidStateError("MR 必须从非保护分支提交到保护分支");
+      if (text(source.status) !== "active") throw new CollaborationInvalidStateError("该草稿分支已提交或关闭，请基于最新版本新建分支");
+      if (text(target.status) !== "active") throw new CollaborationInvalidStateError("目标主分支当前不可接受新的修改申请");
       const sourceSnapshot = await getSnapshot(tx, input.sourceBranchId);
       const targetSnapshot = await getSnapshot(tx, input.targetBranchId);
       // 基线来自源分支创建时的 base_branch；这样目标分支已有内容不会被误判成冲突。
@@ -139,12 +158,24 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
         : targetSnapshot;
       const initialDiff = calculateDiff(baseSnapshot, sourceSnapshot, targetSnapshot);
       const conflictDetails = initialDiff.flatMap((entry) => entry.conflicts);
-      await tx`INSERT INTO merge_request (id, project_id, source_branch_id, target_branch_id, author_user_id, title, description, status, base_commit_id, head_commit_id, target_version, source_base_snapshot, target_base_snapshot, conflict_status, conflict_details)
-        VALUES (${id}, ${input.projectId}, ${input.sourceBranchId}, ${input.targetBranchId}, ${actor.userId}, ${input.title}, ${input.description ?? ""}, 'open', ${nullable(source.base_commit_id)}, ${nullable(source.head_commit_id)}, ${Number(target.version ?? 0)}, ${JSON.stringify(baseSnapshot)}, ${JSON.stringify(targetSnapshot)}, ${conflictDetails.length ? "conflict" : "unknown"}, ${JSON.stringify(conflictDetails)})`;
+      if (initialDiff.every((entry) => entry.operation === "unchanged")) throw new CollaborationInvalidStateError("没有可提交的变化");
+      await tx`INSERT INTO merge_request (id, project_id, source_branch_id, target_branch_id, author_user_id, title, description, status, base_commit_id, head_commit_id, target_version, source_base_snapshot, target_base_snapshot, conflict_status, conflict_details, idempotency_fingerprint)
+        VALUES (${id}, ${input.projectId}, ${input.sourceBranchId}, ${input.targetBranchId}, ${actor.userId}, ${input.title}, ${input.description ?? ""}, 'open', ${nullable(source.base_commit_id)}, ${nullable(source.head_commit_id)}, ${Number(target.version ?? 0)}, ${JSON.stringify(baseSnapshot)}, ${JSON.stringify(targetSnapshot)}, ${conflictDetails.length ? "conflict" : "clean"}, ${JSON.stringify(conflictDetails)}, ${idempotencyFingerprint})`;
       await tx`UPDATE knowledge_branch SET status = 'submitted', updated_at = CURRENT_TIMESTAMP WHERE id = ${input.sourceBranchId} AND status = 'active'`;
       const created = await tx<Row[]>`${tx.unsafe(MERGE_SELECT)} WHERE id = ${id}`;
       return mapMerge(created[0]!);
-    });
+      });
+    } catch (error) {
+      // 两个并发首请求可能同时通过 SELECT；唯一索引胜出后，败者读取胜出的 MR 并按指纹判断是否可安全重放。
+      if (isUniqueViolation(error) && input.idempotencyKey) {
+        const fingerprint = collaborationIdempotencyFingerprint("merge-request", { actorId: actor.userId, projectId: input.projectId, sourceBranchId: input.sourceBranchId, targetBranchId: input.targetBranchId, title: input.title, description: input.description ?? "" });
+        const prior = await this.sql<Row[]>`${this.sql.unsafe(MERGE_SELECT)} WHERE source_branch_id = ${input.sourceBranchId} AND target_branch_id = ${input.targetBranchId} AND idempotency_key = ${input.idempotencyKey} LIMIT 1`;
+        if (prior[0]) {
+          if (!prior[0].idempotency_fingerprint || text(prior[0].idempotency_fingerprint) !== fingerprint) throw new CollaborationInvalidStateError("幂等键已用于另一条不同的合并申请");
+          result = mapMerge(prior[0]);
+        } else throw error;
+      } else throw error;
+    }
     return result;
   }
 
@@ -160,16 +191,40 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
   }
   public async addReview(input: CreateReviewInput, actor: AuthenticatedActor): Promise<ReviewSummary> {
     const id = randomUUID();
-    const result = await this.sql.begin(async (tx: TransactionSql) => {
-      const mr = await tx<Row[]>`SELECT id, project_id, status FROM merge_request WHERE id = ${input.mergeRequestId} FOR UPDATE`; if (!mr[0]) throw new CollaborationNotFoundError("合并申请不存在");
+    let result: ReviewSummary;
+    try {
+      result = await this.sql.begin(async (tx: TransactionSql) => {
+      const mr = await tx<Row[]>`SELECT id, project_id, status, conflict_status FROM merge_request WHERE id = ${input.mergeRequestId} FOR UPDATE`; if (!mr[0]) throw new CollaborationNotFoundError("合并申请不存在");
+      const idempotencyFingerprint = input.idempotencyKey
+        ? collaborationIdempotencyFingerprint("merge-review", { actorId: actor.userId, mergeRequestId: input.mergeRequestId, verdict: input.verdict, body: input.body ?? "", nodeId: input.nodeId ?? null, blockId: input.blockId ?? null })
+        : null;
+      // 同一幂等键即使在 MR 已结束后重试，也必须返回原 Review，而不是制造误导性的状态错误。
+      if (input.idempotencyKey) {
+        const prior = await tx<Row[]>`SELECT id, merge_request_id, reviewer_user_id, verdict, body, node_id, block_id, idempotency_fingerprint, created_at FROM merge_review WHERE merge_request_id = ${input.mergeRequestId} AND reviewer_user_id = ${actor.userId} AND idempotency_key = ${input.idempotencyKey} LIMIT 1`;
+        if (prior[0]) {
+          if (idempotencyFingerprint && !prior[0].idempotency_fingerprint) throw new CollaborationInvalidStateError("历史幂等记录缺少请求指纹，请使用新的幂等键");
+          if (prior[0].idempotency_fingerprint && text(prior[0].idempotency_fingerprint) !== idempotencyFingerprint) throw new CollaborationInvalidStateError("幂等键已用于另一条不同的审核");
+          return mapReview(prior[0]);
+        }
+      }
       if (["merged", "closed"].includes(text(mr[0].status))) throw new CollaborationInvalidStateError("该合并申请已结束");
-      if (input.idempotencyKey) { const prior = await tx<Row[]>`SELECT id, merge_request_id, reviewer_user_id, verdict, body, node_id, block_id, created_at FROM merge_review WHERE merge_request_id = ${input.mergeRequestId} AND reviewer_user_id = ${actor.userId} AND idempotency_key = ${input.idempotencyKey} LIMIT 1`; if (prior[0]) return mapReview(prior[0]); }
-      const rows = await tx<Row[]>`INSERT INTO merge_review (id, merge_request_id, reviewer_user_id, verdict, body, node_id, block_id, idempotency_key) VALUES (${id}, ${input.mergeRequestId}, ${actor.userId}, ${input.verdict}, ${input.body ?? ""}, ${input.nodeId ?? null}, ${input.blockId ?? null}, ${input.idempotencyKey ?? null}) RETURNING id, merge_request_id, reviewer_user_id, verdict, body, node_id, block_id, created_at`;
+      if (input.verdict === "comment" && !input.body?.trim()) throw new CollaborationInvalidStateError("逐段评论必须填写内容");
+      if (input.verdict === "approve" && text(mr[0].conflict_status) === "conflict") throw new CollaborationConflictError("存在未解决冲突，不能批准合并申请");
+      const rows = await tx<Row[]>`INSERT INTO merge_review (id, merge_request_id, reviewer_user_id, verdict, body, node_id, block_id, idempotency_key, idempotency_fingerprint) VALUES (${id}, ${input.mergeRequestId}, ${actor.userId}, ${input.verdict}, ${input.body ?? ""}, ${input.nodeId ?? null}, ${input.blockId ?? null}, ${input.idempotencyKey ?? null}, ${idempotencyFingerprint}) RETURNING id, merge_request_id, reviewer_user_id, verdict, body, node_id, block_id, created_at`;
       const nextStatus = input.verdict === "approve" ? "approved" : input.verdict === "request_changes" ? "changes_requested" : input.verdict === "reject" ? "closed" : null;
       if (nextStatus) await tx`UPDATE merge_request SET status = ${nextStatus}, updated_at = CURRENT_TIMESTAMP WHERE id = ${input.mergeRequestId}`;
       if (input.verdict === "reject") await tx`UPDATE knowledge_branch SET status = 'closed', updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT source_branch_id FROM merge_request WHERE id = ${input.mergeRequestId}) AND status = 'submitted'`;
       return mapReview(rows[0]!);
-    });
+      });
+    } catch (error) {
+      // 并发重复审核由唯一索引裁决；败者读取已提交 Review，保证重试仍返回同一事实。
+      if (isUniqueViolation(error) && input.idempotencyKey) {
+        const fingerprint = collaborationIdempotencyFingerprint("merge-review", { actorId: actor.userId, mergeRequestId: input.mergeRequestId, verdict: input.verdict, body: input.body ?? "", nodeId: input.nodeId ?? null, blockId: input.blockId ?? null });
+        const prior = await this.sql<Row[]>`SELECT id, merge_request_id, reviewer_user_id, verdict, body, node_id, block_id, idempotency_fingerprint, created_at FROM merge_review WHERE merge_request_id = ${input.mergeRequestId} AND reviewer_user_id = ${actor.userId} AND idempotency_key = ${input.idempotencyKey} LIMIT 1`;
+        if (!prior[0] || !prior[0].idempotency_fingerprint || text(prior[0].idempotency_fingerprint) !== fingerprint) throw new CollaborationInvalidStateError("幂等键已用于另一条不同的审核");
+        result = mapReview(prior[0]);
+      } else throw error;
+    }
     return result;
   }
 
@@ -208,7 +263,17 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
         }
         await tx`INSERT INTO knowledge_node_state (project_id, branch_id, node_id, parent_node_id, name, position, deleted_at, updated_at) VALUES (${text(mr.project_id)}, ${text(mr.target_branch_id)}, ${chosen.nodeId}, ${chosen.parentNodeId}, ${chosen.name}, ${chosen.position}, ${chosen.deleted ? now : null}, ${now}) ON CONFLICT (branch_id, node_id) DO UPDATE SET parent_node_id = EXCLUDED.parent_node_id, name = EXCLUDED.name, position = EXCLUDED.position, deleted_at = EXCLUDED.deleted_at, updated_at = EXCLUDED.updated_at`;
         await tx`INSERT INTO commit_change (id, commit_id, node_id, operation, before_revision_id, after_revision_id, metadata, position) VALUES (${randomUUID()}, ${commitId}, ${chosen.nodeId}, ${entry.operation === "conflict" ? "update_content" : entry.operation}, ${nullable(targetNode?.revisionId)}, ${afterRevisionId}, ${JSON.stringify({ mergeRequestId })}, ${position})`; position += 1;
-        if (afterRevisionId) for (const blockId of extractBlockIds(chosen)) await tx`INSERT INTO content_attribution (id, project_id, node_id, block_id, origin_commit_id, last_touch_commit_id, contributor_user_id, reviewer_user_id, merge_request_id) VALUES (${randomUUID()}, ${text(mr.project_id)}, ${chosen.nodeId}, ${blockId}, ${nullable(mr.head_commit_id) ?? commitId}, ${commitId}, ${text(mr.author_user_id)}, ${actor.userId}, ${mergeRequestId}) ON CONFLICT DO NOTHING`;
+         if (afterRevisionId) {
+           // MR 作者可能是代提交的维护者；署名必须来自源分支该节点最近一次真实 Commit，回退到分支所有者。
+           const sourceAuthorRows = await tx<Row[]>`SELECT kc.author_user_id
+             FROM knowledge_commit kc JOIN commit_change cc ON cc.commit_id = kc.id
+             WHERE kc.branch_id = ${text(mr.source_branch_id)} AND cc.node_id = ${chosen.nodeId}
+             ORDER BY kc.created_at DESC LIMIT 1`;
+           const sourceContributorUserId = sourceAuthorRows[0]?.author_user_id
+             ? text(sourceAuthorRows[0].author_user_id)
+             : text(mr.author_user_id);
+           for (const blockId of extractBlockIds(chosen)) await tx`INSERT INTO content_attribution (id, project_id, node_id, block_id, origin_commit_id, last_touch_commit_id, contributor_user_id, reviewer_user_id, merge_request_id) VALUES (${randomUUID()}, ${text(mr.project_id)}, ${chosen.nodeId}, ${blockId}, ${nullable(mr.head_commit_id) ?? commitId}, ${commitId}, ${sourceContributorUserId}, ${actor.userId}, ${mergeRequestId}) ON CONFLICT DO NOTHING`;
+         }
       }
       await tx`UPDATE knowledge_branch SET head_commit_id = ${commitId}, version = version + 1, updated_at = ${now} WHERE id = ${text(mr.target_branch_id)} AND version = ${Number(mr.target_version)}`;
       await tx`UPDATE knowledge_branch SET status = 'merged', updated_at = ${now} WHERE id = ${text(mr.source_branch_id)} AND status <> 'closed'`;
@@ -243,7 +308,7 @@ async function getSnapshot(queryable: CollaborationQueryable, branchId: string):
 
 /** Registry 使用的持久化 Store：检查分支版本后，以一个 Commit 原子落下树变更。 */
 class PostgresKnowledgeCommandStore implements KnowledgeCommandStore {
-  public constructor(private readonly sql: Sql, private readonly options: { branchId: string; expectedVersion?: number; idempotencyKey?: string; message?: string; aiAssisted?: boolean }) {}
+  public constructor(private readonly sql: Sql, private readonly options: { branchId: string; expectedVersion?: number; idempotencyKey?: string; idempotencyFingerprint?: string; message?: string; aiAssisted?: boolean }) {}
   public async getBranch(branchId: string): Promise<KnowledgeBranchContext | null> {
     const rows = await this.sql<Row[]>`SELECT id, project_id, owner_user_id, is_protected, status FROM knowledge_branch WHERE id = ${branchId} LIMIT 1`; const row = rows[0]; if (!row) return null;
     return { id: text(row.id), projectId: text(row.project_id), ownerId: nullable(row.owner_user_id), storage: bool(row.is_protected) ? "published" : "server_draft", status: row.status as KnowledgeBranchContext["status"] };
@@ -255,10 +320,18 @@ class PostgresKnowledgeCommandStore implements KnowledgeCommandStore {
     await this.sql.begin(async (tx: TransactionSql) => {
       const rows = await tx<Row[]>`SELECT id, project_id, head_commit_id, version, status, is_protected FROM knowledge_branch WHERE id = ${change.branchId} FOR UPDATE`; const branch = rows[0]; if (!branch) throw new CollaborationNotFoundError("分支不存在");
       if (bool(branch.is_protected)) throw new CollaborationInvalidStateError("保护分支只能通过合并写入");
-      if (this.options.idempotencyKey) { const prior = await tx<Row[]>`SELECT id FROM knowledge_commit WHERE branch_id = ${change.branchId} AND idempotency_key = ${this.options.idempotencyKey} LIMIT 1`; if (prior[0]) return; }
+      if (text(branch.status) !== "active") throw new CollaborationInvalidStateError("该草稿分支已提交或关闭，不能继续写入");
+      if (this.options.idempotencyKey) {
+        const prior = await tx<Row[]>`SELECT id, idempotency_fingerprint FROM knowledge_commit WHERE branch_id = ${change.branchId} AND idempotency_key = ${this.options.idempotencyKey} LIMIT 1`;
+        if (prior[0]) {
+          if (this.options.idempotencyFingerprint && !prior[0].idempotency_fingerprint) throw new CollaborationInvalidStateError("历史幂等记录缺少请求指纹，请使用新的幂等键");
+          if (prior[0].idempotency_fingerprint && this.options.idempotencyFingerprint && text(prior[0].idempotency_fingerprint) !== this.options.idempotencyFingerprint) throw new CollaborationInvalidStateError("幂等键已用于另一条不同的提交");
+          return;
+        }
+      }
       if (this.options.expectedVersion != null && Number(branch.version) !== this.options.expectedVersion) throw new CollaborationConflictError("草稿分支已被其他提交更新", { expected: this.options.expectedVersion, actual: Number(branch.version) });
       const now = change.createdAt;
-      await tx`INSERT INTO knowledge_commit (id, project_id, branch_id, parent_commit_id, author_user_id, message, ai_assisted, idempotency_key, change_summary) VALUES (${change.id}, ${change.projectId}, ${change.branchId}, ${nullable(branch.head_commit_id)}, ${change.actorId}, ${this.options.message ?? change.command.type}, ${this.options.aiAssisted ?? false}, ${this.options.idempotencyKey ?? null}, ${JSON.stringify(change.command)})`;
+      await tx`INSERT INTO knowledge_commit (id, project_id, branch_id, parent_commit_id, author_user_id, message, ai_assisted, idempotency_key, idempotency_fingerprint, change_summary) VALUES (${change.id}, ${change.projectId}, ${change.branchId}, ${nullable(branch.head_commit_id)}, ${change.actorId}, ${this.options.message ?? change.command.type}, ${this.options.aiAssisted ?? false}, ${this.options.idempotencyKey ?? null}, ${this.options.idempotencyFingerprint ?? null}, ${JSON.stringify(change.command)})`;
       const after = change.after; const before = change.before;
       if (after && (change.command.type === "create_node" || change.command.type === "duplicate_node")) await tx`INSERT INTO knowledge_node (id, project_id, kind, created_by_user_id, created_at) VALUES (${after.id}, ${after.projectId}, ${after.kind === "document" ? "document" : "folder"}, ${change.actorId}, ${now}) ON CONFLICT (id) DO NOTHING`;
       if (after) await tx`INSERT INTO knowledge_node_state (project_id, branch_id, node_id, parent_node_id, name, position, deleted_at, updated_at) VALUES (${after.projectId}, ${change.branchId}, ${after.id}, ${after.parentId}, ${after.name}, 0, ${after.deletedAt}, ${now}) ON CONFLICT (branch_id, node_id) DO UPDATE SET parent_node_id = EXCLUDED.parent_node_id, name = EXCLUDED.name, deleted_at = EXCLUDED.deleted_at, updated_at = EXCLUDED.updated_at`;

@@ -1,9 +1,16 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { NotFoundError, ValidationError } from "@/lib/domain/errors";
-import type { ConversationCheckpoint, ConversationMessage, ConversationSummary, ToolExecution } from "@/lib/domain/memory";
+import type { ConversationCheckpoint, ConversationMessage, ConversationSummary, StructuredConversationSummary, ToolExecution } from "@/lib/domain/memory";
 import type { MemoryRepository } from "@/lib/repositories/memory";
 import { estimateTokens } from "@/lib/services/context/context-assembly-service";
+import {
+  assertCriticalFactsHash,
+  assertCriticalFactsPreserved,
+  criticalFactsHash,
+  extractCriticalFacts,
+  mergeCriticalFacts,
+} from "@/lib/services/memory/critical-fact-ledger";
 import type { ConversationSummaryProvider } from "@/lib/services/memory/summary-provider";
 
 /** 连续失败达到阈值后的显式熔断；调用方应缩小 Scope 或新建对话。 */
@@ -50,6 +57,7 @@ export class ConversationCompactionService {
 
     const messages = await this.repository.listMessages(conversation.id, conversation.ownerUserId);
     const tools = await this.repository.listTools(conversation.id, conversation.ownerUserId);
+    validateToolPairings(messages, tools);
     const lastCompletedEnd = [...checkpoints].reverse().find((checkpoint) => checkpoint.status === "completed")?.sourceEndSequence ?? 0;
     const protectCount = Math.min(20, Math.max(2, input.protectRecentMessages ?? 4));
     const eligible = messages.filter((message) => message.sequence > lastCompletedEnd);
@@ -71,20 +79,37 @@ export class ConversationCompactionService {
       const prepared = candidates.map(pruneLargeToolResult);
       const structured = await this.provider.summarize({ messages: prepared, previous });
       validateStructuredSummary(structured);
-      const tokenAfter = estimateTokens(JSON.stringify(structured));
-      if (tokenAfter >= tokenBefore) throw new Error("SUMMARY_NOT_SMALLER");
-      const summary: ConversationSummary = {
-        id: randomUUID(), conversationId: conversation.id, version: conversation.summaryVersion + 1, structured,
-        sourceStartSequence: candidates[0]!.sequence, sourceEndSequence: candidates.at(-1)!.sequence,
-        sourceMessageIds: candidates.map((message) => message.id), provider: this.provider.name, model: this.provider.model, createdAt: new Date().toISOString(),
+      // 压缩前后对比最小事实账本；缺失即失败，不能用“摘要成功”掩盖金额/日期/ID 漂移。
+      const expectedFacts = mergeCriticalFacts(previous?.structured.criticalFacts, extractCriticalFacts(candidates));
+      assertCriticalFactsHash(structured.criticalFacts, structured.criticalFactsHash);
+      assertCriticalFactsPreserved(expectedFacts, structured.criticalFacts);
+      const persistedStructured: StructuredConversationSummary = {
+        ...structured,
+        criticalFacts: structured.criticalFacts ? mergeCriticalFacts([], structured.criticalFacts) : undefined,
+        criticalFactsHash: structured.criticalFacts ? criticalFactsHash(structured.criticalFacts) : undefined,
       };
-      await this.repository.insertSummary(summary);
-      checkpoint = { ...checkpoint, summaryId: summary.id, tokenAfter, status: "completed", completedAt: new Date().toISOString() };
-      await this.repository.updateCheckpoint(checkpoint);
-      await this.repository.updateConversation({ ...conversation, summaryVersion: summary.version, updatedAt: checkpoint.completedAt! });
+      const tokenAfter = estimateTokens(JSON.stringify(persistedStructured));
+      if (tokenAfter >= tokenBefore) throw new Error("SUMMARY_NOT_SMALLER");
+      const completedAt = new Date().toISOString();
+      const summary: ConversationSummary = {
+        id: randomUUID(), conversationId: conversation.id, version: conversation.summaryVersion + 1, structured: persistedStructured,
+        sourceStartSequence: candidates[0]!.sequence, sourceEndSequence: candidates.at(-1)!.sequence,
+        sourceMessageIds: candidates.map((message) => message.id), provider: this.provider.name, model: this.provider.model, createdAt: completedAt,
+      };
+      checkpoint = { ...checkpoint, summaryId: summary.id, tokenAfter, status: "completed", completedAt };
+      // 原子提交避免 insertSummary 成功而 checkpoint/conversation 更新失败时留下孤儿摘要。
+      await this.repository.commitCompaction({
+        conversation: { ...conversation, summaryVersion: summary.version, updatedAt: completedAt },
+        summary,
+        checkpoint,
+      });
       return { checkpoint, summary };
     } catch (error) {
-      const failureCode = error instanceof Error && error.message === "SUMMARY_NOT_SMALLER" ? "summary_not_smaller" : "summary_failed";
+      const failureCode = error instanceof Error && error.message === "SUMMARY_NOT_SMALLER"
+        ? "summary_not_smaller"
+        : error instanceof Error && (error.message.startsWith("压缩摘要丢失关键事实") || error.message.startsWith("上下文摘要关键事实校验失败"))
+          ? "critical_fact_drift"
+          : "summary_failed";
       checkpoint = { ...checkpoint, status: "failed", failureCode, completedAt: new Date().toISOString() };
       await this.repository.updateCheckpoint(checkpoint);
       throw error;
@@ -122,6 +147,34 @@ function closeToolBoundary(candidates: ConversationMessage[], allMessages: Conve
     }
   }
   return candidates.filter((message) => message.sequence >= start && message.sequence <= end);
+}
+
+/**
+ * 压缩前校验工具事件的会话、角色和结果配对。
+ * 未登记的 tool 消息或跨会话引用会使范围不可审计，宁可失败也不把它当普通文本压缩。
+ */
+function validateToolPairings(messages: ConversationMessage[], tools: ToolExecution[]): void {
+  const byId = new Map(messages.map((message) => [message.id, message]));
+  const resultIds = new Set<string>();
+  for (const tool of tools) {
+    if (tool.conversationId !== messages[0]?.conversationId) throw new ValidationError("工具事件会话不一致");
+    const call = byId.get(tool.callMessageId);
+    if (!call || call.conversationId !== tool.conversationId || (call.role !== "assistant" && call.role !== "system")) {
+      throw new ValidationError("工具调用消息无效或不属于当前会话");
+    }
+    if (tool.resultMessageId) {
+      const result = byId.get(tool.resultMessageId);
+      if (!result || result.conversationId !== tool.conversationId || result.role !== "tool") {
+        throw new ValidationError("工具结果消息无效或不属于当前会话");
+      }
+      resultIds.add(result.id);
+    } else if (tool.status !== "requested") {
+      throw new ValidationError("已结束的工具调用必须包含结果消息");
+    }
+  }
+  for (const message of messages) {
+    if (message.role === "tool" && !resultIds.has(message.id)) throw new ValidationError("存在未登记的工具结果消息");
+  }
 }
 
 function validateStructuredSummary(summary: object): void {

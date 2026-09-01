@@ -23,8 +23,8 @@ export interface CollaborationRepository {
   getBranch(branchId: string): Promise<BranchSummary | null>;
   listBranches(projectId: string): Promise<BranchSummary[]>;
   createBranch(input: CreateBranchInput, owner: AuthenticatedActor): Promise<BranchSummary>;
-  createCommandStore(options: { branchId: string; expectedVersion?: number; idempotencyKey?: string; message?: string; aiAssisted?: boolean }): KnowledgeCommandStore;
-  getCommitByIdempotency(branchId: string, idempotencyKey: string): Promise<CommitSummary | null>;
+  createCommandStore(options: { branchId: string; expectedVersion?: number; idempotencyKey?: string; idempotencyFingerprint?: string; message?: string; aiAssisted?: boolean }): KnowledgeCommandStore;
+  getCommitByIdempotency(branchId: string, idempotencyKey: string, idempotencyFingerprint?: string): Promise<CommitSummary | null>;
   getCommit(branchId: string, commitId: string): Promise<CommitSummary | null>;
   getSnapshot(branchId: string): Promise<CollaborationSnapshot>;
   createMergeRequest(input: CreateMergeRequestInput, actor: AuthenticatedActor): Promise<MergeRequestSummary>;

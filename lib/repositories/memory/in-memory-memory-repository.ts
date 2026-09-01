@@ -77,6 +77,17 @@ export class InMemoryMemoryRepository implements MemoryRepository {
   }
 
   public async insertTool(tool: ToolExecution): Promise<void> {
+    const conversation = this.conversations.get(tool.conversationId);
+    if (!conversation) throw new Error("会话不存在");
+    const messages = this.messages.get(tool.conversationId) ?? [];
+    const call = messages.find((message) => message.id === tool.callMessageId);
+    if (!call || (call.role !== "assistant" && call.role !== "system")) throw new Error("工具调用消息无效");
+    if (tool.resultMessageId) {
+      const result = messages.find((message) => message.id === tool.resultMessageId);
+      if (!result || result.role !== "tool") throw new Error("工具结果消息无效");
+    } else if (tool.status !== "requested") {
+      throw new Error("已结束的工具调用必须包含结果消息");
+    }
     const values = this.tools.get(tool.conversationId) ?? [];
     if (values.some((item) => item.id === tool.id || item.callMessageId === tool.callMessageId)) throw new Error("工具调用已存在");
     values.push(structuredClone(tool));
@@ -101,6 +112,31 @@ export class InMemoryMemoryRepository implements MemoryRepository {
     const index = values.findIndex((item) => item.id === checkpoint.id);
     if (index < 0) throw new Error("压缩检查点不存在");
     values[index] = structuredClone(checkpoint);
+  }
+
+  /**
+   * 内存仓储按与 PostgreSQL 相同的先校验后提交顺序更新三类对象。
+   * 契约测试可覆盖提交失败时不出现 summary/checkpoint 半写入状态。
+   */
+  public async commitCompaction(input: { conversation: Conversation; summary: ConversationSummary; checkpoint: ConversationCheckpoint }): Promise<void> {
+    const conversation = this.conversations.get(input.conversation.id);
+    if (!conversation || conversation.ownerUserId !== input.conversation.ownerUserId) throw new Error("会话不存在");
+    const checkpoints = this.checkpoints.get(input.checkpoint.conversationId) ?? [];
+    const checkpointIndex = checkpoints.findIndex((entry) => entry.id === input.checkpoint.id && entry.status === "started");
+    if (checkpointIndex < 0) throw new Error("压缩检查点不存在或已提交");
+    const summaries = this.summaries.get(input.summary.conversationId) ?? [];
+    if (summaries.some((entry) => entry.id === input.summary.id || entry.version === input.summary.version)) throw new Error("压缩摘要版本已存在");
+    if (input.summary.conversationId !== conversation.id || input.checkpoint.conversationId !== conversation.id) throw new Error("压缩对象会话不一致");
+    if (input.summary.version !== conversation.summaryVersion + 1) throw new Error("压缩摘要版本不是当前会话的下一个版本");
+    if (input.checkpoint.summaryId !== input.summary.id || input.checkpoint.status !== "completed") throw new Error("压缩检查点未正确闭合");
+
+    // 所有前置检查完成后才替换副本；中途抛错不会污染原状态。
+    const nextCheckpoints = structuredClone(checkpoints);
+    nextCheckpoints[checkpointIndex] = structuredClone(input.checkpoint);
+    const nextSummaries = [...summaries.map((entry) => structuredClone(entry)), structuredClone(input.summary)];
+    this.summaries.set(input.summary.conversationId, nextSummaries);
+    this.checkpoints.set(input.checkpoint.conversationId, nextCheckpoints);
+    this.conversations.set(conversation.id, structuredClone(input.conversation));
   }
 
   public async listCheckpoints(conversationId: string, ownerUserId: string): Promise<ConversationCheckpoint[]> {

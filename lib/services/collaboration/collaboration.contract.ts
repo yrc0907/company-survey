@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { calculateDiff, type BranchSummary, type CollaborationSnapshot, type MergeRequestSummary, type ProjectSummary, type ReviewSummary } from "@/lib/domain/collaboration";
 import { CollaborationService } from "@/lib/services/collaboration/collaboration-service";
+import { collaborationIdempotencyFingerprint } from "@/lib/services/collaboration/idempotency";
 import type { CollaborationRepository } from "@/lib/repositories/collaboration/collaboration-repository";
 import type { PlatformRepository } from "@/lib/repositories/platform/platform-repository";
 
@@ -12,6 +13,9 @@ const branch = (id: string, ownerUserId: string | null, isProtected: boolean): B
 
 /** 仅验证协作服务的授权/幂等边界；生产仓储由 PostgreSQL 实现，测试不连接外部服务。 */
 async function run(): Promise<void> {
+  const reordered = collaborationIdempotencyFingerprint("contract", { b: 2, a: 1 });
+  assert.equal(reordered, collaborationIdempotencyFingerprint("contract", { a: 1, b: 2 }), "幂等指纹必须与 JSON 字段顺序无关");
+  assert.notEqual(reordered, collaborationIdempotencyFingerprint("contract", { a: 2, b: 1 }), "载荷变化必须产生不同指纹");
   const mrs = new Map<string, MergeRequestSummary>(); const reviews = new Map<string, ReviewSummary[]>(); let reviewNumber = 0;
   const fakeRepository = {
     listPublicProjects: async () => [project], getProject: async () => project, createProject: async () => project,

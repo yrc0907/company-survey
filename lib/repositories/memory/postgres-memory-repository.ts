@@ -89,12 +89,30 @@ export class PostgresMemoryRepository implements MemoryRepository {
   }
 
   public async insertTool(value: ToolExecution): Promise<void> {
+    const callRows = await this.sql<Row[]>`SELECT id, role FROM ai_conversation_message
+      WHERE id = ${value.callMessageId} AND conversation_id = ${value.conversationId} LIMIT 1`;
+    const call = callRows[0];
+    if (!call || (call.role !== "assistant" && call.role !== "system")) throw new Error("工具调用消息无效");
+    if (value.resultMessageId) {
+      const resultRows = await this.sql<Row[]>`SELECT id, role FROM ai_conversation_message
+        WHERE id = ${value.resultMessageId} AND conversation_id = ${value.conversationId} LIMIT 1`;
+      if (!resultRows[0] || resultRows[0].role !== "tool") throw new Error("工具结果消息无效");
+    } else if (value.status !== "requested") {
+      throw new Error("已结束的工具调用必须包含结果消息");
+    }
     await this.sql`INSERT INTO ai_tool_execution
       (id, conversation_id, call_message_id, result_message_id, tool_name, arguments_hash, status, result_reference, created_at, completed_at)
       VALUES (${value.id}, ${value.conversationId}, ${value.callMessageId}, ${value.resultMessageId}, ${value.toolName}, ${value.argumentsHash}, ${value.status}, ${value.resultReference}, ${value.createdAt}, ${value.completedAt})`;
   }
 
   public async updateTool(value: ToolExecution): Promise<void> {
+    if (value.resultMessageId) {
+      const resultRows = await this.sql<Row[]>`SELECT id, role FROM ai_conversation_message
+        WHERE id = ${value.resultMessageId} AND conversation_id = ${value.conversationId} LIMIT 1`;
+      if (!resultRows[0] || resultRows[0].role !== "tool") throw new Error("工具结果消息无效");
+    } else if (value.status !== "requested") {
+      throw new Error("已结束的工具调用必须包含结果消息");
+    }
     await this.sql`UPDATE ai_tool_execution SET result_message_id = ${value.resultMessageId}, status = ${value.status}, result_reference = ${value.resultReference}, completed_at = ${value.completedAt}
       WHERE id = ${value.id} AND conversation_id = ${value.conversationId}`;
   }
@@ -108,6 +126,37 @@ export class PostgresMemoryRepository implements MemoryRepository {
   public async updateCheckpoint(value: ConversationCheckpoint): Promise<void> {
     await this.sql`UPDATE ai_conversation_checkpoint SET summary_id = ${value.summaryId}, token_after = ${value.tokenAfter}, status = ${value.status}, failure_code = ${value.failureCode}, completed_at = ${value.completedAt}
       WHERE id = ${value.id} AND conversation_id = ${value.conversationId}`;
+  }
+
+  /**
+   * 以数据库事务提交压缩结果：摘要、检查点和会话 summary_version 要么全部可见，要么全部回滚。
+   * 会话行加锁并校验版本，避免两个并发压缩任务写出同一个摘要版本或孤儿摘要。
+   */
+  public async commitCompaction(input: { conversation: Conversation; summary: ConversationSummary; checkpoint: ConversationCheckpoint }): Promise<void> {
+    await this.sql.begin(async (transaction) => {
+      const rows = await transaction<Row[]>`SELECT id, owner_user_id, summary_version
+        FROM ai_conversation
+        WHERE id = ${input.conversation.id} AND owner_user_id = ${input.conversation.ownerUserId}
+        FOR UPDATE`;
+      const conversation = rows[0];
+      if (!conversation) throw new Error("会话不存在");
+      if (Number(conversation.summary_version) + 1 !== input.summary.version) throw new Error("压缩摘要版本不是当前会话的下一个版本");
+
+      const checkpointRows = await transaction<Row[]>`SELECT id FROM ai_conversation_checkpoint
+        WHERE id = ${input.checkpoint.id} AND conversation_id = ${input.conversation.id} AND status = 'started'
+        FOR UPDATE`;
+      if (!checkpointRows[0]) throw new Error("压缩检查点不存在或已提交");
+      if (input.summary.conversationId !== input.conversation.id || input.checkpoint.conversationId !== input.conversation.id) throw new Error("压缩对象会话不一致");
+      if (input.checkpoint.summaryId !== input.summary.id || input.checkpoint.status !== "completed") throw new Error("压缩检查点未正确闭合");
+
+      await transaction`INSERT INTO ai_conversation_summary
+        (id, conversation_id, version, structured_summary, source_start_sequence, source_end_sequence, source_message_ids, provider, model, created_at)
+        VALUES (${input.summary.id}, ${input.summary.conversationId}, ${input.summary.version}, ${JSON.stringify(input.summary.structured)}::jsonb, ${input.summary.sourceStartSequence}, ${input.summary.sourceEndSequence}, ${transaction.array(input.summary.sourceMessageIds)}::text[], ${input.summary.provider}, ${input.summary.model}, ${input.summary.createdAt})`;
+      await transaction`UPDATE ai_conversation_checkpoint SET summary_id = ${input.checkpoint.summaryId}, token_after = ${input.checkpoint.tokenAfter}, status = ${input.checkpoint.status}, failure_code = ${input.checkpoint.failureCode}, completed_at = ${input.checkpoint.completedAt}
+        WHERE id = ${input.checkpoint.id} AND conversation_id = ${input.conversation.id}`;
+      await transaction`UPDATE ai_conversation SET summary_version = ${input.conversation.summaryVersion}, updated_at = ${input.conversation.updatedAt}, last_message_at = ${input.conversation.lastMessageAt}
+        WHERE id = ${input.conversation.id} AND owner_user_id = ${input.conversation.ownerUserId}`;
+    });
   }
 
   public async listCheckpoints(conversationId: string, ownerUserId: string): Promise<ConversationCheckpoint[]> {
@@ -300,4 +349,3 @@ function iso(value: unknown): string {
 function nullableIso(value: unknown): string | null {
   return value === null || value === undefined ? null : iso(value);
 }
-

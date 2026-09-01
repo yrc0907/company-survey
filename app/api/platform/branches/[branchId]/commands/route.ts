@@ -7,6 +7,7 @@ import { json } from "@/lib/api/http";
 import { collaborationErrorResponse, CollaborationService } from "@/lib/services/collaboration";
 import { getCollaborationRepository } from "@/lib/repositories/collaboration";
 import { getPlatformRepository } from "@/lib/repositories/platform/platform-repository-factory";
+import { readIdempotencyKey } from "@/lib/services/collaboration/idempotency";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,6 @@ const commandSchema = z.object({ command: z.discriminatedUnion("type", [z.object
 
 /** 文件树所有写入均走 KnowledgeCommandRegistry，提交后返回 immutable Commit。 */
 export async function POST(request: Request, context: { params: { branchId: string } }) {
-  try { assertTrustedJsonRequest(request); const actor = await requireAuthenticatedActor(); const input = commandSchema.parse(await request.json()); const idempotencyKey = request.headers.get("Idempotency-Key")?.trim() || undefined; const result = await new CollaborationService(getCollaborationRepository(), getPlatformRepository()).executeCommand({ branchId: context.params.branchId, command: input.command, message: input.message, aiAssisted: input.aiAssisted, expectedVersion: input.expectedVersion, idempotencyKey }, actor); return json(result, { status: result.replayed ? 200 : 201 }); }
+  try { assertTrustedJsonRequest(request); const actor = await requireAuthenticatedActor(); const input = commandSchema.parse(await request.json()); const idempotencyKey = readIdempotencyKey(request); const result = await new CollaborationService(getCollaborationRepository(), getPlatformRepository()).executeCommand({ branchId: context.params.branchId, command: input.command, message: input.message, aiAssisted: input.aiAssisted, expectedVersion: input.expectedVersion, idempotencyKey }, actor); return json(result, { status: result.replayed ? 200 : 201 }); }
   catch (error) { return collaborationErrorResponse(error) ?? authErrorResponse(error); }
 }

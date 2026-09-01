@@ -45,6 +45,8 @@ export interface MemoryRepository {
   updateTool(tool: ToolExecution): Promise<void>;
   insertCheckpoint(checkpoint: ConversationCheckpoint): Promise<void>;
   updateCheckpoint(checkpoint: ConversationCheckpoint): Promise<void>;
+  /** 将摘要、已完成检查点和会话版本在同一事务中提交，禁止产生孤儿摘要。 */
+  commitCompaction(input: { conversation: Conversation; summary: ConversationSummary; checkpoint: ConversationCheckpoint }): Promise<void>;
   listCheckpoints(conversationId: string, ownerUserId: string): Promise<ConversationCheckpoint[]>;
   insertSummary(summary: ConversationSummary): Promise<void>;
   getLatestSummary(conversationId: string, ownerUserId: string): Promise<ConversationSummary | null>;
@@ -56,4 +58,3 @@ export interface MemoryRepository {
   listMemories(query: MemoryQuery): Promise<MemoryCandidate[]>;
   searchMemories(query: MemoryQuery): Promise<MemoryCandidate[]>;
 }
-

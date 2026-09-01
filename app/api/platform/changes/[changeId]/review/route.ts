@@ -7,6 +7,7 @@ import { json } from "@/lib/api/http";
 import { collaborationErrorResponse, CollaborationService } from "@/lib/services/collaboration";
 import { getCollaborationRepository } from "@/lib/repositories/collaboration";
 import { getPlatformRepository } from "@/lib/repositories/platform/platform-repository-factory";
+import { readIdempotencyKey } from "@/lib/services/collaboration/idempotency";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +15,6 @@ const schema = z.object({ verdict: z.enum(["comment", "approve", "request_change
 
 /** 逐段 Review；提交者不能审核自己的 MR，重复 Idempotency-Key 不产生第二条 Review。 */
 export async function POST(request: Request, context: { params: { changeId: string } }) {
-  try { assertTrustedJsonRequest(request); const actor = await requireAuthenticatedActor(); const input = schema.parse(await request.json()); const review = await new CollaborationService(getCollaborationRepository(), getPlatformRepository()).addReview({ ...input, mergeRequestId: context.params.changeId, idempotencyKey: request.headers.get("Idempotency-Key")?.trim() || undefined }, actor); return json({ review }, { status: 201 }); }
+  try { assertTrustedJsonRequest(request); const actor = await requireAuthenticatedActor(); const input = schema.parse(await request.json()); const review = await new CollaborationService(getCollaborationRepository(), getPlatformRepository()).addReview({ ...input, mergeRequestId: context.params.changeId, idempotencyKey: readIdempotencyKey(request) }, actor); return json({ review }, { status: 201 }); }
   catch (error) { return collaborationErrorResponse(error) ?? authErrorResponse(error); }
 }

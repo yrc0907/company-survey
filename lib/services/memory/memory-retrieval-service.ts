@@ -20,6 +20,12 @@ export class MemoryManagementService {
     if (input.sources.length === 0) throw new ValidationError("长期记忆必须保留来源");
     if (input.scope === "project" && !input.projectId) throw new ValidationError("项目记忆必须包含 projectId");
     if (input.scope === "conversation" && !input.conversationId) throw new ValidationError("会话记忆必须包含 conversationId");
+    if (input.scope === "conversation" && input.conversationId) {
+      const conversation = await this.repository.getConversation(input.conversationId, owner);
+      if (!conversation || (input.projectId && conversation.projectId !== input.projectId)) {
+        throw new ValidationError("会话记忆作用域无法确认");
+      }
+    }
     if (input.category !== "preference" && input.state === "active" && input.sources.some((source) => source.extractionMode === "automatic_candidate")) {
       throw new ValidationError("自动提取的身份、决定或待办必须先由用户确认");
     }
@@ -81,10 +87,20 @@ export class MemoryRetrievalService {
   public async retrieve(input: { ownerUserId: string; projectId: string | null; conversationId: string | null; query: string; now?: string; maxEntries?: number; tokenBudget?: number }): Promise<MemoryCandidate[]> {
     const query = input.query.trim();
     if (!query) return [];
+    const ownerUserId = requireValue(input.ownerUserId, "用户 ID");
+    const projectId = input.projectId?.trim() || null;
+    const conversationId = input.conversationId?.trim() || null;
+    if (conversationId) {
+      // 先确认会话属于当前用户，并且 project 绑定一致；不能用任意会话 ID 查询另一条历史。
+      const conversation = await this.repository.getConversation(conversationId, ownerUserId);
+      if (!conversation || (projectId !== null && conversation.projectId !== projectId)) {
+        throw new ValidationError("记忆会话作用域无法确认");
+      }
+    }
     const maxEntries = Math.min(10, Math.max(1, input.maxEntries ?? 8));
     const tokenBudget = Math.min(4_096, Math.max(32, input.tokenBudget ?? 768));
     const candidates = await this.repository.searchMemories({
-      ownerUserId: requireValue(input.ownerUserId, "用户 ID"), projectId: input.projectId, conversationId: input.conversationId,
+      ownerUserId, projectId, conversationId,
       query: query.slice(0, 1_000), now: input.now ?? new Date().toISOString(), limit: maxEntries * 3,
     });
     const selected: MemoryCandidate[] = [];
@@ -128,4 +144,3 @@ function parseOptionalDate(value: string | undefined): string | null {
   if (Number.isNaN(parsed.valueOf())) throw new ValidationError("记忆失效时间无效");
   return parsed.toISOString();
 }
-

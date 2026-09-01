@@ -1,4 +1,5 @@
 import type { ConversationMessage, ConversationSummary, StructuredConversationSummary } from "@/lib/domain/memory";
+import { criticalFactsHash, extractCriticalFacts, mergeCriticalFacts } from "@/lib/services/memory/critical-fact-ledger";
 
 /** 摘要 Provider 可替换；测试使用确定性实现，生产模型实现也只能返回固定结构。 */
 export interface ConversationSummaryProvider {
@@ -31,13 +32,16 @@ export class DeterministicSummaryProvider implements ConversationSummaryProvider
         } else if (message.role === "user" && result.goal.length < 8) pushUnique(result.goal, line.slice(0, 500));
       }
     }
+    // 确定性摘要器也必须输出事实账本，供压缩服务进行前后校验；不依赖模型“记得”关键值。
+    result.criticalFacts = mergeCriticalFacts(previous?.criticalFacts, extractCriticalFacts(input.messages));
+    result.criticalFactsHash = criticalFactsHash(result.criticalFacts);
     return result;
   }
 }
 
 /** 创建完整空结构，确保压缩后关键数组不会因 Provider 省略字段而消失。 */
 export function emptyStructuredSummary(): StructuredConversationSummary {
-  return { goal: [], decisions: [], constraints: [], entities: [], claims: [], citationIds: [], todos: [], conflicts: [] };
+  return { goal: [], decisions: [], constraints: [], entities: [], claims: [], citationIds: [], todos: [], conflicts: [], criticalFacts: [], criticalFactsHash: criticalFactsHash([]) };
 }
 
 function stripPrefix(value: string): string {
@@ -47,4 +51,3 @@ function stripPrefix(value: string): string {
 function pushUnique(values: string[], value: string): void {
   if (value && !values.includes(value)) values.push(value);
 }
-
