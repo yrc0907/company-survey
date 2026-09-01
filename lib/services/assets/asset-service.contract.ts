@@ -24,9 +24,11 @@ async function run(): Promise<void> {
   const config = getOssConfig({ OSS_AUTH_MODE: "ecs_ram_role", OSS_RAM_ROLE_NAME: "research-oss", OSS_BUCKET: "reaserch", OSS_REGION: "cn-shanghai", OSS_ENDPOINT: "https://oss-cn-shanghai.aliyuncs.com" });
   if (!config.configured) throw new Error(config.reason);
   let head = { etag: "e".repeat(32), contentLength: 12, sha256: "a".repeat(64) };
+  const deletedKeys: string[] = [];
   setAssetsOssProviderForTest(new OssObjectStorageProvider(config.value, {
     asyncSignatureUrl: async (name) => `https://signed.test/${encodeURIComponent(name)}`,
     asyncHeadObject: async () => head,
+    asyncDeleteObject: async (name) => { deletedKeys.push(name); },
   }));
   setPlatformRepositoryForTest(platform); setAssetsRepositoryForTest(assets);
   setAuthenticatedActorResolverForTest(async () => null);
@@ -49,13 +51,22 @@ async function run(): Promise<void> {
   const forbidden = await createUploadRoute(new Request("http://localhost/api/platform/uploads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: "foreign.md", contentType: "text/markdown", size: 12, sha256: "b".repeat(64), projectId: "asset-project", branchId: "asset-branch" }) })); assert.equal(forbidden.status, 403, "非项目成员不能上传到他人分支");
 
   setAuthenticatedActorResolverForTest(async () => ({ userId: alice.id, role: alice.role }));
-  const failedIntent = await createUploadRoute(new Request("http://localhost/api/platform/uploads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: "bad.md", contentType: "text/markdown", size: 12, sha256: "c".repeat(64) }) })); const failedBody = await failedIntent.json() as { asset: { id: string } };
+  const failedIntent = await createUploadRoute(new Request("http://localhost/api/platform/uploads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: "bad.md", contentType: "text/markdown", size: 12, sha256: "c".repeat(64) }) })); const failedBody = await failedIntent.json() as { asset: { id: string; objectKey: string } };
   const failedComplete = await completeUploadRoute(new Request("http://localhost/api/platform/uploads/x", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ etag: "d".repeat(32), size: 12, sha256: "c".repeat(64) }) }), { params: { id: failedBody.asset.id } }); assert.equal(failedComplete.status, 400, "Head 校验失败不能转正");
+  assert.deepEqual(deletedKeys, [failedBody.asset.objectKey], "校验失败的隔离对象应尝试立即回收");
   const verificationRetry = await retryUploadRoute(new Request("http://localhost/api/platform/uploads/x/retry", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }), { params: { id: failedBody.asset.id } }); assert.equal(verificationRetry.status, 400, "上传校验失败不能把坏对象当解析任务重试");
   await assets.updateIngestionStatus(firstBody.asset.id, "failed", { code: "PARSER_FAILED", message: "mock parser" });
   const retry = await retryUploadRoute(new Request("http://localhost/api/platform/uploads/x/retry", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }), { params: { id: firstBody.asset.id } }); assert.equal(retry.status, 200, "已验证对象的失败解析任务可显式重试");
   await assets.updateIngestionStatus(firstBody.asset.id, "failed", { code: "PARSER_FAILED", message: "mock parser" });
-  const cancelled = await cancelUploadRoute(new Request("http://localhost/api/platform/uploads/x", { method: "DELETE" }), { params: { id: firstBody.asset.id } }); assert.equal(cancelled.status, 200, "已验证对象可取消解析队列");
+  const cancelled = await cancelUploadRoute(new Request("http://localhost/api/platform/uploads/x", { method: "DELETE", headers: { "content-type": "application/json" } }), { params: { id: firstBody.asset.id } }); assert.equal(cancelled.status, 200, "已验证对象可取消解析队列");
+  assert.deepEqual(deletedKeys, [failedBody.asset.objectKey], "verified 原件不可因取消解析而删除");
+
+  const pendingIntent = await createUploadRoute(new Request("http://localhost/api/platform/uploads", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: "pending.md", contentType: "text/markdown", size: 12, sha256: "d".repeat(64) }) }));
+  assert.equal(pendingIntent.status, 201);
+  const pendingBody = await pendingIntent.json() as { asset: { id: string; objectKey: string } };
+  const pendingCancel = await cancelUploadRoute(new Request("http://localhost/api/platform/uploads/x", { method: "DELETE", headers: { "content-type": "application/json" } }), { params: { id: pendingBody.asset.id } });
+  assert.equal(pendingCancel.status, 200, "未完成上传取消应成功");
+  assert.deepEqual(deletedKeys, [failedBody.asset.objectKey, pendingBody.asset.objectKey], "隔离对象必须在失败或取消时清理");
   setAuthenticatedActorResolverForTest(null); setAssetsRepositoryForTest(null); setPlatformRepositoryForTest(null); setAssetsOssProviderForTest(null);
   console.log("asset-service contract: passed");
 }

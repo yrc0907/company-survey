@@ -35,7 +35,7 @@
 - [ ] 首页列表式卡片展示 owner、published_at、main 最新合并、去重阅读、已合并贡献者、来源与 open MR
 - [ ] 匿名 AI 签名 Cookie、Redis 限流、额度、成本和滥用防护
 - [ ] 阿里云 OSS 文件/头像存储、许可证、举报、下架和审计
-- [~] 私有 Bucket `reaserch` 已创建，ECS 已绑定 `research-oss` 且 IMDSv2 临时凭据状态为 `Success`；OSS SDK、实际对象读写、CORS 和权限 E2E 尚未实现
+- [~] 私有 Bucket `reaserch` 已创建，ECS 已绑定 `research-oss` 且 IMDSv2 临时凭据状态为 `Success`；OSS SDK、预签名读写、隔离对象删除和所有者边界已实现，目标 Bucket CORS、真实对象权限 E2E 与解析 Worker 待在香港环境验收
 - [ ] 默认头像使用用户名首字符和稳定背景色；用户头像完成 MIME/大小校验、EXIF 清理、WebP 派生和私有 OSS 受控访问
 - [ ] PostgreSQL FTS + pgvector + RRF + Reranker 持久化检索和后台索引 Worker
 - [ ] 权限拒绝、游客迁移、版本冲突、署名一致性、移动端、Reduced Motion 和公网 E2E
@@ -114,9 +114,10 @@
 
 - [x] Dockerfile、Compose、Caddy、PostgreSQL、命名卷、健康检查和部署预检脚本
 - [x] Compose 中为 2C2G 设置 Caddy/App/PostgreSQL 内存与 CPU 上限；文档提供 1 GiB swap 建议
-- [x] `research.webyrc.com` 已解析并放行 `80/443`；Caddy 已取得受信任证书，公网 `/healthz` 返回 `200`、未认证首页返回 `401`、Basic Auth 首页返回 `200`
+- [~] 香港源站已解析并放行 `80/443`，Caddy 容器健康；ESA 代理当前返回 ICP 合规拦截，源站证书尚未完成，公网 `/healthz`、首页和 Basic Auth 入口需在 ESA 切换后复跑
 - [x] 服务器 `.env` 权限 `600`、轮换密码/Key 的运行时配置、模型/Embedding/Rerank 连通性、PostgreSQL seed 与 named-volume 持久化已验收
-- [ ] 备份计划、异机备份、恢复演练、磁盘/流量/容器告警
+- [~] 已加入 `scripts/backup.sh`（PostgreSQL + uploads 成对备份、SHA-256 清单）、`scripts/health-check.sh`（容器/私有端口/公网 HTTPS）和 `scripts/release.sh`（备份→迁移→发布→验收）；首次异机复制、恢复演练与告警仍需在香港 ECS 人工执行
+- [~] `scripts/aliyun-security-group.ps1` 默认只读计划，可显式确认后新增 80/443/指定 22；删除 3389、收紧 SSH 来源和默认安全组仍需人工变更
 - [~] `3000/5432` 未对公网发布，`80/443` 已正确放行；仍需把 SSH `22` 限制到可信来源，并删除 Linux 实例不需要的公网 RDP `3389`
 
 ## 6. 验收
@@ -124,5 +125,5 @@
 - [x] 服务契约测试覆盖保存、版本冲突、手动文本导入/重复拒绝/报告不存在、memory_demo 持久化拒绝、active 来源过滤、图边过滤、选区隔离、SSRF 基础拒绝和客户端快照裁剪
 - [x] `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm build` 已在提交 `20229c7` 前全部通过
 - [~] 已在服务器 PostgreSQL 模式完成浏览器资料导入、混合检索、带引用 AI 回答，以及 API 保存/版本冲突验收；新建报告 UI、Diff 和导出待对应功能完成后纳入
-- [x] Docker Compose 启动、`postgres/app/caddy` 健康检查、数据库 seed、低内存构建、HTTPS 和 Basic Auth 公网验收均已通过
+- [~] Docker Compose 启动、`postgres/app/caddy` 健康检查、数据库 seed、低内存构建和源站持久化已通过；ESA/ICP 入口导致 HTTPS 与 Basic Auth 公网验收待切换后复跑
 - [ ] RAG Golden Set、无证据拒答、Reranker 降级和向量重建评测

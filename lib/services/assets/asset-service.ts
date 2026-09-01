@@ -83,6 +83,8 @@ export class AssetService {
     const actualSha256 = head.sha256?.toLowerCase() ?? await this.oss.sha256Object(asset.objectKey).catch(() => null);
     if (!head.etag || head.contentLength === null || !actualSha256 || expectedEtag !== actualEtag || input.size !== asset.expectedSize || head.contentLength !== asset.expectedSize || sha256 !== asset.expectedSha256 || actualSha256 !== asset.expectedSha256) {
       await this.assets.failAsset(assetId, ownerUserId, "UPLOAD_VERIFICATION_FAILED", "ETag、大小或 SHA-256 与上传意图不一致");
+      // 校验失败的隔离对象没有证据价值，立即尝试回收；若 OSS 暂时不可用，DELETE 接口仍可安全重试。
+      try { await this.oss.deleteObject(asset.objectKey); } catch (cleanupError) { console.error("OSS quarantine cleanup failed", { assetId, cleanupError }); }
       throw new AssetVerificationError();
     }
     return this.assets.completeVerification({ assetId, ownerUserId, etag: actualEtag, actualSize: head.contentLength, actualSha256 });
@@ -100,6 +102,8 @@ export class AssetService {
       await this.assets.updateIngestionStatus(assetId, "failed", { code: "INGESTION_CANCELLED", message: "用户从队列移除" });
       return;
     }
+    // pending/uploaded/failed 只属于隔离区，取消前删除 OSS 对象；删除失败时保留状态，允许用户重试而不产生“假成功”。
+    await this.oss.deleteObject(asset.objectKey);
     await this.assets.failAsset(assetId, actor.userId, "UPLOAD_CANCELLED", "用户取消上传");
   }
   public async createDownloadGrant(actor: AuthenticatedActor, assetId: string): Promise<{ url: string; expiresInSeconds: number }> { const asset = await this.assets.getAssetForActor(assetId, actor.userId); if (!asset || asset.status !== "verified") throw new AssetNotFoundError(); const grant = await this.oss.createDownloadGrant(asset.objectKey); return { url: grant.url, expiresInSeconds: grant.expiresInSeconds }; }

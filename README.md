@@ -4,7 +4,7 @@
 
 ## 当前实现状态
 
-工作台和 API 已部署到 `https://research.webyrc.com`，公开平台页面由 Caddy HTTPS 提供，旧版个人 Research API 继续由 Basic Auth 保护，PostgreSQL 使用命名卷持久化。没有 `DATABASE_URL` 的本地运行仍只加载不可持久化的演示数据。
+工作台已部署到香港 ECS 的 `/srv/research-workbench`，应用、PostgreSQL 和 Caddy 源站容器均健康；`research.webyrc.com` 当前仍经过 ESA 代理，因 ICP 拦截和源站证书切换尚未完成，不能把公网 HTTPS 入口写成已验收。旧版个人 Research API 继续由 Basic Auth 保护，PostgreSQL 使用命名卷持久化。没有 `DATABASE_URL` 的本地运行仍只加载不可持久化的演示数据。
 
 已实现：
 
@@ -24,7 +24,7 @@
 - 真正的 PostgreSQL FTS 查询、pgvector 持久化/ANN、检索评测；远程 Embedding、Dense RRF 与 Rerank 已有有界运行时实现；
 - 企业 CRUD、图谱写入/API/UI、版本 Diff/回滚、Markdown/PDF 导出；
 - 应用内会话认证已实现；旧版 Research API 仍依赖 Caddy Basic Auth，公开平台写操作依赖 Auth.js/RBAC；
-- 备份恢复、磁盘/流量告警和 SSH/RDP 安全组收紧；服务器 HTTPS、持久化、模型调用和核心公网验收已完成。
+- 备份/发布/健康检查脚本和安全组只读计划已加入；异机恢复、磁盘/流量告警、SSH/RDP 安全组收紧，以及 ESA/ICP 公网 HTTPS 验收仍待人工变更和复跑。
 
 ## 数据与 AI 边界
 

@@ -17,46 +17,46 @@ Internet
 
 `BGE-M3` 如需启用，只在有 GPU 的本地开发机离线生成 embedding；服务器只存储向量、执行过滤和查询。详细检索架构见 [retrieval-architecture.md](retrieval-architecture.md)。
 
-## 1.1 实际部署记录（2026-09-01）
+## 1.1 实际部署记录（2026-09-02）
 
-本次部署使用提交 `c8cf64d`，服务器目录为 `/srv/research-workbench`。以下为实际命令与运行结果，不包含任何密码、Key 或 Basic Auth 凭据：
+本次香港迁移使用分支提交 `0ebcd30`（工作树后续 OSS/运维脚本改动尚未推远端），服务器目录为 `/srv/research-workbench`。以下为实际命令与运行结果，不包含任何密码、Key 或 Basic Auth 凭据：
 
 | 项目 | 实际结果 |
 | --- | --- |
 | 运行环境 | Ubuntu Linux、Docker `29.7.2`、Docker Compose `v5.5.0` |
 | 资源 | 约 `1.6 GiB` 内存、已启用 `1 GiB` swap；应用构建后根盘约 `31 GiB` 可用 |
-| 构建 | `docker compose build app` 成功完成 Next.js 生产构建 |
+| 构建 | 香港 ECS 上 `docker compose build app migrate` 成功完成 Next.js 生产构建 |
 | 容器 | `postgres`、`app`、`caddy` 三个容器均为 `healthy` |
-| 数据库 | `/api/healthz` 返回 `200` 和 `persistence: "postgres"`；默认研究库、默认报告及 `project-huice` 首发样例均已写入，`006_public_seed.sql` 可重复运行 |
+| 数据库 | 容器内 `/api/healthz` 返回 `200` 和 `persistence: "postgres"`；旧服务器备份已恢复，`project-huice` 存在，迁移表包含 `006_public_seed.sql` |
 | 持久化 | PostgreSQL 和上传目录均使用 Compose named volume，不向公网发布 `5432` |
 | 模型链路 | 服务器受限 `.env` 的模型、Embedding、Rerank 三个 Provider 已做连通性验证；Key 不在 Git、文档或日志中 |
 | Caddy | 配置校验通过，服务器本机已监听 `80` 与 `443`；应用 `3000` 仅在 Compose 内部暴露 |
 
-### 公网上线结果
+### 公网验收状态
 
-`research.webyrc.com` 的 A 记录已解析到部署实例。阿里云安全组放行入站 `80/tcp`、`443/tcp` 后，Caddy 的 TLS-ALPN-01 验证成功并取得受信任证书。首次重试期间曾遇到一次权威 DNS 的 CAA `SERVFAIL`，随后 `dns7.hichina.com`、`dns8.hichina.com` 与 Google DNS 均恢复为 `NOERROR`，重启 Caddy 后证书签发成功。
+香港源站的 HTTP 直连（`--resolve research.webyrc.com:80:47.57.138.55`）返回 Caddy 的 `308`，容器和安全组端口正常。当前 ESA 代理仍处于启用状态，公网请求返回阿里云 `403 Non-compliance ICP Filing`；ESA 回源 HTTPS 在源站证书签发前返回 `525`，因此下列 HTTPS 公网验收尚未成立。必须先在 ESA 暂时关闭代理（DNS-only）或把回源协议临时改为 HTTP，让 Caddy 完成 ACME 证书申请；证书成功后再恢复 ESA HTTPS 回源，并重新执行验收。该切换属于高影响人工操作，不能由仓库脚本擅自完成。
 
-最终公网验收结果：
+当前已验证结果：
 
 ```text
 HTTP /healthz              -> 308 redirect to HTTPS
-HTTPS /healthz             -> 200, certificate verified
-HTTPS / without auth       -> 401
-HTTPS / with Basic Auth    -> 200
-App / PostgreSQL / Caddy   -> healthy
+HTTP source /healthz       -> 308, Caddy source reachable
+ESA HTTP /healthz          -> 403, ICP compliance block
+ESA HTTPS /healthz         -> 525, origin certificate not ready
+App / PostgreSQL / Caddy   -> healthy inside ECS
 ```
 
-公开平台补充验收：
+公开平台补充验收（源站容器/API 已具备，ESA 公网入口待切换后复跑）：
 
 ```text
-GET /api/platform/projects                         -> 200, project-huice 可匿名读取
-GET /api/platform/projects/project-huice            -> 200, 文件树与贡献署名可读取
-POST /api/research/assistant                        -> 200, 返回受限上下文、引用 ID 和待核验边界
-GET /api/research/workbench                         -> 401, 旧版个人接口仍受 Basic Auth 保护
-POST /api/platform/uploads（未登录）                -> 401, 上传不允许匿名
+GET /api/platform/projects（源站）                  -> 待在证书/ESA 切换后复跑
+GET /api/platform/projects/project-huice（源站）     -> 待在证书/ESA 切换后复跑
+POST /api/research/assistant（源站）                 -> 待在证书/ESA 切换后复跑
+GET /api/research/workbench（源站）                  -> 待在证书/ESA 切换后复跑
+POST /api/platform/uploads（未登录，源站）           -> 待在证书/ESA 切换后复跑
 ```
 
-完整界面流程通过 SSH 隧道连接实际服务器 App 验收：浏览器写入资料后来源数立即更新，语义搜索返回新资料，AI 使用 `gemini-embedding-2-preview -> qwen3-rerank -> gpt-5.6-terra` 生成带来源回答。服务器 API 另行验证了版本从 1 保存到 2，以及旧版本写入被 `409 VERSION_CONFLICT` 拒绝。
+完整界面流程通过 SSH 隧道连接实际服务器 App 验收：浏览器写入资料后来源数立即更新，语义搜索返回新资料，AI 使用 `gemini-embedding-2-preview -> qwen3-rerank -> gpt-5.6-terra` 生成带来源回答。服务器 API 另行验证了版本从 1 保存到 2，以及旧版本写入被 `409 VERSION_CONFLICT` 拒绝。公网入口因 ESA ICP/源站证书链路尚未切换，不能把上述源站验收写成公网验收。
 
 应用 `3000` 和数据库 `5432` 均未向公网发布。当前安全组仍需收尾：将 SSH `22` 从 `0.0.0.0/0` 限制为可信管理来源，并删除 Linux 实例不需要的 RDP `3389` 规则。
 
@@ -196,6 +196,81 @@ docker compose ps
 
 应用更新使用经过本地/CI 验证的新镜像标签；不要在低内存服务器临时修改代码或直接构建。
 
+### 5.3 可重复的部署自动化
+
+仓库提供了只依赖 Docker Compose 的服务器脚本。脚本默认不会修改云控制台、删除
+Docker 卷或清理旧备份；所有脚本都不读取或打印 Key 的明文。先在香港 ECS 上确认
+脚本来自已经验证的提交，再执行：
+
+```bash
+cd /srv/research-workbench
+chmod 700 scripts/backup.sh scripts/health-check.sh scripts/release.sh
+
+# 只读容器/配置预检（Windows 可运行 scripts/deploy-check.ps1）。
+bash scripts/health-check.sh --env-file .env --skip-external
+
+# 发布后检查真实域名和证书；不会把 Basic Auth 密码放在命令行。
+bash scripts/health-check.sh --env-file .env --url https://research.webyrc.com
+```
+
+`scripts/backup.sh` 会验证 PostgreSQL 健康状态和 `research-workbench_uploads_data`
+卷存在，然后在 `data/backups/<UTC 时间>/` 写入 `postgres.dump`、`uploads.tar.gz` 和
+`manifest.txt`。清单包含 Git 提交和 SHA-256，不包含数据库连接串或模型凭据。数据库与
+上传卷必须整体复制到异机；脚本不自动删除旧备份，避免误删唯一恢复点：
+
+```bash
+bash scripts/backup.sh --env-file .env --output-dir data/backups
+```
+
+标准发布入口会在迁移前备份，迁移失败时停止，不会让新应用跑在旧 schema 上。2 GiB
+实例默认使用本地/CI 预构建的不可变 `APP_IMAGE`；只有明确知道内存余量时才传 `--build`：
+
+```bash
+bash scripts/release.sh --env-file .env --url https://research.webyrc.com
+# 服务器确实需要构建时才使用：
+# bash scripts/release.sh --env-file .env --build --url https://research.webyrc.com
+```
+
+发布记录写入 `data/releases/<UTC 时间>.txt`，其中只记录提交、旧应用镜像和流程状态。
+发布失败时保留旧容器、镜像和备份；回滚必须由人工选择已验证的镜像与对应数据库恢复点，
+不能把自动回滚当作数据恢复。跳过备份需要同时显式传入
+`--skip-backup --confirm-skip-backup`，不建议在生产使用。
+
+#### 安全组声明式检查
+
+`scripts/aliyun-security-group.ps1` 默认是只读计划模式，使用服务器上的 `aliyun`
+CLI/RAM 临时凭据查询安全组，不接收 AccessKey 参数，也不把凭据写入文件。它只计划或
+（显式确认后）新增以下最小规则：公网 `tcp/80`、`tcp/443`，以及指定管理网段的
+`tcp/22`：
+
+```powershell
+# 只读：查看缺失规则，不会修改阿里云资源
+pwsh ./scripts/aliyun-security-group.ps1 `
+  -SecurityGroupId sg-hk-example `
+  -ManagementCidr 203.0.113.8/32
+
+# 需要变更时必须显式确认；仍不会删除任何规则
+pwsh ./scripts/aliyun-security-group.ps1 `
+  -SecurityGroupId sg-hk-example `
+  -ManagementCidr 203.0.113.8/32 `
+  -Apply -ConfirmText ALLOW-HK-ECS-SECURITY-GROUP
+```
+
+脚本不会自动撤销 `3389`、`3000`、`5432`，也不会猜测你的管理 IP。完成计划后仍需人工
+在阿里云变更流程中核对：`22` 仅可信固定来源，`80/443` 公网开放，`3000/5432/3389`
+关闭。安全组 ID、管理 CIDR、DNS/ESA NS 切换和备案属于高影响外部操作，必须人工确认。
+
+#### 哪些可以代码化，哪些必须人工
+
+| 操作 | 自动化边界 |
+| --- | --- |
+| Compose 配置、迁移、启动、健康检查、备份与发布记录 | 脚本可重复执行；失败即停并保留证据 |
+| 安全组规则查询和新增 80/443/指定 22 | 默认计划；显式 `-Apply` 才写入，永不自动删除 |
+| 删除 3389、收紧 22、修改默认安全组 | 人工审核目标和来源后操作 |
+| 域名 A/AAAA、ESA NS、证书申请和 CDN 缓存策略 | 可由 API/IaC 辅助，但切换前必须人工确认 |
+| RAM 角色、临时凭据、备案、实名和云账号恢复 | 必须控制台/人工安全确认 |
+| 数据库/上传卷恢复 | 必须先核对备份配对、目标卷和恢复窗口，再人工执行 |
+
 ## 6. 备份与恢复
 
 至少每天备份 PostgreSQL 和上传卷，并将备份复制到服务器之外。数据库备份与附件必须成对保留。
@@ -262,4 +337,4 @@ OSS_ENDPOINT=https://oss-cn-shanghai.aliyuncs.com
 OSS_FORCE_HTTPS=true
 ```
 
-以上配置目前只是资源准备：当前生产镜像尚无 OSS SDK、预签名上传、CORS、对象路径校验和解析 Worker。实现后必须验证 `PutObject/GetObject/DeleteObject` 权限边界、跨用户拒绝、签名过期、重复上传和跨地域延迟，才能把上传标记为完成。
+以上配置用于生产镜像的真实 OSS SDK、预签名 `PutObject/GetObject` 和受控 `DeleteObject`。应用只使用 ECS RAM Role 临时凭据，不保存永久 AccessKey；数据库先做所有者/项目权限过滤，再签发短期 URL。删除只针对隔离对象，已验证原件不可由取消接口删除。上线前仍需在目标 Bucket CORS 和香港 ECS 环境验证 `PutObject/GetObject/DeleteObject` 权限边界、跨用户拒绝、签名过期、重复上传和跨地域延迟。

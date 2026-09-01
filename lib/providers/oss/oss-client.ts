@@ -11,6 +11,8 @@ export interface OssSigningClient {
   asyncHeadObject?(name: string): Promise<OssObjectHead>;
   /** 25 MiB 白名单内对象可由服务端流式计算 SHA-256，避免仅信任客户端 header。 */
   asyncSha256Object?(name: string): Promise<string>;
+  /** 删除隔离区对象；只由 Provider 在完成所有者校验后调用。 */
+  asyncDeleteObject?(name: string): Promise<void>;
 }
 
 export interface OssObjectHead {
@@ -64,6 +66,10 @@ export async function createOssSigningClient(config: OssConfig): Promise<OssSign
       const hash = createHash("sha256");
       for await (const chunk of result.stream as AsyncIterable<Uint8Array>) hash.update(chunk);
       return hash.digest("hex");
+    },
+    asyncDeleteObject: async (name) => {
+      // OSS DELETE 对不存在对象保持幂等，便于用户重复点击取消或清理失败重试。
+      await client.delete(name);
     },
   };
 }

@@ -1,6 +1,6 @@
 # 私有 OSS 上传实现
 
-状态：后端上传闭环已实现，前端和解析 Worker 仍按 `TODO.md` 接入。
+状态：后端私有 OSS 上传、下载和隔离对象清理闭环已实现；文件内容解析 Worker 仍按 `TODO.md` 接入。
 
 ## 安全边界
 
@@ -38,6 +38,10 @@ x-oss-meta-sha256: <预期 SHA-256>
 
 只允许 `verified` 原件对应的解析 Job 在 `failed` 状态下重试；上传校验失败的对象必须新建上传意图，避免坏对象被重新当成解析任务。
 
+### `DELETE /api/platform/uploads/{assetId}`
+
+仅当前登录用户可以取消自己的上传。对 `pending_upload`、`uploaded` 或 `failed` 的隔离对象，服务端先调用受控 `DeleteObject` 再将资产标记为 `failed`；OSS 删除失败时接口返回错误，不报告“已取消”，方便客户端重试。对 `verified` 原件，接口只取消解析 Job，不删除不可变原始证据。
+
 ### `GET /api/platform/assets/{assetId}`
 
 仅资产所有者可以获得短期私有 GET URL。数据库只保存 `object_key`，不保存签名 URL。
@@ -49,6 +53,6 @@ Asset: pending_upload -> verified | failed
 Job: queued -> uploading -> processing -> ready | failed -> queued (retry)
 ```
 
-`uploaded_asset` 保存不可变原始对象元数据；解析器生成的 Markdown/结构化文档必须创建独立 `asset_kind=derived` 记录，并通过 `original_asset_id` 关联，编辑派生内容不能覆盖原始证据。
+`uploaded_asset` 保存不可变原始对象元数据；解析器生成的 Markdown/结构化文档必须创建独立 `asset_kind=derived` 记录，并通过 `original_asset_id` 关联，编辑派生内容不能覆盖原始证据。`DeleteObject` 只允许隔离前缀，不能删除 `verified` 原件；已取消或校验失败对象的 OSS 清理可安全幂等重试。
 
 解析 Worker 通过 `AssetRepository.updateIngestionStatus` 领取和更新任务；状态更新应使用条件 SQL、attempt 和幂等键，失败保留错误码和可恢复提示。当前 API 不声称解析已经完成。

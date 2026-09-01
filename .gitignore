@@ -6,6 +6,7 @@ coverage/
 tsconfig.tsbuildinfo
 data/uploads/
 data/backups/
+data/releases/
 *.log
 __pycache__/
 *.py[cod]

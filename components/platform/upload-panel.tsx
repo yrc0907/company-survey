@@ -124,12 +124,12 @@ export function UploadPanel() {
   function cancelUpload(): void {
     if (stage !== "uploading") return;
     xhrRef.current?.abort();
-    if (assetId) void fetch(`/api/platform/uploads/${encodeURIComponent(assetId)}`, { method: "DELETE" }).catch(() => undefined);
+    if (assetId) void fetch(`/api/platform/uploads/${encodeURIComponent(assetId)}`, { method: "DELETE", headers: { "content-type": "application/json" }, body: "{}" }).catch(() => undefined);
     setStage("failed"); setNotice("上传已取消；隔离对象已标记为不可用。"); setError("");
   }
   function removeQueuedFile(): void {
     if (stage === "uploading") { cancelUpload(); return; }
-    if (assetId) void fetch(`/api/platform/uploads/${encodeURIComponent(assetId)}`, { method: "DELETE" }).catch(() => undefined);
+    if (assetId) void fetch(`/api/platform/uploads/${encodeURIComponent(assetId)}`, { method: "DELETE", headers: { "content-type": "application/json" }, body: "{}" }).catch(() => undefined);
     setFile(null); setAssetId(null); setProjectId(null); setProgress(0); setJobStatus("等待上传"); setError(""); setNotice("队列项已移除，可以重新选择文件。"); setStage("editing");
   }
 

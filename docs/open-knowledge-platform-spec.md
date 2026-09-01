@@ -221,7 +221,7 @@ V1 不使用 LangGraph、RabbitMQ、Temporal、Kubernetes、Neo4j、Yjs 或真�
 | ECS RAM 角色 | `research-oss` |
 | 认证方式 | ECS Instance RAM Role / IMDSv2 临时凭据，不使用永久 AccessKey |
 
-服务器元数据已返回 `research-oss` 且临时凭据状态为 `Success`，证明角色绑定和自动轮换生效；这不等于应用已经完成 OSS `PutObject/GetObject`。在 SDK、上传 API、CORS 和端到端测试完成前，上传功能仍应显示未实现。
+服务器元数据已返回 `research-oss` 且临时凭据状态为 `Success`，证明角色绑定和自动轮换生效。应用已提供基于该角色的 OSS SDK、预签名 `PutObject/GetObject`、隔离对象 `DeleteObject` 和上传校验 API；目标 Bucket CORS、真实对象权限 E2E 与解析 Worker 仍需在香港环境验收，未验收前不得把解析结果标记为完成。
 
 当前 ECS 与 Bucket 不在同一地域，因此使用上海公网 HTTPS Endpoint，会产生跨地域时延和可能的公网流量费用。内测规模可以接受；流量增长后应评估在服务器同地域创建新 Bucket 或迁移计算资源，不能使用跨地域不可达的内网 Endpoint。
 

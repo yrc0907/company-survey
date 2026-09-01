@@ -125,7 +125,7 @@ ai_artifact_source
 
 ### 3.1 当前现象
 
-`research.webyrc.com` 的 DNS 和服务器 HTTPS 正常；中国大陆公网 HTTP 访问被阿里云拦截为 `Non-compliance ICP Filing`。这不是应用代码错误，也不是只允许某一台电脑的 IP。
+香港源站 HTTP 可达，但当前 `research.webyrc.com` 经 ESA 代理时返回 `Non-compliance ICP Filing`；ESA 回源 HTTPS 在源站证书签发前返回 `525`。这不是应用代码错误，也不是只允许某一台电脑的 IP。
 
 如果电脑能打开而手机不能，常见原因是电脑已经缓存 HTTPS/HSTS，手机首次访问先走 HTTP；若手机输入 `localhost`，则访问的是手机自身，不是电脑或 ECS。
 
