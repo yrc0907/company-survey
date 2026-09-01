@@ -141,6 +141,7 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
       const conflictDetails = initialDiff.flatMap((entry) => entry.conflicts);
       await tx`INSERT INTO merge_request (id, project_id, source_branch_id, target_branch_id, author_user_id, title, description, status, base_commit_id, head_commit_id, target_version, source_base_snapshot, target_base_snapshot, conflict_status, conflict_details)
         VALUES (${id}, ${input.projectId}, ${input.sourceBranchId}, ${input.targetBranchId}, ${actor.userId}, ${input.title}, ${input.description ?? ""}, 'open', ${nullable(source.base_commit_id)}, ${nullable(source.head_commit_id)}, ${Number(target.version ?? 0)}, ${JSON.stringify(baseSnapshot)}, ${JSON.stringify(targetSnapshot)}, ${conflictDetails.length ? "conflict" : "unknown"}, ${JSON.stringify(conflictDetails)})`;
+      await tx`UPDATE knowledge_branch SET status = 'submitted', updated_at = CURRENT_TIMESTAMP WHERE id = ${input.sourceBranchId} AND status = 'active'`;
       const created = await tx<Row[]>`${tx.unsafe(MERGE_SELECT)} WHERE id = ${id}`;
       return mapMerge(created[0]!);
     });
@@ -162,6 +163,7 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
       const rows = await tx<Row[]>`INSERT INTO merge_review (id, merge_request_id, reviewer_user_id, verdict, body, node_id, block_id, idempotency_key) VALUES (${id}, ${input.mergeRequestId}, ${actor.userId}, ${input.verdict}, ${input.body ?? ""}, ${input.nodeId ?? null}, ${input.blockId ?? null}, ${input.idempotencyKey ?? null}) RETURNING id, merge_request_id, reviewer_user_id, verdict, body, node_id, block_id, created_at`;
       const nextStatus = input.verdict === "approve" ? "approved" : input.verdict === "request_changes" ? "changes_requested" : input.verdict === "reject" ? "closed" : null;
       if (nextStatus) await tx`UPDATE merge_request SET status = ${nextStatus}, updated_at = CURRENT_TIMESTAMP WHERE id = ${input.mergeRequestId}`;
+      if (input.verdict === "reject") await tx`UPDATE knowledge_branch SET status = 'closed', updated_at = CURRENT_TIMESTAMP WHERE id = (SELECT source_branch_id FROM merge_request WHERE id = ${input.mergeRequestId}) AND status = 'submitted'`;
       return mapReview(rows[0]!);
     });
     return result;
@@ -249,8 +251,8 @@ class PostgresKnowledgeCommandStore implements KnowledgeCommandStore {
     await this.sql.begin(async (tx: TransactionSql) => {
       const rows = await tx<Row[]>`SELECT id, project_id, head_commit_id, version, status, is_protected FROM knowledge_branch WHERE id = ${change.branchId} FOR UPDATE`; const branch = rows[0]; if (!branch) throw new CollaborationNotFoundError("分支不存在");
       if (bool(branch.is_protected)) throw new CollaborationInvalidStateError("保护分支只能通过合并写入");
-      if (this.options.expectedVersion != null && Number(branch.version) !== this.options.expectedVersion) throw new CollaborationConflictError("草稿分支已被其他提交更新", { expected: this.options.expectedVersion, actual: Number(branch.version) });
       if (this.options.idempotencyKey) { const prior = await tx<Row[]>`SELECT id FROM knowledge_commit WHERE branch_id = ${change.branchId} AND idempotency_key = ${this.options.idempotencyKey} LIMIT 1`; if (prior[0]) return; }
+      if (this.options.expectedVersion != null && Number(branch.version) !== this.options.expectedVersion) throw new CollaborationConflictError("草稿分支已被其他提交更新", { expected: this.options.expectedVersion, actual: Number(branch.version) });
       const now = change.createdAt;
       await tx`INSERT INTO knowledge_commit (id, project_id, branch_id, parent_commit_id, author_user_id, message, ai_assisted, idempotency_key, change_summary) VALUES (${change.id}, ${change.projectId}, ${change.branchId}, ${nullable(branch.head_commit_id)}, ${change.actorId}, ${this.options.message ?? change.command.type}, ${this.options.aiAssisted ?? false}, ${this.options.idempotencyKey ?? null}, ${JSON.stringify(change.command)})`;
       const after = change.after; const before = change.before;

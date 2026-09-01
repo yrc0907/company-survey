@@ -20,6 +20,17 @@
         respond "ok" 200
     }
 
+    # 公开 AI 只读入口使用应用内输入限制与单实例限流；其余旧版个人 Research API 仍由 Basic Auth 保护。
+    @publicResearchAssistant path /api/research/assistant
+    handle @publicResearchAssistant {
+        reverse_proxy app:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
     # 旧版个人 Research Workbench API 仍由 Basic Auth 保护，避免公开平台上线时裸露旧写接口。
     @legacyResearch path /api/research/*
     handle @legacyResearch {
