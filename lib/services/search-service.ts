@@ -109,6 +109,8 @@ export class SearchService {
       .map(({ index, score }) => ({ candidate: candidates[index]!, score: rerank.status === "completed" ? score : candidates[index]!.score }))
       .map((candidate) => ({
         ...candidate.candidate,
+        // 解析来源的 owner/project/branch/产物血缘只用于服务端授权，不随公开搜索结果返回。
+        source: publicSource(candidate.candidate.source),
         score: candidate.score,
         lexical,
         parentSection: candidate.candidate.chunk.parentSectionId ? snapshot.sections.find((section) => section.id === candidate.candidate.chunk.parentSectionId) ?? null : null,
@@ -117,6 +119,22 @@ export class SearchService {
         dense: { status: dense.status, provider: dense.provider, model: dense.model, reason: dense.reason },
       }));
   }
+}
+
+/** 将带内部血缘字段的 Source 投影成可安全返回给浏览器的来源。 */
+function publicSource(source: SearchHit["source"]): SearchHit["source"] {
+  return {
+    id: source.id,
+    reportId: source.reportId,
+    title: source.title,
+    kind: source.kind,
+    url: source.url,
+    language: source.language,
+    state: source.state,
+    capturedAt: source.capturedAt,
+    contentHash: source.contentHash,
+    snapshot: source.snapshot,
+  };
 }
 
 /** 只有完整实现了可选向量仓储的 PostgreSQL 实例才接入 Dense 持久化；内存仓储保持原行为。 */
