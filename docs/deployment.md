@@ -103,7 +103,7 @@ DEEPSEEK_API_KEY=<rotated-optional-key>
 docker run --rm caddy:2.8.4-alpine caddy hash-password --plaintext 'choose-a-long-unique-password'
 ```
 
-当前个人版的公网认证仅由 Caddy Basic Auth 提供；应用端暂未实现独立登录会话，因此不能将 `.env.example` 中预留的 `APP_PASSWORD` / `SESSION_SECRET` 当作已生效的第二层认证。应用与数据库仅在 Compose 内部网络可见。
+公开平台上线后，Caddy 只对旧版 `/api/research/*` 个人接口保留 Basic Auth；首页、公开项目、Auth.js 和平台 API 由应用层 Session/RBAC 判权。应用与数据库仅在 Compose 内部网络可见。公开 AI 目前是单实例 IP 限流，规模增大后必须迁移到 Redis/网关限流。
 
 ## 4. 构建与启动
 
@@ -154,7 +154,7 @@ docker compose ps
 docker compose logs --tail=100 app postgres caddy
 ```
 
-`/healthz` 没有业务数据；其余页面由 Caddy Basic Auth 保护。应用与数据库端口不对公网发布，容器内的 `/api/healthz` 只供 Compose 健康检查使用。
+`/healthz` 没有业务数据；旧版 `/api/research/*` 由 Caddy Basic Auth 保护，平台公开页面和平台 API 由 Auth.js/RBAC 决定访问。应用与数据库端口不对公网发布，容器内的 `/api/healthz` 只供 Compose 健康检查使用。
 
 ## 5. 日常运维
 
