@@ -153,7 +153,14 @@ function validatePersistedSummary(summary: ConversationSummary | null, messages:
   }
   const messageIds = new Set(messages.map((message) => message.id));
   const missing = (summary.structured.criticalFacts ?? []).flatMap((fact) => fact.sourceMessageIds.filter((id) => !messageIds.has(id)));
-  if (missing.length > 0 || summary.sourceMessageIds.some((id) => !messageIds.has(id))) {
+  const sourceIds = new Set(summary.sourceMessageIds);
+  const rangeMessages = messages.filter((message) => message.sequence >= summary.sourceStartSequence && message.sequence <= summary.sourceEndSequence);
+  const rangeIncomplete = rangeMessages.some((message) => !sourceIds.has(message.id));
+  const sourceOutsideRange = summary.sourceMessageIds.some((id) => {
+    const message = messages.find((entry) => entry.id === id);
+    return !message || message.sequence < summary.sourceStartSequence || message.sequence > summary.sourceEndSequence;
+  });
+  if (missing.length > 0 || summary.sourceMessageIds.length !== sourceIds.size || summary.sourceMessageIds.some((id) => !messageIds.has(id)) || rangeIncomplete || sourceOutsideRange) {
     throw new ContextIntegrityError("上下文摘要引用了不存在的原始消息");
   }
 }
