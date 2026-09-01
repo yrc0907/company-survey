@@ -35,7 +35,8 @@ export async function GET(_request: Request, context: { params: { id: string } }
     const branches = await collaborationRepository.listBranches(projectId);
     const branch = branches
       .filter((candidate) => candidate.ownerUserId === actor.userId || candidate.isProtected)
-      .sort((left, right) => Number(right.isProtected) - Number(left.isProtected) || Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0];
+      // 上传资料先写入 owner 的草稿分支；只有没有草稿时才读取保护主分支。
+      .sort((left, right) => Number(right.ownerUserId === actor.userId) - Number(left.ownerUserId === actor.userId) || Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0];
     const snapshot = branch ? await collaborationRepository.getSnapshot(branch.id) : {};
     const nodes = Object.values(snapshot).filter((node) => !node.deleted);
     const files = nodes.map((node) => ({ id: node.nodeId, name: node.name, kind: fileKind(node.kind), parentId: node.parentNodeId, position: node.position }));
@@ -59,4 +60,3 @@ export async function GET(_request: Request, context: { params: { id: string } }
     return authErrorResponse(error);
   }
 }
-
