@@ -94,6 +94,30 @@
 - **复验**：香港 ECS Worker 输出 `asset_ingestion_idle`、`processed=0` 后正常退出；未留下 ingestion 容器。
 - **性能影响**：按需构建耗时约数分钟但不增加常驻内存；空队列运行不调用模型、不读取大对象。
 
+## ASSET-INDEX-001：未完成或待校对产物误进入检索
+
+- **场景**：上传仍在处理，或图片/扫描 PDF 只有 `needs_review` 产物时调用索引接口。
+- **现象**：若只按资产 ID 写入，检索可能把不完整正文当成可引用证据。
+- **方案**：`ArtifactSourceIndexService` 同时检查 ingestion Job 为 `ready`、产物类型为 `text`、内容存在且 SHA-256 与正文重算一致；其他状态明确返回 400，不创建 source 或 Chunk。
+- **复验**：`artifact-source-index.contract.ts` 的 queued 资产场景通过；解析 Worker 的图片和扫描 PDF 场景保持 `needs_review`。
+- **性能影响**：索引前增加一次有界正文哈希计算（最大 4 MiB），避免后续检索污染和不可追溯引用。
+
+## ASSET-INDEX-002：解析产物跨用户或跨项目分支写入
+
+- **场景**：调用者篡改 `projectId`、`branchId` 或使用另一用户的资产 ID。
+- **现象**：若只校验报告存在，资料可能进入无权读取的报告范围。
+- **方案**：服务端从资产记录和 Auth.js Session 读取 owner，要求资产项目/分支与请求完全相等，并复用 `AuthorizationService.assertBranchAction(..., "write_branch")`；迁移 016 以复合外键阻止数据库层的项目/分支错配。
+- **复验**：契约测试覆盖他人 actor、篡改项目和保护分支拒绝；拒绝路径不写入来源。
+- **性能影响**：两次按主键/分支索引的权限查询，不扫描正文或 OSS 对象。
+
+## ASSET-INDEX-003：重复消费或同内容重试生成重复来源
+
+- **场景**：Worker 重试、HTTP 超时重放或同一内容通过多个上传任务重复索引。
+- **现象**：source/source_chunk 重复后，搜索排名和来源统计被放大。
+- **方案**：来源 ID 由报告与正文哈希确定；服务先按产物 ID和报告内容哈希幂等命中，PostgreSQL 使用 `source(report_id, content_hash)` 唯一约束、`source.ingestion_artifact_id` 唯一索引和事务 `ON CONFLICT DO NOTHING`。既有来源的快照和原件不覆盖。
+- **复验**：契约测试两次索引同一 ready 产物只保留一个 source 和同数量 Chunk；全量 `pnpm test` 通过。
+- **性能影响**：重复请求只做快照/索引查找，不重复切分或写入；首次切分按正文长度线性执行，最多 4096 个 Chunk。
+
 ## COLLAB-IDEMP-001：重试幂等键携带不同内容
 
 - **场景**：网络超时后，客户端使用同一 `Idempotency-Key` 重试，但修改了命令、MR 描述或 Review 内容。
