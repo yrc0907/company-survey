@@ -17,6 +17,39 @@ Internet
 
 `BGE-M3` 如需启用，只在有 GPU 的本地开发机离线生成 embedding；服务器只存储向量、执行过滤和查询。详细检索架构见 [retrieval-architecture.md](retrieval-architecture.md)。
 
+## 1.1 实际部署记录（2026-09-01）
+
+本次部署使用提交 `20229c7`，服务器目录为 `/srv/research-workbench`。以下为实际命令与运行结果，不包含任何密码、Key 或 Basic Auth 凭据：
+
+| 项目 | 实际结果 |
+| --- | --- |
+| 运行环境 | Ubuntu Linux、Docker `29.7.2`、Docker Compose `v5.5.0` |
+| 资源 | 约 `1.6 GiB` 内存、已启用 `1 GiB` swap；应用构建后根盘约 `31 GiB` 可用 |
+| 构建 | `docker compose build app` 成功完成 Next.js 生产构建 |
+| 容器 | `postgres`、`app`、`caddy` 三个容器均为 `healthy` |
+| 数据库 | `/api/healthz` 返回 `200` 和 `persistence: "postgres"`；默认研究库、默认报告均已写入，public schema 共有 9 张表 |
+| 持久化 | PostgreSQL 和上传目录均使用 Compose named volume，不向公网发布 `5432` |
+| 模型链路 | 服务器受限 `.env` 的模型、Embedding、Rerank 三个 Provider 已做连通性验证；Key 不在 Git、文档或日志中 |
+| Caddy | 配置校验通过，服务器本机已监听 `80` 与 `443`；应用 `3000` 仅在 Compose 内部暴露 |
+
+### 公网上线结果
+
+`research.webyrc.com` 的 A 记录已解析到部署实例。阿里云安全组放行入站 `80/tcp`、`443/tcp` 后，Caddy 的 TLS-ALPN-01 验证成功并取得受信任证书。首次重试期间曾遇到一次权威 DNS 的 CAA `SERVFAIL`，随后 `dns7.hichina.com`、`dns8.hichina.com` 与 Google DNS 均恢复为 `NOERROR`，重启 Caddy 后证书签发成功。
+
+最终公网验收结果：
+
+```text
+HTTP /healthz              -> 308 redirect to HTTPS
+HTTPS /healthz             -> 200, certificate verified
+HTTPS / without auth       -> 401
+HTTPS / with Basic Auth    -> 200
+App / PostgreSQL / Caddy   -> healthy
+```
+
+完整界面流程通过 SSH 隧道连接实际服务器 App 验收：浏览器写入资料后来源数立即更新，语义搜索返回新资料，AI 使用 `gemini-embedding-2-preview -> qwen3-rerank -> gpt-5.6-terra` 生成带来源回答。服务器 API 另行验证了版本从 1 保存到 2，以及旧版本写入被 `409 VERSION_CONFLICT` 拒绝。
+
+应用 `3000` 和数据库 `5432` 均未向公网发布。当前安全组仍需收尾：将 SSH `22` 从 `0.0.0.0/0` 限制为可信管理来源，并删除 Linux 实例不需要的 RDP `3389` 规则。
+
 ## 2. 上线前准备
 
 1. 域名添加 A 记录，指向服务器公网 IP；Caddy 需要可验证的公网 DNS 才能签发 HTTPS 证书。

@@ -4,7 +4,7 @@
 
 ## 当前实现状态
 
-工作台和 API 已经在当前代码库中实现，但尚未完成服务器部署验收。没有 `DATABASE_URL` 时系统只加载不可持久化的演示数据，并在 UI 中禁用新建和保存；设置 PostgreSQL 后，报告创建、编辑和不可变版本保存才会写入数据库。
+工作台和 API 已部署到 `https://research.webyrc.com`，由 Caddy HTTPS 与 Basic Auth 保护，PostgreSQL 使用命名卷持久化。没有 `DATABASE_URL` 的本地运行仍只加载不可持久化的演示数据，并在 UI 中禁用新建和保存。
 
 已实现：
 
@@ -24,7 +24,7 @@
 - 真正的 PostgreSQL FTS 查询、pgvector 持久化/ANN、检索评测；远程 Embedding、Dense RRF 与 Rerank 已有有界运行时实现；
 - 企业 CRUD、图谱写入/API/UI、版本 Diff/回滚、Markdown/PDF 导出；
 - 应用内会话认证，当前公网访问依赖 Caddy Basic Auth；
-- 服务器 HTTPS、数据库持久化、模型/搜索调用、备份恢复和公网 E2E 验收。
+- 备份恢复、磁盘/流量告警和 SSH/RDP 安全组收紧；服务器 HTTPS、持久化、模型调用和核心公网验收已完成。
 
 ## 数据与 AI 边界
 
@@ -65,7 +65,7 @@ Internet
   -> 外部模型 / 搜索 / embedding / rerank Provider
 ```
 
-详细步骤与资源边界见 [部署说明](docs/deployment.md)。当前目标服务器的公网入口、证书、安全组和模型连通性都仍需实测。
+详细步骤、实测证据与资源边界见 [部署说明](docs/deployment.md)。
 
 ## 文档
 

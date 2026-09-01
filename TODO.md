@@ -4,7 +4,7 @@
 
 ## 下一步优先级
 
-1. **P0: 先完成服务器部署验收。** 在服务器本地 `.env` 写入新轮换的密码和 Key，启动 Compose，确认 HTTPS、Caddy Basic Auth、PostgreSQL 持久化和 `/api/healthz`；不要把任何凭据提交或发送到聊天。
+1. **P0: 收紧公网运维边界并建立备份。** HTTPS、Basic Auth、PostgreSQL 持久化和模型链路已上线；下一步限制 SSH 来源、删除无用 RDP 规则，并完成首轮异机备份与恢复演练。
 2. **P1: 扩展真实资料进入系统的范围。** 手动文本导入、来源快照和 Chunk 写入已实现；下一步才是受限 URL/PDF/图片导入与解析，不能为了“导入更多类型”放开任意抓取。
 3. **P2: 把有界运行时混合检索升级为可评测的持久化检索。** 远程 Embedding、余弦、RRF 和 Reranker 降级已接入；下一步是 PostgreSQL FTS SQL、pgvector、向量版本与 Golden Set。
 4. **P3: 再补可审查的研究闭环。** 来源刷新/变化检测、引用校验、Diff/回滚、导出和独立应用会话保护。
@@ -17,8 +17,8 @@
 - [x] 实现 OpenAI-compatible 模型 Provider、显式未配置降级和思考强度白名单
 - [~] DeepSeek 原生 `web_search` 请求构造已存在；没有执行搜索的 Job、路由或来源落库
 - [x] 实测 Cloudmist 模型目录、`gemini-embedding-2-preview` Embedding 与三种 Reranker API
-- [ ] 在轮换后的服务器环境验证模型、搜索和视觉输入，不提交凭据
-- [ ] 将当前实现提交并同步到 GitHub `main` 与 Gitee `master`
+- [~] 轮换后的服务器环境已验证模型、Embedding、Rerank 三个 Provider；原生联网搜索和视觉输入尚未作为完整用户闭环验收，且凭据未提交
+- [x] 当前实现已提交为 `20229c7`，并同步到 GitHub `main` 与 Gitee `master`
 
 ## 1. 前端工作台 V1
 
@@ -75,15 +75,15 @@
 
 - [x] Dockerfile、Compose、Caddy、PostgreSQL、命名卷、健康检查和部署预检脚本
 - [x] Compose 中为 2C2G 设置 Caddy/App/PostgreSQL 内存与 CPU 上限；文档提供 1 GiB swap 建议
-- [~] Caddy 配置 HTTPS、安全响应头和 Basic Auth；域名、证书、阿里云安全组和公网访问尚需实际验收
-- [ ] 服务器 `.env`、密码/Key 轮换、模型/搜索连通性和 PostgreSQL 持久化验收
+- [x] `research.webyrc.com` 已解析并放行 `80/443`；Caddy 已取得受信任证书，公网 `/healthz` 返回 `200`、未认证首页返回 `401`、Basic Auth 首页返回 `200`
+- [x] 服务器 `.env` 权限 `600`、轮换密码/Key 的运行时配置、模型/Embedding/Rerank 连通性、PostgreSQL seed 与 named-volume 持久化已验收
 - [ ] 备份计划、异机备份、恢复演练、磁盘/流量/容器告警
-- [ ] 限制 SSH 来源，仅开放 `80/443`，并验证不暴露 `3000/5432`
+- [~] `3000/5432` 未对公网发布，`80/443` 已正确放行；仍需把 SSH `22` 限制到可信来源，并删除 Linux 实例不需要的公网 RDP `3389`
 
 ## 6. 验收
 
 - [x] 服务契约测试覆盖保存、版本冲突、手动文本导入/重复拒绝/报告不存在、memory_demo 持久化拒绝、active 来源过滤、图边过滤、选区隔离、SSRF 基础拒绝和客户端快照裁剪
-- [ ] 重新运行并记录 `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm build` 的本次提交结果
-- [ ] 浏览器 E2E：PostgreSQL 模式下新建报告 -> 编辑 -> 冲突拒绝 -> 搜索 -> AI 降级/回答；来源导入、Diff、导出需在实现后纳入
-- [ ] Docker Compose 启动、健康检查、Basic Auth、HTTPS 和低内存回归
+- [x] `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm build` 已在提交 `20229c7` 前全部通过
+- [~] 已在服务器 PostgreSQL 模式完成浏览器资料导入、混合检索、带引用 AI 回答，以及 API 保存/版本冲突验收；新建报告 UI、Diff 和导出待对应功能完成后纳入
+- [x] Docker Compose 启动、`postgres/app/caddy` 健康检查、数据库 seed、低内存构建、HTTPS 和 Basic Auth 公网验收均已通过
 - [ ] RAG Golden Set、无证据拒答、Reranker 降级和向量重建评测
