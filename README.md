@@ -71,6 +71,7 @@ Internet
 
 - [真实用户开放知识平台 UI、评论、搜索与数据规格](docs/public-knowledge-platform-ui-and-data-spec.md)
 - [AI 生成面板与 ICP/香港部署决策](docs/generation-panel-and-icp-deployment.md)
+- [前后端性能与交互验收记录](docs/performance-and-e2e-verification.md)
 - [开放知识协作平台产品与架构规格](docs/open-knowledge-platform-spec.md)
 - [开放知识平台 shadcn/ui 前端与动效规范](docs/open-knowledge-ui-motion.md)
 - [AI 助手记忆、上下文压缩与会话架构](docs/ai-memory-context-architecture.md)

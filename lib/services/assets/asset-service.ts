@@ -90,6 +90,18 @@ export class AssetService {
 
   public async getStatus(actor: AuthenticatedActor, assetId: string): Promise<{ asset: AssetRecord; ingestion: IngestionJobRecord }> { const asset = await this.assets.getOwnedAsset(assetId, actor.userId); if (!asset) throw new AssetNotFoundError(); const ingestion = await this.assets.getIngestionJob(assetId, actor.userId); if (!ingestion) throw new AssetNotFoundError(); return { asset, ingestion }; }
   public async retry(actor: AuthenticatedActor, assetId: string): Promise<IngestionJobRecord> { return this.assets.retryIngestion(assetId, actor.userId); }
+  /** 取消上传队列：未确认对象标记失败；已确认原件只取消解析 Job，不删除不可变原始证据。 */
+  public async cancel(actor: AuthenticatedActor, assetId: string): Promise<void> {
+    const asset = await this.assets.getOwnedAsset(assetId, actor.userId);
+    if (!asset) throw new AssetNotFoundError();
+    if (asset.status === "verified") {
+      const job = await this.assets.getIngestionJob(assetId, actor.userId);
+      if (!job) throw new AssetNotFoundError();
+      await this.assets.updateIngestionStatus(assetId, "failed", { code: "INGESTION_CANCELLED", message: "用户从队列移除" });
+      return;
+    }
+    await this.assets.failAsset(assetId, actor.userId, "UPLOAD_CANCELLED", "用户取消上传");
+  }
   public async createDownloadGrant(actor: AuthenticatedActor, assetId: string): Promise<{ url: string; expiresInSeconds: number }> { const asset = await this.assets.getAssetForActor(assetId, actor.userId); if (!asset || asset.status !== "verified") throw new AssetNotFoundError(); const grant = await this.oss.createDownloadGrant(asset.objectKey); return { url: grant.url, expiresInSeconds: grant.expiresInSeconds }; }
 }
 

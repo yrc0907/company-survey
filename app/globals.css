@@ -109,6 +109,8 @@
 .project-list-item { @apply py-6; }
 .project-list-main { @apply block w-full border-0 bg-transparent p-0 text-left; }
 .project-owner-line { @apply flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground; }
+.project-owner-link { @apply inline-flex items-center gap-1.5 border-0 bg-transparent p-0 text-left text-muted-foreground hover:text-primary; }
+.project-owner-link:focus-visible, .project-tag-row button:focus-visible { @apply rounded-sm outline-none ring-2 ring-ring ring-offset-2; }
 .verification { @apply inline-flex h-5 items-center rounded border px-1.5 text-[10px] font-medium; }
 .verification--verified { @apply border-emerald-200 bg-emerald-50 text-emerald-700; }
 .verification--pending { @apply border-amber-200 bg-amber-50 text-amber-700; }
@@ -118,7 +120,7 @@
 .project-open-icon { @apply mt-1 shrink-0 text-muted-foreground opacity-0 transition-[opacity,transform] duration-150; }
 .project-list-main:hover .project-open-icon { @apply translate-x-0.5 opacity-100; }
 .project-tag-row { @apply mt-3 flex flex-wrap gap-1.5; }
-.project-tag-row span { @apply rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground; }
+.project-tag-row button { @apply rounded border-0 bg-muted px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground; }
 .project-list-footer { @apply mt-4 flex items-center justify-between gap-4; }
 .project-metrics { @apply flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground; }
 .project-metrics span { @apply inline-flex items-center gap-1.5; }
@@ -135,6 +137,7 @@
 .project-list-loading p { @apply m-0 text-xs text-muted-foreground; }
 .loading-bar { @apply block h-3 w-full animate-pulse rounded bg-muted; }
 .loading-bar--short { @apply w-2/3; }
+.skeleton { @apply animate-pulse rounded-md bg-muted; }
 .route-state { @apply grid min-h-screen place-content-center justify-items-center gap-3 bg-background px-6 text-center; }
 .route-state h1 { @apply m-0 text-xl font-semibold; }
 .route-state p { @apply m-0 max-w-md text-sm text-muted-foreground; }
@@ -188,6 +191,9 @@
 .tree-node__actions { @apply mr-1 flex shrink-0 items-center; }
 .tree-node:hover .tree-icon-action, .tree-node:focus-within .tree-icon-action { @apply opacity-100; }
 .tree-empty { @apply m-0 py-1 text-[10px] text-muted-foreground; }
+.project-tree { @apply relative min-h-0 rounded-md transition-colors; }
+.project-tree.is-drop-target { @apply bg-primary/5 ring-1 ring-inset ring-primary/40; }
+.tree-drop-hint { @apply pointer-events-none absolute inset-x-2 top-9 z-10 rounded-md border border-dashed border-primary/50 bg-background/95 px-2 py-2 text-center text-[11px] text-primary shadow-sm; }
 .sidebar-collaboration { @apply mx-2 mt-6 border-t pt-4; }
 .sidebar-collaboration p { @apply m-0 text-xs font-medium; }
 .sidebar-collaboration span { @apply mt-1 block text-[11px] leading-5 text-muted-foreground; }
@@ -248,7 +254,9 @@
 .assistant-stage span { @apply grid; }
 .assistant-stage small { @apply text-[10px] text-muted-foreground; }
 .assistant-inline-error { @apply rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800; }
+.assistant-inline-notice { @apply rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs leading-5 text-emerald-800; }
 .assistant-input { @apply m-3 rounded-lg border bg-background p-2 shadow-sm focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/10; }
+.assistant-input.is-drop-target { @apply border-primary bg-primary/5 ring-2 ring-primary/10; }
 .assistant-input textarea { @apply block w-full resize-none border-0 bg-transparent px-1 py-1 text-xs leading-5 outline-none placeholder:text-muted-foreground; }
 .assistant-input > div { @apply mt-1 flex items-center justify-between gap-2; }
 .assistant-input > div > span { @apply pl-1 text-[9px] text-muted-foreground; }

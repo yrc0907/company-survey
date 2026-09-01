@@ -1,13 +1,13 @@
 "use client";
 
 import { BookOpenText, ChevronDown, Filter, LogIn, Plus, Search, Sparkles, Upload } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ProjectCard } from "@/components/platform/project-card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { matchesProjectSearch } from "@/lib/ui/platform-format";
-import { adaptPublicProjects } from "@/lib/ui/platform-api";
 import type { ProjectCategory, SeedProject } from "@/lib/ui/platform-seed";
 
 interface PublicHomeProps {
@@ -26,6 +26,18 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<(typeof categories)[number]>("全部");
   const [sort, setSort] = useState<"recommended" | "latest" | "read">("recommended");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function focusSearch(event: KeyboardEvent): void {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", focusSearch);
+    return () => window.removeEventListener("keydown", focusSearch);
+  }, []);
 
   const visibleProjects = useMemo(() => {
     const filtered = projects.filter((project) => {
@@ -37,20 +49,38 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
     return filtered;
   }, [category, projects, query, sort]);
 
+  function resetExplore(): void {
+    setQuery("");
+    setCategory("全部");
+    setSort("recommended");
+  }
+
+  function searchTopic(topic: string): void {
+    setCategory("全部");
+    setQuery(topic);
+    document.querySelector(".project-feed")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function searchProject(value: string): void {
+    setCategory("全部");
+    setQuery(value);
+    document.querySelector(".project-feed")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return (
     <div className="public-home">
       <header className="public-header">
-        <button className="platform-brand" type="button" onClick={() => { setQuery(""); setCategory("全部"); }}>
+        <button className="platform-brand" type="button" onClick={resetExplore}>
           <span className="platform-brand__mark"><BookOpenText size={19} aria-hidden="true" /></span>
           <span>开源研报</span>
         </button>
         <label className="global-search" htmlFor="global-search-input">
           <Search size={17} aria-hidden="true" />
-          <input id="global-search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目、报告、公司、结论或来源" />
+          <input ref={searchInputRef} id="global-search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目、报告、公司、结论或来源" />
           <kbd>Ctrl K</kbd>
         </label>
         <nav className="public-nav" aria-label="全站导航">
-          <Button variant="ghost">探索</Button>
+          <Button variant="ghost" onClick={resetExplore}>探索</Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button variant="outline"><Plus size={15} />提交研究<ChevronDown size={14} /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -86,17 +116,17 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
             <span>{visibleProjects.length} 个公开项目</span>
           </div>
           {error ? <div className="public-data-notice" role="status"><span>线上项目列表暂时不可用，当前显示首发内容。</span>{onRetry ? <button type="button" onClick={onRetry}>重试</button> : null}</div> : null}
-          {loading ? <div className="project-list-loading" aria-live="polite" aria-busy="true"><span className="loading-bar" /><span className="loading-bar loading-bar--short" /><span className="loading-bar" /><p>正在读取公开项目…</p></div> : null}
+          {loading ? <div className="project-list-loading" aria-live="polite" aria-busy="true"><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-2/3" /><Skeleton className="h-3 w-full" /><p>正在读取公开项目…</p></div> : null}
           <div className="project-list" aria-busy={loading}>
-            {!loading && visibleProjects.map((project) => <ProjectCard key={project.id} project={project} onOpen={onOpenProject} />)}
+            {!loading && visibleProjects.map((project) => <ProjectCard key={project.id} project={project} onOpen={onOpenProject} onSearch={searchProject} />)}
             {!loading && visibleProjects.length === 0 ? <div className="search-empty"><Search size={22} /><h2>没有匹配的公开项目</h2><p>调整关键词或分类后再试。</p></div> : null}
           </div>
         </section>
 
         <aside className="discovery-rail" aria-label="社区动态">
           <section>
-            <div className="rail-heading"><span>热门主题</span><button type="button">查看全部</button></div>
-            <div className="topic-list"><button type="button"># 电商 SaaS <span>18</span></button><button type="button"># 十五五规划 <span>12</span></button><button type="button"># AI 工作流 <span>9</span></button><button type="button"># 跨境电商 <span>8</span></button></div>
+            <div className="rail-heading"><span>热门主题</span><button type="button" onClick={resetExplore}>查看全部</button></div>
+            <div className="topic-list"><button type="button" onClick={() => searchTopic("电商 SaaS")}># 电商 SaaS <span>18</span></button><button type="button" onClick={() => searchTopic("十五五规划")}># 十五五规划 <span>12</span></button><button type="button" onClick={() => searchTopic("AI 工作流")}># AI 工作流 <span>9</span></button><button type="button" onClick={() => searchTopic("跨境电商")}># 跨境电商 <span>8</span></button></div>
           </section>
           <section>
             <div className="rail-heading"><span>最近合并</span></div>

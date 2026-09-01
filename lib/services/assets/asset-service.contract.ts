@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import { setAuthenticatedActorResolverForTest } from "@/lib/auth/session";
 import { POST as createUploadRoute } from "@/app/api/platform/uploads/route";
-import { POST as completeUploadRoute, GET as getUploadRoute } from "@/app/api/platform/uploads/[id]/route";
+import { POST as completeUploadRoute, DELETE as cancelUploadRoute, GET as getUploadRoute } from "@/app/api/platform/uploads/[id]/route";
 import { POST as retryUploadRoute } from "@/app/api/platform/uploads/[id]/retry/route";
 import { getOssConfig } from "@/lib/providers/oss";
 import { OssObjectStorageProvider } from "@/lib/providers/oss";
@@ -54,6 +54,8 @@ async function run(): Promise<void> {
   const verificationRetry = await retryUploadRoute(new Request("http://localhost/api/platform/uploads/x/retry", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }), { params: { id: failedBody.asset.id } }); assert.equal(verificationRetry.status, 400, "上传校验失败不能把坏对象当解析任务重试");
   await assets.updateIngestionStatus(firstBody.asset.id, "failed", { code: "PARSER_FAILED", message: "mock parser" });
   const retry = await retryUploadRoute(new Request("http://localhost/api/platform/uploads/x/retry", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }), { params: { id: firstBody.asset.id } }); assert.equal(retry.status, 200, "已验证对象的失败解析任务可显式重试");
+  await assets.updateIngestionStatus(firstBody.asset.id, "failed", { code: "PARSER_FAILED", message: "mock parser" });
+  const cancelled = await cancelUploadRoute(new Request("http://localhost/api/platform/uploads/x", { method: "DELETE" }), { params: { id: firstBody.asset.id } }); assert.equal(cancelled.status, 200, "已验证对象可取消解析队列");
   setAuthenticatedActorResolverForTest(null); setAssetsRepositoryForTest(null); setPlatformRepositoryForTest(null); setAssetsOssProviderForTest(null);
   console.log("asset-service contract: passed");
 }

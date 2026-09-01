@@ -26,3 +26,8 @@ export async function POST(request: Request, context: { params: { id: string } }
 export async function GET(_request: Request, context: { params: { id: string } }) {
   try { const actor = await requireAuthenticatedActor(); const id = idSchema.parse(context.params.id); const result = await (await service()).getStatus(actor, id); return json(result, { headers: { "cache-control": "no-store" } }); } catch (error) { return assetErrorResponse(error); }
 }
+
+/** 取消当前用户自己的上传或解析排队任务；私有原件不会被公开删除，后续清理 Worker 再回收隔离对象。 */
+export async function DELETE(_request: Request, context: { params: { id: string } }) {
+  try { const actor = await requireAuthenticatedActor(); const id = idSchema.parse(context.params.id); await (await service()).cancel(actor, id); return json({ cancelled: true }, { headers: { "cache-control": "no-store" } }); } catch (error) { return assetErrorResponse(error); }
+}

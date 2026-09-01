@@ -14,6 +14,9 @@ interface ProjectFileTreeProps {
   activeNodeId: string;
   onActiveNodeChange: (nodeId: string) => void;
   onCommand: (command: FileCommandId, node: SeedFileNode | null) => void;
+  query?: string;
+  /** 拖拽资料到文件树后的业务回调；页面层负责登录、上传意图和分支权限。 */
+  onDropFiles?: (files: FileList) => void;
 }
 
 const iconByKind = {
@@ -95,12 +98,25 @@ function TreeNode({ node, depth, activeNodeId, expanded, setExpanded, onActiveNo
 }
 
 /** 项目文件树的加号、更多按钮和右键菜单全部走同一 Command Registry。 */
-export function ProjectFileTree({ nodes, activeNodeId, onActiveNodeChange, onCommand }: ProjectFileTreeProps) {
+export function ProjectFileTree({ nodes, activeNodeId, onActiveNodeChange, onCommand, query = "", onDropFiles }: ProjectFileTreeProps) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(["folder-report", "folder-sources"]));
+  const [dropActive, setDropActive] = useState(false);
+  function filterNodes(items: SeedFileNode[]): SeedFileNode[] {
+    const normalized = query.trim().toLocaleLowerCase("zh-CN");
+    if (!normalized) return items;
+    return items.flatMap((item) => {
+      const matches = item.name.toLocaleLowerCase("zh-CN").includes(normalized);
+      const children = filterNodes(item.children ?? []);
+      if (matches || children.length) return [{ ...item, children: matches ? item.children : children.length ? children : undefined }];
+      return [];
+    });
+  }
+  const visibleNodes = filterNodes(nodes);
   return (
-    <div className="project-tree">
+    <div className={dropActive ? "project-tree is-drop-target" : "project-tree"} onDragOver={(event) => { if (!onDropFiles) return; event.preventDefault(); setDropActive(true); }} onDragLeave={(event) => { if (event.currentTarget === event.target) setDropActive(false); }} onDrop={(event) => { if (!onDropFiles) return; event.preventDefault(); setDropActive(false); if (event.dataTransfer.files.length) onDropFiles(event.dataTransfer.files); }}>
       <div className="tree-heading"><span>文件</span><NewNodeMenu parent={null} onCommand={onCommand} /></div>
-      <div className="tree-list">{nodes.map((node) => <TreeNode key={node.id} node={node} depth={0} activeNodeId={activeNodeId} expanded={expanded} setExpanded={setExpanded} onActiveNodeChange={onActiveNodeChange} onCommand={onCommand} />)}</div>
+      {dropActive ? <div className="tree-drop-hint" role="status">松开以加入当前项目草稿</div> : null}
+      <div className="tree-list">{visibleNodes.map((node) => <TreeNode key={node.id} node={node} depth={0} activeNodeId={activeNodeId} expanded={expanded} setExpanded={setExpanded} onActiveNodeChange={onActiveNodeChange} onCommand={onCommand} />)}{visibleNodes.length === 0 ? <p className="tree-empty">没有匹配文件</p> : null}</div>
     </div>
   );
 }

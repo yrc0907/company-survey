@@ -37,7 +37,7 @@ function findNode(nodes: SeedFileNode[], nodeId: string): SeedFileNode | undefin
   return undefined;
 }
 
-function ProjectDocument({ project }: { project: SeedProject }) {
+function ProjectDocument({ project, onActivity }: { project: SeedProject; onActivity?: (message: string) => void }) {
   const sections = project.sections.length ? project.sections : [{
     id: "seed-boundary",
     heading: "Seed 展示边界",
@@ -55,7 +55,7 @@ function ProjectDocument({ project }: { project: SeedProject }) {
         <div className="document-status-line"><span className={project.verification === "verified" ? "verification verification--verified" : "verification verification--pending"}>{project.verification === "verified" ? "Seed 已核验" : "Seed 待核验"}</span><span>公开 · main@v{project.version}</span></div>
         <h1>{project.title}</h1>
         <p>{project.summary}</p>
-        <div className="document-byline"><UserAvatar name={project.owner.displayName} size="sm" /><span>由 <strong>{project.owner.displayName}</strong> 维护</span><span>·</span><span>{project.contributors.length} 位贡献者</span><span>·</span><span>{project.sourceCount} 个来源</span></div>
+        <div className="document-byline"><UserAvatar name={project.owner.displayName} size="sm" /><span>由 <strong>{project.owner.displayName}</strong> 维护</span><span>·</span><span>{project.contributorCount ?? project.contributors.length} 位贡献者</span><span>·</span><span>{project.sourceCount} 个来源</span></div>
       </header>
       <nav className="document-toc" aria-label="本文目录"><span>本文目录</span>{sections.map((section) => <a key={section.id} href={`#${section.id}`}>{section.heading}</a>)}</nav>
       <div className="document-body">
@@ -67,7 +67,7 @@ function ProjectDocument({ project }: { project: SeedProject }) {
             <div className="section-attribution" title={`${section.contributor.displayName} 提交，通过 MR #${section.mergeRequest}，由 ${section.reviewer} 审核`}>
               <UserAvatar name={section.contributor.displayName} size="sm" />
               <span><strong>{section.contributor.displayName}</strong> 贡献{section.mergeRequest ? <> · MR #{section.mergeRequest}</> : null} · {section.reviewer}审核</span>
-              <button type="button">查看 Diff</button>
+              <button type="button" onClick={() => onActivity?.(`“${section.heading}”的贡献 Diff 将在修改申请中打开。`)}>查看 Diff</button>
               <span>{section.citations} 条引用</span>
             </div>
           </div>
@@ -89,7 +89,24 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
   const [branchLoading, setBranchLoading] = useState(false);
   const [collaborationError, setCollaborationError] = useState("");
   const [collaborationRefresh, setCollaborationRefresh] = useState(0);
+  const [treeQuery, setTreeQuery] = useState("");
+  const [dropNotice, setDropNotice] = useState("");
   const activeNode = useMemo(() => findNode(project.files, activeNodeId), [activeNodeId, project.files]);
+
+  useEffect(() => {
+    const firstDocument = project.files.flatMap((node) => node.children ?? [node]).find((node) => node.kind !== "folder");
+    setActiveNodeId(firstDocument?.id ?? project.files[0]?.id ?? "");
+    setTreeQuery("");
+  }, [project.id, project.files]);
+
+  async function shareProject(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setActivity("项目链接已复制。可分享给拥有公开访问权限的读者。");
+    } catch {
+      setCollaborationError("浏览器未允许访问剪贴板，请手动复制地址栏链接。");
+    }
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -168,6 +185,14 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
     finally { setBranchLoading(false); }
   }
 
+  /** 文件树接收拖入文件后只进入草稿上传入口，不绕过私有 OSS 和分支权限。 */
+  function handleTreeDrop(files: FileList): void {
+    const names = Array.from(files).map((file) => file.name).filter(Boolean).slice(0, 8);
+    if (!names.length) return;
+    if (!authenticated) { onRequireLogin("upload"); return; }
+    setDropNotice(`${names.length} 个文件已接收：${names.join("、")}。请通过上传入口确认项目和权限。`);
+  }
+
   async function submitMergeRequest() {
     if (!authenticated) { onRequireLogin("contribute"); return; }
     const draft = await ensureDraftBranch(); if (!draft) return;
@@ -200,7 +225,7 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
               <SheetContent className="mobile-file-sheet">
                 <div className="sheet-heading"><SheetTitle>项目文件</SheetTitle><SheetDescription>浏览当前公开版本；修改会进入个人草稿。</SheetDescription></div>
                 <div className="branch-row"><GitBranch size={14} /><span>main</span><span>v{project.version}</span></div>
-                <ProjectFileTree nodes={project.files} activeNodeId={activeNodeId} onActiveNodeChange={setActiveNodeId} onCommand={runFileCommand} />
+                <ProjectFileTree nodes={project.files} activeNodeId={activeNodeId} onActiveNodeChange={setActiveNodeId} onCommand={runFileCommand} query={treeQuery} onDropFiles={handleTreeDrop} />
               </SheetContent>
             </Sheet>
             <Sheet>
@@ -208,7 +233,7 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
               <SheetContent className="mobile-assistant-sheet"><SheetTitle className="sr-only">AI 研究助手</SheetTitle><AssistantPanel project={project} activeFileName={activeNode?.name ?? "研究结论"} activeFileId={activeNode?.id} /></SheetContent>
             </Sheet>
           </div>
-          <Button variant="ghost" size="sm"><Share2 size={15} />分享</Button>
+          <Button variant="ghost" size="sm" onClick={() => void shareProject()}><Share2 size={15} />分享</Button>
           <Button variant="outline" size="sm" onClick={() => void ensureDraftBranch()} disabled={branchLoading}><GitBranch size={15} />创建草稿</Button>
           <Button size="sm" onClick={() => void submitMergeRequest()} disabled={branchLoading}>{branchLoading ? <Loader2 size={15} className="animate-spin" /> : <GitPullRequest size={15} />}提交修改</Button>
           {!authenticated ? <Button variant="ghost" size="sm" onClick={() => onRequireLogin("login")}><LogIn size={15} />登录</Button> : <span className="text-xs text-muted-foreground">已登录</span>}
@@ -218,14 +243,14 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
       <nav className="project-tabs" aria-label="项目导航"><button className={activeTab === "content" ? "is-active" : undefined} type="button" onClick={() => setActiveTab("content")}><BookOpen size={15} />内容</button><button className={activeTab === "changes" ? "is-active" : undefined} type="button" onClick={() => setActiveTab("changes")}><GitPullRequest size={15} />修改申请 <span>{project.openMergeRequests}</span></button><button type="button" onClick={() => setActivity("问题面板将在有可追踪争议后显示。") }><CircleAlert size={15} />问题</button><button type="button" onClick={() => setActivity("历史版本请通过修改申请详情查看。") }><History size={15} />历史</button><button type="button" onClick={() => setActivity("贡献者列表将在首个真实合并后显示。") }><Users size={15} />贡献者</button></nav>
 
       <aside className="file-sidebar">
-        <div className="file-sidebar__tools"><label><Search size={14} /><input placeholder="搜索当前项目" /></label><Button size="icon" variant="ghost" onClick={() => setTreeCollapsed(true)} aria-label="收起文件树"><PanelLeftClose size={16} /></Button></div>
+        <div className="file-sidebar__tools"><label><Search size={14} /><input value={treeQuery} onChange={(event) => setTreeQuery(event.target.value)} placeholder="搜索当前项目" aria-label="搜索当前项目文件" /></label><Button size="icon" variant="ghost" onClick={() => setTreeCollapsed(true)} aria-label="收起文件树"><PanelLeftClose size={16} /></Button></div>
         <div className="branch-row"><GitBranch size={14} /><span>{branches.find((branch) => branch.isProtected)?.name ?? "main"}</span><span>v{project.version}</span><ChevronRight size={14} /></div>
-        <ProjectFileTree nodes={project.files} activeNodeId={activeNodeId} onActiveNodeChange={setActiveNodeId} onCommand={runFileCommand} />
+        <ProjectFileTree nodes={project.files} activeNodeId={activeNodeId} onActiveNodeChange={setActiveNodeId} onCommand={runFileCommand} query={treeQuery} onDropFiles={handleTreeDrop} />
         <div className="sidebar-collaboration"><p>公开主版本为只读</p><span>编辑会进入个人草稿，通过维护者审核后合并并保留署名。</span></div>
       </aside>
 
       {treeCollapsed ? <Button className="tree-reopen" size="icon" variant="outline" onClick={() => setTreeCollapsed(false)} aria-label="展开文件树"><ChevronRight size={17} /></Button> : null}
-      <main className="document-pane">{activeTab === "content" ? <ProjectDocument project={project} /> : <CollaborationPanel projectId={project.id} authenticated={authenticated} canReview={canReview} onRequireLogin={() => onRequireLogin("login")} refreshToken={collaborationRefresh} />}{collaborationError ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{collaborationError}</span><button type="button" onClick={() => setCollaborationError("")}>关闭</button></div> : null}{activity ? <div className="workspace-activity" role="status"><span>{activity}</span><button type="button" onClick={() => setActivity("")}>关闭</button></div> : null}</main>
+      <main className="document-pane">{activeTab === "content" ? <ProjectDocument project={project} onActivity={setActivity} /> : <CollaborationPanel projectId={project.id} authenticated={authenticated} canReview={canReview} onRequireLogin={() => onRequireLogin("login")} refreshToken={collaborationRefresh} />}{collaborationError ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{collaborationError}</span><button type="button" onClick={() => setCollaborationError("")}>关闭</button></div> : null}{dropNotice ? <div className="workspace-activity" role="status"><span>{dropNotice}</span><button type="button" onClick={() => setDropNotice("")}>关闭</button></div> : null}{activity ? <div className="workspace-activity" role="status"><span>{activity}</span><button type="button" onClick={() => setActivity("")}>关闭</button></div> : null}</main>
       <AssistantPanel project={project} activeFileName={activeNode?.name ?? "研究结论"} activeFileId={activeNode?.id} />
     </div>
   );

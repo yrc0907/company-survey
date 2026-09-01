@@ -6,6 +6,8 @@
 
 > AI 生成结果面板、统一成功/失败反馈、排序筛选规则、ICP 与香港部署参数见 [AI 生成面板与 ICP/香港部署决策](docs/generation-panel-and-icp-deployment.md)。
 
+> 已验证的首页/项目交互、拖放和移动端 E2E，以及前后端性能边界记录在 [前后端性能与交互验收记录](docs/performance-and-e2e-verification.md)；后续优先复跑脚本，不重复人工点击。
+
 ## 下一步优先级
 
 1. **P0: 收紧公网运维边界并建立备份。** HTTPS、Basic Auth、PostgreSQL 持久化和模型链路已上线；下一步限制 SSH 来源、删除无用 RDP 规则，并完成首轮异机备份与恢复演练。

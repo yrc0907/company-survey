@@ -4,6 +4,7 @@ import { Check, GitPullRequest, Loader2, MessageSquare, RefreshCw, ShieldAlert, 
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { MergeRequestSummary, ReviewSummary, CollaborationDiffEntry } from "@/lib/domain/collaboration";
 
 interface CollaborationPanelProps {
@@ -87,7 +88,7 @@ export function CollaborationPanel({ projectId, authenticated, canReview, onRequ
       <div className="rounded-lg border bg-background">
         <div className="flex items-center justify-between border-b px-4 py-3"><div className="flex items-center gap-2 text-sm font-semibold"><GitPullRequest size={16} />修改申请</div><Button size="icon" variant="ghost" onClick={() => void loadRequests()} disabled={loading} aria-label="刷新修改申请"><RefreshCw size={15} className={loading ? "animate-spin" : undefined} /></Button></div>
         {error && !selectedId ? <p className="m-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800" role="alert">{error}</p> : null}
-        {loading ? <div className="flex items-center gap-2 p-6 text-xs text-muted-foreground"><Loader2 size={15} className="animate-spin" />加载申请…</div> : null}
+        {loading ? <div className="grid gap-3 p-6" aria-live="polite" aria-busy="true"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-5/6" /><span className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 size={15} className="animate-spin" />加载申请…</span></div> : null}
         {!loading && requests.length === 0 ? <p className="p-6 text-xs text-muted-foreground">当前没有公开修改申请。</p> : null}
         <div className="divide-y">{requests.map((request) => <button key={request.id} type="button" className={`block w-full px-4 py-3 text-left transition-colors hover:bg-muted/50 ${selectedId === request.id ? "bg-muted" : ""}`} onClick={() => void selectRequest(request.id)}><div className="flex items-start justify-between gap-3"><span className="min-w-0 truncate text-sm font-medium">{request.title}</span><span className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">{statusCopy[request.status]}</span></div><span className="mt-1 block text-[11px] text-muted-foreground">#{request.id.slice(0, 8)} · {request.sourceBranchId} → {request.targetBranchId}</span></button>)}</div>
       </div>
