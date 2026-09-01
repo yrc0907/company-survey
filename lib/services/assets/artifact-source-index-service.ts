@@ -124,6 +124,7 @@ export class ArtifactSourceIndexService {
     this.authorization = new AuthorizationService(platform);
   }
 
+  /** 校验当前 actor 与 Scope 后索引最新 ready 产物；返回 indexed 或幂等命中，不修改原始资产。 */
   public async indexReadyArtifact(actor: AuthenticatedActor, input: ArtifactSourceIndexInput): Promise<ArtifactSourceIndexResult> {
     if (!input.assetId.trim() || !input.reportId.trim() || !input.projectId.trim() || !input.branchId.trim()) throw new ValidationError("索引范围参数不能为空");
     const asset = await this.assets.getOwnedAsset(input.assetId, actor.userId);
