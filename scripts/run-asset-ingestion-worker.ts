@@ -27,7 +27,10 @@ async function run(): Promise<void> {
   if (close) await close.call(repository);
 }
 
-void run().catch((error: unknown) => {
+void run().then(() => {
+  // ali-oss/STS 可能注册凭据刷新定时器；one-shot Worker 已完成所有 I/O 后必须显式结束。
+  process.exit(0);
+}).catch((error: unknown) => {
   console.error(JSON.stringify({ event: "asset_ingestion_error", code: error instanceof Error && "code" in error ? String((error as { code: unknown }).code) : "WORKER_FAILED", message: error instanceof Error ? error.message : "解析 Worker 失败" }));
-  process.exitCode = 1;
+  process.exit(1);
 });
