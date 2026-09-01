@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 
 import { GET as getProjects, POST as createProject } from "@/app/api/platform/projects/route";
 import { GET as getProject } from "@/app/api/platform/projects/[id]/route";
+import { POST as recordView } from "@/app/api/platform/projects/[id]/view/route";
+import { DELETE as deleteStar, GET as getStarState, POST as postStar } from "@/app/api/platform/projects/[id]/star/route";
 import { setAuthenticatedActorResolverForTest } from "@/lib/auth/session";
 import { MemoryPlatformRepository } from "@/lib/repositories/platform/memory-platform-repository";
 import { AccountService } from "@/lib/services/platform/account-service";
@@ -33,6 +35,52 @@ async function run(): Promise<void> {
   const created = await new PublicProjectService(repository).createPrivate({ userId: account.id, role: "user" }, { title: "我的私有项目" });
   assert.equal(created.data.status, "draft");
   assert.equal(created.data.visibility, "private");
+
+  // 公开阅读统计必须是真实去重语义：同一访客同日重复打开不增加人数，跨天回访也不重复增加全站读者。
+  const publicProject = { ...created.data, visibility: "public" as const, status: "published" as const, publishedAt: created.data.updatedAt };
+  repository.seedPublicProject(publicProject);
+  const projectService = new PublicProjectService(repository);
+  const firstView = await projectService.recordView({ projectIdOrSlug: publicProject.id, visitorId: "visitor-a", viewedOn: "2026-09-02" });
+  const repeatedView = await projectService.recordView({ projectIdOrSlug: publicProject.id, visitorId: "visitor-a", viewedOn: "2026-09-02" });
+  const secondVisitor = await projectService.recordView({ projectIdOrSlug: publicProject.slug, visitorId: "visitor-b", viewedOn: "2026-09-02" });
+  const nextDayReturn = await projectService.recordView({ projectIdOrSlug: publicProject.id, visitorId: "visitor-a", viewedOn: "2026-09-03" });
+  assert.equal(firstView.data.recorded, true);
+  assert.equal(repeatedView.data.recorded, false);
+  assert.equal(secondVisitor.data.uniqueReaders, 2);
+  assert.equal(nextDayReturn.data.uniqueReaders, 2);
+
+  // API 会给匿名访客签发 HttpOnly Cookie；后续请求沿用 Cookie 后仍由服务端每日去重。
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = "test://platform-view-contract";
+  setPlatformRepositoryForTest(repository);
+  setAuthenticatedActorResolverForTest(async () => null);
+  const apiView = await recordView(new Request("http://localhost/api/platform/projects/my-private-project/view", { method: "POST", headers: { "content-type": "application/json", "user-agent": "Mozilla/5.0" }, body: "{}" }), { params: { id: publicProject.id } });
+  assert.equal(apiView.status, 200);
+  assert.ok(apiView.headers.get("set-cookie")?.includes("research_visitor_id="));
+  const botView = await recordView(new Request("http://localhost/api/platform/projects/view", { method: "POST", headers: { "content-type": "application/json", "user-agent": "HealthCheckBot/1.0" }, body: "{}" }), { params: { id: publicProject.id } });
+  assert.equal(botView.status, 200);
+  assert.equal((await botView.json() as { ignored?: string }).ignored, "automated_client");
+
+  // Star 只允许真实登录用户写入；重复 POST/DELETE 必须保持同一计数。
+  const anonymousStars = await getStarState(new Request(`http://localhost/api/platform/projects/${publicProject.id}/star`), { params: { id: publicProject.id } });
+  assert.equal(anonymousStars.status, 200);
+  assert.equal((await anonymousStars.json() as { starCount?: number; starred?: boolean }).starred, false);
+  setAuthenticatedActorResolverForTest(async () => null);
+  const deniedStar = await postStar(new Request("http://localhost/api/platform/projects/star", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ starred: true }) }), { params: { id: publicProject.id } });
+  assert.equal(deniedStar.status, 401);
+  setAuthenticatedActorResolverForTest(async () => ({ userId: account.id, role: "user" }));
+  const firstStar = await postStar(new Request("http://localhost/api/platform/projects/star", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ starred: true }) }), { params: { id: publicProject.id } });
+  const repeatedStar = await postStar(new Request("http://localhost/api/platform/projects/star", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ starred: true }) }), { params: { id: publicProject.id } });
+  assert.equal(firstStar.status, 200);
+  assert.equal((await firstStar.json() as { starCount?: number; starred?: boolean }).starCount, 1);
+  assert.equal((await repeatedStar.json() as { starCount?: number; starred?: boolean }).starCount, 1);
+  const currentStar = await getStarState(new Request("http://localhost/api/platform/projects/star"), { params: { id: publicProject.id } });
+  assert.equal((await currentStar.json() as { starred?: boolean }).starred, true);
+  const removedStar = await deleteStar(new Request("http://localhost/api/platform/projects/star", { method: "DELETE", headers: { "content-type": "application/json" }, body: "{}" }), { params: { id: publicProject.id } });
+  const repeatedRemoval = await deleteStar(new Request("http://localhost/api/platform/projects/star", { method: "DELETE", headers: { "content-type": "application/json" }, body: "{}" }), { params: { id: publicProject.id } });
+  assert.equal((await removedStar.json() as { starCount?: number; starred?: boolean }).starCount, 0);
+  assert.equal((await repeatedRemoval.json() as { starCount?: number; starred?: boolean }).starCount, 0);
+  if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = previousDatabaseUrl;
   setAuthenticatedActorResolverForTest(null);
   setPlatformRepositoryForTest(null);
   console.log("public project contract: passed");

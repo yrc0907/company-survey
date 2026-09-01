@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { AccountConflictError } from "@/lib/domain/platform/errors";
 import type { KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount } from "@/lib/domain/platform";
-import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicProjectListInput, PublicProjectRecord } from "@/lib/repositories/platform/platform-repository";
+import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, RecordPublicProjectViewInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
 
 /** 契约测试使用的内存仓储；复制所有返回值，避免测试误改内部事实。 */
 export class MemoryPlatformRepository implements PlatformRepository {
@@ -12,6 +12,9 @@ export class MemoryPlatformRepository implements PlatformRepository {
   private readonly branches = new Map<string, KnowledgeBranchAccess>();
   private readonly nodeStates = new Map<string, KnowledgeNodeState>();
   private readonly publicProjects = new Map<string, PublicProjectRecord>();
+  private readonly projectReaders = new Map<string, Set<string>>();
+  private readonly projectDailyViews = new Set<string>();
+  private readonly projectStars = new Map<string, Map<string, boolean>>();
 
   public async createPasswordAccount(record: CreatePasswordAccountRecord): Promise<PlatformAccount> {
     const email = record.account.email.toLowerCase();
@@ -96,13 +99,49 @@ export class MemoryPlatformRepository implements PlatformRepository {
     return project && project.visibility === "public" && project.status === "published" ? structuredClone(project) : null;
   }
 
+  /** 内存仓储只供契约测试使用，但仍复刻 PostgreSQL 的跨天/同日去重语义。 */
+  public async recordPublicProjectView(input: RecordPublicProjectViewInput): Promise<PublicProjectViewResult | null> {
+    const project = await this.getPublicProject(input.projectIdOrSlug);
+    if (!project) return null;
+    const viewedOn = input.viewedOn ?? new Date().toISOString().slice(0, 10);
+    const readerKey = `${project.id}:${input.viewerKeyHash}`;
+    const dailyKey = `${readerKey}:${viewedOn}`;
+    const readers = this.projectReaders.get(project.id) ?? new Set<string>();
+    readers.add(input.viewerKeyHash);
+    this.projectReaders.set(project.id, readers);
+    const recorded = !this.projectDailyViews.has(dailyKey);
+    this.projectDailyViews.add(dailyKey);
+    const next = { ...project, uniqueReaders: readers.size };
+    this.publicProjects.set(project.id, structuredClone(next));
+    return { projectId: project.id, recorded, uniqueReaders: readers.size };
+  }
+
+  /** 内存仓储复刻公开 Star 的唯一用户关系，供契约测试验证 UI/API 幂等语义。 */
+  public async getPublicProjectStarState(projectIdOrSlug: string, userId: string | null): Promise<PublicProjectStarState | null> {
+    const project = await this.getPublicProject(projectIdOrSlug);
+    if (!project) return null;
+    const stars = this.projectStars.get(project.id) ?? new Map<string, boolean>();
+    return { projectId: project.id, starred: userId ? stars.get(userId) === true : false, starCount: Array.from(stars.values()).filter(Boolean).length };
+  }
+
+  public async setPublicProjectStar(input: SetPublicProjectStarInput): Promise<PublicProjectStarState | null> {
+    const project = await this.getPublicProject(input.projectIdOrSlug);
+    if (!project) return null;
+    const stars = this.projectStars.get(project.id) ?? new Map<string, boolean>();
+    stars.set(input.userId, input.starred);
+    this.projectStars.set(project.id, stars);
+    const starCount = Array.from(stars.values()).filter(Boolean).length;
+    this.publicProjects.set(project.id, structuredClone({ ...project, starCount }));
+    return { projectId: project.id, starred: input.starred, starCount };
+  }
+
   public async createPrivateProject(input: CreatePrivateProjectRecordInput): Promise<PublicProjectRecord> {
     const account = await this.findAccountById(input.ownerUserId);
     if (!account) throw new Error("项目所有者不存在");
     const record: PublicProjectRecord = {
       id: input.id, slug: input.slug, title: input.title, summary: input.summary, visibility: "private", status: "draft",
       owner: { id: account.id, username: account.username, displayName: account.displayName, avatarAssetId: account.avatarAssetId },
-      publishedAt: null, updatedAt: input.createdAt, uniqueReaders: 0, contributorCount: 1, sourceCount: 0,
+      publishedAt: null, updatedAt: input.createdAt, uniqueReaders: 0, starCount: 0, contributorCount: 1, sourceCount: 0,
       openMergeRequests: 0, version: 1, license: input.license, files: [], sections: [],
     };
     this.publicProjects.set(record.id, structuredClone(record));

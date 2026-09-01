@@ -36,6 +36,8 @@ export interface PublicProjectRecord {
   publishedAt: string | null;
   updatedAt: string;
   uniqueReaders: number;
+  /** 当前公开版本被真实登录用户收藏的数量；匿名用户不能写入 Star。 */
+  starCount: number;
   contributorCount: number;
   sourceCount: number;
   openMergeRequests: number;
@@ -63,6 +65,33 @@ export interface PublicProjectListInput {
   sort?: "recommended" | "latest" | "read";
   limit?: number;
   offset?: number;
+}
+
+/** 公开阅读上报输入；哈希由服务层生成，Repository 不接触原始 Cookie/设备标识。 */
+export interface RecordPublicProjectViewInput {
+  projectIdOrSlug: string;
+  viewerKeyHash: string;
+  viewerUserId: string | null;
+  viewedOn?: string;
+}
+
+/** 阅读事实写入结果；recorded=false 表示同一读者当天重复打开，没有增加去重人数。 */
+export interface PublicProjectViewResult {
+  projectId: string;
+  recorded: boolean;
+  uniqueReaders: number;
+}
+
+export interface PublicProjectStarState {
+  projectId: string;
+  starred: boolean;
+  starCount: number;
+}
+
+export interface SetPublicProjectStarInput {
+  projectIdOrSlug: string;
+  userId: string;
+  starred: boolean;
 }
 
 export interface CreatePrivateProjectRecordInput {
@@ -95,5 +124,8 @@ export interface PlatformRepository {
   getNodeState(projectId: string, branchId: string, nodeId: string): Promise<KnowledgeNodeState | null>;
   listPublicProjects(input: PublicProjectListInput): Promise<PublicProjectRecord[]>;
   getPublicProject(projectIdOrSlug: string): Promise<PublicProjectRecord | null>;
+  recordPublicProjectView(input: RecordPublicProjectViewInput): Promise<PublicProjectViewResult | null>;
+  getPublicProjectStarState(projectIdOrSlug: string, userId: string | null): Promise<PublicProjectStarState | null>;
+  setPublicProjectStar(input: SetPublicProjectStarInput): Promise<PublicProjectStarState | null>;
   createPrivateProject(input: CreatePrivateProjectRecordInput): Promise<PublicProjectRecord>;
 }

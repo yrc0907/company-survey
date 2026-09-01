@@ -49,7 +49,7 @@ export async function GET(_request: Request, context: { params: { id: string } }
       project: {
         id: project.id, slug: project.slug, title: project.title, summary: project.summary,
         visibility: project.visibility, status: project.status, license: project.license, owner,
-        publishedAt: project.publishedAt, updatedAt: project.updatedAt, uniqueReaders: 0,
+        publishedAt: project.publishedAt, updatedAt: project.updatedAt, uniqueReaders: 0, starCount: 0,
         contributorCount: 1, sourceCount: nodes.filter((node) => node.kind === "source").length, openMergeRequests: 0,
         version: Math.max(1, (branch?.version ?? 0) + 1), verification: "needs_verification", verificationNote: "这是你的私有草稿，公开前需要完成来源核验。",
         files, sections,

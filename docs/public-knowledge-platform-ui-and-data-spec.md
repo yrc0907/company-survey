@@ -638,6 +638,8 @@ GET  /api/platform/search
 GET  /api/platform/users/:username
 GET  /api/platform/projects/:id/comments
 GET  /api/platform/projects/:id/activity
+POST /api/platform/projects/:id/view
+GET  /api/platform/projects/:id/star
 ```
 
 ### 11.2 登录写入
@@ -650,6 +652,7 @@ POST   /api/platform/comments/:id/reactions
 POST   /api/platform/users/:id/follow
 POST   /api/platform/projects/:id/follow
 POST   /api/platform/projects/:id/star
+DELETE /api/platform/projects/:id/star
 GET    /api/platform/notifications
 POST   /api/platform/notifications/:id/read
 ```

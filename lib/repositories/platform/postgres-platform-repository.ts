@@ -2,7 +2,7 @@ import postgres, { type Sql, type TransactionSql } from "postgres";
 
 import { AccountConflictError } from "@/lib/domain/platform/errors";
 import type { KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PlatformRole } from "@/lib/domain/platform";
-import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord } from "@/lib/repositories/platform/platform-repository";
+import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, RecordPublicProjectViewInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
 
 type DatabaseRow = Record<string, unknown>;
 type Queryable = Sql | TransactionSql;
@@ -45,7 +45,7 @@ function mapPublicProject(row: DatabaseRow): PublicProjectRecord {
     visibility: projectVisibility(row.visibility), status: projectStatus(row.status),
     owner: { id: String(row.owner_id), username: String(row.owner_username), displayName: String(row.owner_display_name), avatarAssetId: row.owner_avatar ? String(row.owner_avatar) : null },
     publishedAt: row.published_at ? iso(row.published_at) : null, updatedAt: iso(row.updated_at),
-    uniqueReaders: Number(row.unique_readers ?? 0), contributorCount: Number(row.contributor_count ?? 0),
+    uniqueReaders: Number(row.unique_readers ?? 0), starCount: Number(row.star_count ?? 0), contributorCount: Number(row.contributor_count ?? 0),
     sourceCount: Number(row.source_count ?? 0), openMergeRequests: Number(row.open_merge_requests ?? 0),
     version: Math.max(1, Number(row.version ?? 1)), license: String(row.license ?? "all-rights-reserved"),
     category: row.category === "企业" || row.category === "政策" || row.category === "行业" || row.category === "技术" ? row.category : "行业",
@@ -60,9 +60,10 @@ const PUBLIC_PROJECT_SELECT = `
          p.published_at, p.updated_at,
          u.id AS owner_id, pr.username AS owner_username, pr.display_name AS owner_display_name,
          pr.avatar_asset_id AS owner_avatar,
-         0::bigint AS unique_readers,
-         (SELECT COUNT(DISTINCT ca.contributor_user_id) FROM content_attribution ca
-            WHERE ca.project_id = p.id AND ca.active = TRUE) AS contributor_count,
+         COALESCE((SELECT ps.unique_readers FROM project_stats ps WHERE ps.project_id = p.id), 0)::bigint AS unique_readers,
+         (SELECT COUNT(*) FROM project_star ps WHERE ps.project_id = p.id AND ps.active = TRUE)::bigint AS star_count,
+         (1::bigint + (SELECT COUNT(DISTINCT ca.contributor_user_id) FROM content_attribution ca
+            WHERE ca.project_id = p.id AND ca.active = TRUE AND ca.contributor_user_id <> p.owner_user_id)) AS contributor_count,
          (SELECT COUNT(*) FROM knowledge_node source_node
             WHERE source_node.project_id = p.id AND source_node.kind = 'source') AS source_count,
          (SELECT COUNT(*) FROM merge_request mr
@@ -200,7 +201,7 @@ export class PostgresPlatformRepository implements PlatformRepository {
     const limit = Math.min(100, Math.max(1, Math.trunc(input.limit ?? 50)));
     const offset = Math.max(0, Math.trunc(input.offset ?? 0));
     const query = input.query?.trim() ?? "";
-    const order = input.sort === "read" ? "p.updated_at DESC" : input.sort === "recommended" ? "p.published_at DESC NULLS LAST, p.updated_at DESC" : "p.updated_at DESC";
+    const order = input.sort === "read" ? "unique_readers DESC, p.updated_at DESC" : input.sort === "recommended" ? "p.published_at DESC NULLS LAST, p.updated_at DESC" : "p.updated_at DESC";
     const rows = await this.sql.unsafe<DatabaseRow[]>(`${PUBLIC_PROJECT_SELECT}
       WHERE p.visibility = 'public' AND p.status = 'published'
         AND ($1 = '' OR p.title ILIKE '%' || $1 || '%' OR p.summary ILIKE '%' || $1 || '%' OR p.slug ILIKE '%' || $1 || '%' OR pr.username ILIKE '%' || $1 || '%')
@@ -233,6 +234,86 @@ export class PostgresPlatformRepository implements PlatformRepository {
     };
   }
 
+  /**
+   * 记录一次公开项目阅读并返回最新去重人数。
+   * 同一项目、同一读者在同一自然日只插入一条 daily 事实；跨天仍由 project_reader
+   * 保持全站唯一读者计数。事务内先写事实再更新聚合，避免并发请求重复增加统计。
+   */
+  public async recordPublicProjectView(input: RecordPublicProjectViewInput): Promise<PublicProjectViewResult | null> {
+    const viewedOn = input.viewedOn ?? new Date().toISOString().slice(0, 10);
+    return this.sql.begin(async (tx) => {
+      const projectRows = await tx<DatabaseRow[]>`SELECT id FROM knowledge_project
+        WHERE (id = ${input.projectIdOrSlug} OR slug = ${input.projectIdOrSlug})
+          AND visibility = 'public' AND status = 'published' LIMIT 1`;
+      const project = projectRows[0];
+      if (!project) return null;
+      const projectId = String(project.id);
+
+      const newReader = await tx<DatabaseRow[]>`INSERT INTO project_reader
+        (project_id, viewer_key_hash, viewer_user_id)
+        VALUES (${projectId}, ${input.viewerKeyHash}, ${input.viewerUserId})
+        ON CONFLICT (project_id, viewer_key_hash) DO UPDATE SET last_seen_at = CURRENT_TIMESTAMP
+        RETURNING (xmax = 0) AS inserted`;
+      const insertedReader = Boolean(newReader[0]?.inserted);
+
+      const dailyRows = await tx<DatabaseRow[]>`INSERT INTO project_view_daily
+        (project_id, view_date, viewer_key_hash, viewer_user_id)
+        VALUES (${projectId}, ${viewedOn}::date, ${input.viewerKeyHash}, ${input.viewerUserId})
+        ON CONFLICT (project_id, view_date, viewer_key_hash)
+        DO UPDATE SET last_seen_at = CURRENT_TIMESTAMP
+        RETURNING (xmax = 0) AS inserted`;
+      const recorded = Boolean(dailyRows[0]?.inserted);
+
+      // 只有首次跨天读者才增加聚合数；同日重复访问和跨日回访都保持幂等。
+      await tx`INSERT INTO project_stats (project_id, unique_readers, updated_at)
+        VALUES (${projectId}, ${insertedReader ? 1 : 0}, CURRENT_TIMESTAMP)
+        ON CONFLICT (project_id) DO UPDATE SET
+          unique_readers = project_stats.unique_readers + ${insertedReader ? 1 : 0},
+          updated_at = CURRENT_TIMESTAMP`;
+      const stats = await tx<DatabaseRow[]>`SELECT unique_readers FROM project_stats WHERE project_id = ${projectId} LIMIT 1`;
+      return { projectId, recorded, uniqueReaders: Number(stats[0]?.unique_readers ?? 0) };
+    });
+  }
+
+  /** 读取公开项目 Star 状态；匿名读取只返回公开计数，不返回任何用户关系。 */
+  public async getPublicProjectStarState(projectIdOrSlug: string, userId: string | null): Promise<PublicProjectStarState | null> {
+    const rows = await this.sql<DatabaseRow[]>`SELECT p.id,
+      (SELECT COUNT(*) FROM project_star ps WHERE ps.project_id = p.id AND ps.active = TRUE) AS star_count,
+      ${userId}::text IS NOT NULL AND EXISTS (
+        SELECT 1 FROM project_star mine WHERE mine.project_id = p.id AND mine.user_id = ${userId} AND mine.active = TRUE
+      ) AS starred
+      FROM knowledge_project p
+      WHERE (p.id = ${projectIdOrSlug} OR p.slug = ${projectIdOrSlug})
+        AND p.visibility = 'public' AND p.status = 'published' LIMIT 1`;
+    const row = rows[0];
+    return row ? { projectId: String(row.id), starred: Boolean(row.starred), starCount: Number(row.star_count ?? 0) } : null;
+  }
+
+  /** 登录用户才能切换 Star；事务内更新关系后读取计数，响应始终与数据库一致。 */
+  public async setPublicProjectStar(input: SetPublicProjectStarInput): Promise<PublicProjectStarState | null> {
+    return this.sql.begin(async (tx) => {
+      const projects = await tx<DatabaseRow[]>`SELECT id FROM knowledge_project
+        WHERE (id = ${input.projectIdOrSlug} OR slug = ${input.projectIdOrSlug})
+          AND visibility = 'public' AND status = 'published' LIMIT 1`;
+      const project = projects[0];
+      if (!project) return null;
+      const projectId = String(project.id);
+      if (input.starred) {
+        await tx`INSERT INTO project_star (project_id, user_id, active)
+          VALUES (${projectId}, ${input.userId}, TRUE)
+          ON CONFLICT (project_id, user_id) DO UPDATE SET active = TRUE, updated_at = CURRENT_TIMESTAMP`;
+      } else {
+        await tx`UPDATE project_star SET active = FALSE, updated_at = CURRENT_TIMESTAMP
+          WHERE project_id = ${projectId} AND user_id = ${input.userId}`;
+      }
+      const rows = await tx<DatabaseRow[]>`SELECT
+        (SELECT COUNT(*) FROM project_star ps WHERE ps.project_id = ${projectId} AND ps.active = TRUE) AS star_count,
+        EXISTS (SELECT 1 FROM project_star mine WHERE mine.project_id = ${projectId} AND mine.user_id = ${input.userId} AND mine.active = TRUE) AS starred`;
+      const row = rows[0];
+      return { projectId, starred: Boolean(row?.starred), starCount: Number(row?.star_count ?? 0) };
+    });
+  }
+
   /** 创建空白私有项目与 owner/main 分支同事务写入；不接受客户端 userId。 */
   public async createPrivateProject(input: CreatePrivateProjectRecordInput): Promise<PublicProjectRecord> {
     try {
@@ -244,7 +325,7 @@ export class PostgresPlatformRepository implements PlatformRepository {
           VALUES (${crypto.randomUUID()}, ${input.id}, 'main', NULL, TRUE, ${input.createdAt}, ${input.createdAt})`;
         const ownerRows = await tx.unsafe<DatabaseRow[]>(`SELECT p.id, p.slug, p.title, p.summary, p.visibility, p.status, p.license, p.published_at, p.updated_at,
           u.id AS owner_id, pr.username AS owner_username, pr.display_name AS owner_display_name, pr.avatar_asset_id AS owner_avatar,
-          0::bigint AS unique_readers, 1::bigint AS contributor_count, 0::bigint AS source_count, 0::bigint AS open_merge_requests, 0::bigint AS version
+          0::bigint AS unique_readers, 0::bigint AS star_count, 1::bigint AS contributor_count, 0::bigint AS source_count, 0::bigint AS open_merge_requests, 0::bigint AS version
           FROM knowledge_project p JOIN platform_user u ON u.id = p.owner_user_id JOIN platform_profile pr ON pr.user_id = u.id WHERE p.id = $1 LIMIT 1`, [input.id]);
         const row = ownerRows[0];
         if (!row) throw new Error("项目创建后读取失败");

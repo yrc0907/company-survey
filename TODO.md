@@ -33,6 +33,7 @@
 - [ ] 公开首页、全站搜索、项目详情、编辑、审核、用户主页、收件箱和管理员页面
 - [ ] 迁移并核验慧策、十五五规划、跨境 ERP 等官方首发项目，确保正式首页非空
 - [~] 首页列表式卡片展示 owner、published_at、main 最新合并、去重阅读、已合并贡献者、来源与 open MR；去重阅读已由真实 PostgreSQL 统计提供，作者主页/关注/评论/点赞仍待实现
+- [~] 项目 Star 已完成真实用户唯一关系、GET/POST/DELETE API 和详情页反馈；作者主页、关注、评论与其他社交功能仍待实现
 - [ ] 匿名 AI 签名 Cookie、Redis 限流、额度、成本和滥用防护
 - [ ] 阿里云 OSS 文件/头像存储、许可证、举报、下架和审计
 - [~] 私有 Bucket `reaserch` 已创建，ECS 已绑定 `research-oss` 且 IMDSv2 临时凭据状态为 `Success`；OSS SDK、预签名读写、隔离对象删除、所有者边界和 ECS 临时对象 Put/Head/Delete 已验证，目标 Bucket CORS、浏览器直传权限 E2E 与 source/source_chunk 产物索引仍待接入；解析 Worker 已实现租约、重试和明确待校对降级

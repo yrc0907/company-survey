@@ -2,6 +2,23 @@
 
 > 每个已复现异常使用稳定 `scenario_id`。本文只记录实际观察、根因、修复提交和复验结果；目标指标未实测前不写成 SLA。
 
+## PUBLIC-VIEW-001：阅读量被重复刷新或爬虫放大
+
+- **场景**：读者打开公开项目详情、刷新页面，或健康检查/搜索爬虫访问详情 URL。
+- **现象**：若把详情 GET 次数直接累加，单个读者可通过刷新制造虚高阅读量，机器人也会污染统计。
+- **方案**：详情页使用同源 POST 显式上报；登录用户按 `user_id`，匿名用户按 HttpOnly `research_visitor_id` 计算服务端 SHA-256 哈希。`project_reader` 按项目和哈希做跨天全局去重，`project_view_daily` 按项目、日期和哈希做每日幂等审计；自动化 User-Agent、健康检查、curl/wget 不入表。`project_stats` 只在首次读者事实写入时原子增加。
+- **实现**：迁移 `012_public_project_views.sql`；`PlatformRepository.recordPublicProjectView`；`POST /api/platform/projects/:id/view`；`ProjectWorkspace` 详情挂载时上报并显示加载/成功/不可用状态。
+- **复验**：`public-project.contract.ts` 覆盖同日重复、跨日回访、不同访客、slug 访问、匿名 Cookie 签发和 Bot 忽略；`pnpm typecheck`、`pnpm lint` 通过。
+- **性能影响**：每次详情只进行一次短事务和两次受索引保护的幂等插入；首页直接读取 `project_stats`，避免逐卡片扫描阅读明细。匿名 Cookie 仅保存随机 UUID，原文不入数据库。
+
+## PUBLIC-STAR-001：重复点击或匿名请求伪造项目收藏
+
+- **场景**：用户反复点击收藏，或未登录请求尝试把 Star 写入任意项目。
+- **方案**：`project_star` 使用 `(project_id, user_id)` 主键和 `active` 软删除；GET 只返回公开项目的聚合计数，POST/DELETE 均经过同源校验和已验证 Session，服务端忽略请求体中的身份字段。重复设置和重复取消都是幂等操作。
+- **实现**：迁移 `013_project_stars.sql`；平台 Repository 的 `getPublicProjectStarState`/`setPublicProjectStar`；`GET|POST|DELETE /api/platform/projects/:id/star`；项目工作区 Star 按钮带加载、成功、失败和登录门槛反馈。
+- **复验**：`public-project.contract.ts` 覆盖匿名读取、匿名写入 401、重复 POST、GET 当前用户状态、DELETE 和重复 DELETE；`pnpm typecheck`、`pnpm lint`、公开项目契约均通过。
+- **性能影响**：写入只更新单个主键关系并做一次有索引的聚合计数，不扫描项目正文；软删除保留关系审计而不增加重复行。
+
 ## DEPLOY-FTS-001：表达式索引迁移失败
 
 - **场景**：香港 ECS 执行迁移 `007_source_chunk_fts.sql`。

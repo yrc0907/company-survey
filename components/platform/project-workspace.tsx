@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, BookOpen, Bot, CheckCircle2, ChevronRight, CircleAlert, Eye, Files, GitBranch, GitMerge, GitPullRequest, History, Loader2, LogIn, PanelLeftClose, Search, Share2, Users } from "lucide-react";
+import { ArrowLeft, BookOpen, Bot, CheckCircle2, ChevronRight, CircleAlert, Eye, Files, GitBranch, GitMerge, GitPullRequest, History, Loader2, LogIn, PanelLeftClose, Search, Share2, Star, Users } from "lucide-react";
 import { getSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -37,7 +37,7 @@ function findNode(nodes: SeedFileNode[], nodeId: string): SeedFileNode | undefin
   return undefined;
 }
 
-function ProjectDocument({ project, onActivity }: { project: SeedProject; onActivity?: (message: string) => void }) {
+function ProjectDocument({ project, viewCount, starCount, onActivity }: { project: SeedProject; viewCount: number; starCount: number; onActivity?: (message: string) => void }) {
   const sections = project.sections.length ? project.sections : [{
     id: "seed-boundary",
     heading: "Seed 展示边界",
@@ -55,7 +55,7 @@ function ProjectDocument({ project, onActivity }: { project: SeedProject; onActi
         <div className="document-status-line"><span className={project.verification === "verified" ? "verification verification--verified" : "verification verification--pending"}>{project.verification === "verified" ? "Seed 已核验" : "Seed 待核验"}</span><span>公开 · main@v{project.version}</span></div>
         <h1>{project.title}</h1>
         <p>{project.summary}</p>
-        <div className="document-byline"><UserAvatar name={project.owner.displayName} size="sm" /><span>由 <strong>{project.owner.displayName}</strong> 维护</span><span>·</span><span>{project.contributorCount ?? project.contributors.length} 位贡献者</span><span>·</span><span>{project.sourceCount} 个来源</span></div>
+        <div className="document-byline"><UserAvatar name={project.owner.displayName} size="sm" /><span>由 <strong>{project.owner.displayName}</strong> 维护</span><span>·</span><span>{project.contributorCount ?? project.contributors.length} 位贡献者</span><span>·</span><span>{project.sourceCount} 个来源</span><span>·</span><span><Eye size={13} aria-hidden="true" /> {viewCount} 位读者</span><span>·</span><span><Star size={13} aria-hidden="true" /> {starCount} Star</span></div>
       </header>
       <nav className="document-toc" aria-label="本文目录"><span>本文目录</span>{sections.map((section) => <a key={section.id} href={`#${section.id}`}>{section.heading}</a>)}</nav>
       <div className="document-body">
@@ -91,6 +91,11 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
   const [collaborationRefresh, setCollaborationRefresh] = useState(0);
   const [treeQuery, setTreeQuery] = useState("");
   const [dropNotice, setDropNotice] = useState("");
+  const [viewCount, setViewCount] = useState(project.uniqueReaders);
+  const [viewState, setViewState] = useState<"loading" | "ready" | "ignored" | "error">("loading");
+  const [starred, setStarred] = useState(false);
+  const [starCount, setStarCount] = useState(project.starCount ?? 0);
+  const [starState, setStarState] = useState<"loading" | "ready" | "saving" | "error">("loading");
   const activeNode = useMemo(() => findNode(project.files, activeNodeId), [activeNodeId, project.files]);
 
   useEffect(() => {
@@ -98,6 +103,61 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
     setActiveNodeId(firstDocument?.id ?? project.files[0]?.id ?? "");
     setTreeQuery("");
   }, [project.id, project.files]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setViewCount(project.uniqueReaders);
+    setViewState("loading");
+    void fetch(`/api/platform/projects/${encodeURIComponent(project.id)}/view`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: "{}",
+      credentials: "same-origin",
+    }).then(async (response) => {
+      const payload = await response.json().catch(() => ({})) as { uniqueReaders?: unknown; recorded?: boolean; ignored?: string };
+      if (cancelled) return;
+      if (!response.ok) { setViewState("error"); return; }
+      if (typeof payload.uniqueReaders === "number" && Number.isFinite(payload.uniqueReaders)) setViewCount(Math.max(0, Math.trunc(payload.uniqueReaders)));
+      setViewState(payload.ignored ? "ignored" : "ready");
+    }).catch(() => { if (!cancelled) setViewState("error"); });
+    return () => { cancelled = true; };
+  }, [project.id, project.uniqueReaders]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setStarred(false);
+    setStarCount(project.starCount ?? 0);
+    setStarState("loading");
+    void fetch(`/api/platform/projects/${encodeURIComponent(project.id)}/star`, { headers: { accept: "application/json" }, credentials: "same-origin", cache: "no-store" }).then(async (response) => {
+      const payload = await response.json().catch(() => ({})) as { starred?: unknown; starCount?: unknown };
+      if (cancelled) return;
+      if (!response.ok) { setStarState("error"); return; }
+      setStarred(payload.starred === true);
+      if (typeof payload.starCount === "number" && Number.isFinite(payload.starCount)) setStarCount(Math.max(0, Math.trunc(payload.starCount)));
+      setStarState("ready");
+    }).catch(() => { if (!cancelled) setStarState("error"); });
+    return () => { cancelled = true; };
+  }, [project.id, project.starCount]);
+
+  async function toggleStar(): Promise<void> {
+    if (!authenticated) { onRequireLogin("login"); return; }
+    const nextStarred = !starred;
+    setStarState("saving");
+    try {
+      const response = await fetch(`/api/platform/projects/${encodeURIComponent(project.id)}/star`, {
+        method: nextStarred ? "POST" : "DELETE",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: "{}",
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({})) as { starred?: unknown; starCount?: unknown; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "Star 操作失败");
+      setStarred(payload.starred === true);
+      if (typeof payload.starCount === "number" && Number.isFinite(payload.starCount)) setStarCount(Math.max(0, Math.trunc(payload.starCount)));
+      setStarState("ready");
+      setActivity(nextStarred ? "已收藏此项目。" : "已取消收藏此项目。");
+    } catch (error) { setStarState("error"); setCollaborationError(error instanceof Error ? error.message : "Star 操作失败"); }
+  }
 
   async function shareProject(): Promise<void> {
     try {
@@ -233,6 +293,7 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
               <SheetContent className="mobile-assistant-sheet"><SheetTitle className="sr-only">AI 研究助手</SheetTitle><AssistantPanel project={project} activeFileName={activeNode?.name ?? "研究结论"} activeFileId={activeNode?.id} /></SheetContent>
             </Sheet>
           </div>
+          <Button variant={starred ? "subtle" : "ghost"} size="sm" onClick={() => void toggleStar()} disabled={starState === "loading" || starState === "saving"} aria-pressed={starred} title={starState === "error" ? "Star 服务暂不可用，点击可重试" : undefined}>{starState === "saving" ? <Loader2 size={15} className="animate-spin" /> : <Star size={15} fill={starred ? "currentColor" : "none"} />}Star {starCount}</Button>
           <Button variant="ghost" size="sm" onClick={() => void shareProject()}><Share2 size={15} />分享</Button>
           <Button variant="outline" size="sm" onClick={() => void ensureDraftBranch()} disabled={branchLoading}><GitBranch size={15} />创建草稿</Button>
           <Button size="sm" onClick={() => void submitMergeRequest()} disabled={branchLoading}>{branchLoading ? <Loader2 size={15} className="animate-spin" /> : <GitPullRequest size={15} />}提交修改</Button>
@@ -250,7 +311,7 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
       </aside>
 
       {treeCollapsed ? <Button className="tree-reopen" size="icon" variant="outline" onClick={() => setTreeCollapsed(false)} aria-label="展开文件树"><ChevronRight size={17} /></Button> : null}
-      <main className="document-pane">{activeTab === "content" ? <ProjectDocument project={project} onActivity={setActivity} /> : <CollaborationPanel projectId={project.id} authenticated={authenticated} canReview={canReview} onRequireLogin={() => onRequireLogin("login")} refreshToken={collaborationRefresh} />}{collaborationError ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{collaborationError}</span><button type="button" onClick={() => setCollaborationError("")}>关闭</button></div> : null}{dropNotice ? <div className="workspace-activity" role="status"><span>{dropNotice}</span><button type="button" onClick={() => setDropNotice("")}>关闭</button></div> : null}{activity ? <div className="workspace-activity" role="status"><span>{activity}</span><button type="button" onClick={() => setActivity("")}>关闭</button></div> : null}</main>
+      <main className="document-pane">{activeTab === "content" ? <ProjectDocument project={project} viewCount={viewCount} starCount={starCount} onActivity={setActivity} /> : <CollaborationPanel projectId={project.id} authenticated={authenticated} canReview={canReview} onRequireLogin={() => onRequireLogin("login")} refreshToken={collaborationRefresh} />}{viewState === "loading" || starState === "loading" ? <div className="workspace-activity" role="status" aria-live="polite" aria-busy="true"><span>{viewState === "loading" ? "正在记录阅读…" : "正在读取 Star 状态…"}</span></div> : null}{viewState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>阅读统计暂不可用，正文仍可继续浏览。</span></div> : null}{starState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>Star 服务暂不可用，正文仍可继续浏览。</span></div> : null}{viewState === "ready" ? <div className="workspace-activity" role="status" aria-live="polite"><span>阅读已记录 · 去重读者 {viewCount}</span><button type="button" onClick={() => setViewState("ignored")}>关闭</button></div> : null}{collaborationError ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{collaborationError}</span><button type="button" onClick={() => setCollaborationError("")}>关闭</button></div> : null}{dropNotice ? <div className="workspace-activity" role="status"><span>{dropNotice}</span><button type="button" onClick={() => setDropNotice("")}>关闭</button></div> : null}{activity ? <div className="workspace-activity" role="status"><span>{activity}</span><button type="button" onClick={() => setActivity("")}>关闭</button></div> : null}</main>
       <AssistantPanel project={project} activeFileName={activeNode?.name ?? "研究结论"} activeFileId={activeNode?.id} />
     </div>
   );

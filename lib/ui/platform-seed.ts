@@ -39,6 +39,8 @@ export interface SeedProject {
   publishedAt: string;
   updatedAt: string;
   uniqueReaders: number;
+  /** 首发 Seed 不伪造社区行为；数据库项目会返回真实 Star 聚合。 */
+  starCount?: number;
   contributors: SeedUser[];
   /** 数据库摘要可能只有聚合计数，展示时优先使用该服务端计数。 */
   contributorCount?: number;
