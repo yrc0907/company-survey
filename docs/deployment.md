@@ -19,7 +19,7 @@ Internet
 
 ## 1.1 实际部署记录（2026-09-02）
 
-本次香港迁移使用分支提交 `9b2b9c8`，服务器目录为 `/srv/research-workbench`。以下为实际命令与运行结果，不包含任何密码、Key 或 Basic Auth 凭据：
+本次香港迁移使用分支提交 `d716c35`（E2E 脚本修复随后为 `9de6bb2`），服务器目录为 `/srv/research-workbench`。以下为实际命令与运行结果，不包含任何密码、Key 或 Basic Auth 凭据：
 
 | 项目 | 实际结果 |
 | --- | --- |
@@ -27,7 +27,7 @@ Internet
 | 资源 | 约 `1.6 GiB` 内存、已启用 `1 GiB` swap；应用构建后根盘约 `31 GiB` 可用 |
 | 构建 | 香港 ECS 上 `docker compose build app migrate` 成功完成 Next.js 生产构建 |
 | 容器 | `postgres`、`app`、`caddy` 三个容器均为 `healthy` |
-| 数据库 | 容器内 `/api/healthz` 返回 `200` 和 `persistence: "postgres"`；旧服务器备份已恢复，`project-huice` 存在，迁移表包含 `014_author_follows.sql` |
+| 数据库 | 容器内 `/api/healthz` 返回 `200` 和 `persistence: "postgres"`；旧服务器备份已恢复，`project-huice` 存在，迁移表包含 `015_project_comments.sql` |
 | 持久化 | PostgreSQL 和上传目录均使用 Compose named volume，不向公网发布 `5432` |
 | 模型链路 | 服务器受限 `.env` 的模型、Embedding、Rerank 三个 Provider 已做连通性验证；Key 不在 Git、文档或日志中 |
 | Caddy | 配置校验通过，服务器本机已监听 `80` 与 `443`；应用 `3000` 仅在 Compose 内部暴露 |
@@ -59,6 +59,7 @@ GET /api/platform/projects/project-huice/star（匿名）  -> 200，返回公开
 pgvector 能力探测                                    -> available=false，保留 FTS/确定性降级
 GET /api/platform/authors/yu-research（匿名）          -> 200，作者主页只返回公开项目
 GET /api/platform/authors/yu-research/follow（匿名）   -> 200，返回公开关注计数
+GET /api/platform/projects/project-huice/comments（匿名） -> 200，返回公开评论列表
 ```
 
 完整界面流程通过 SSH 隧道连接实际服务器 App 验收：浏览器写入资料后来源数立即更新，PostgreSQL FTS 与 Dense RRF 均返回真实状态（`lexical=postgres_fts`、`dense=completed`），AI 使用 `gemini-embedding-2-preview -> qwen3-rerank -> gpt-5.6-terra` 生成带来源回答。服务器 API 另行验证了版本从 1 保存到 2，以及旧版本写入被 `409 VERSION_CONFLICT` 拒绝。公网入口因 ESA ICP/源站证书链路尚未切换，不能把上述源站验收写成公网验收。
