@@ -38,7 +38,8 @@ try {
     await page.getByRole("heading", { name: /慧策掌上先机/ }).waitFor();
     await page.getByRole("button", { name: "官方资料.pdf", exact: true }).click();
     assert.equal(await page.getByRole("button", { name: "官方资料.pdf", exact: true }).locator("..", { hasText: "官方资料.pdf" }).count(), 1);
-    await page.getByRole("button", { name: "修改申请 3" }).click();
+    // 申请数量来自真实数据库，不能把本地 seed 的计数写死；只验证入口和面板能打开。
+    await page.getByRole("button", { name: /修改申请(?:\s+\d+)?/ }).click();
     await page.getByRole("region", { name: "修改申请" }).waitFor();
   });
 

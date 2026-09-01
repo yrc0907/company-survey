@@ -22,6 +22,8 @@ content-type: <返回值>
 x-oss-meta-sha256: <预期 SHA-256>
 ```
 
+`ali-oss` 的 `head()` 通常会把该用户元数据从 `x-oss-meta-sha256` 映射为 `result.meta.sha256`；适配器同时兼容 SDK 未解析时的原始 `x-oss-meta-sha256` 响应头，并只接受 64 位 SHA-256。临时验证脚本必须在 PUT 请求中显式携带该 header（仅带 `Content-Type` 的 PUT 不会产生用户元数据），否则完成接口会读取对象流重新计算哈希。
+
 用户配额默认 500 MiB，可由 `PLATFORM_UPLOAD_USER_QUOTA_BYTES` 调整。相同用户、项目和 SHA 的未失败对象幂等返回，不重复创建对象或解析任务。
 
 首次启用浏览器直传前，Bucket CORS 需要允许实际站点 Origin（不要填 `*`）、方法 `PUT`/`GET`/`HEAD`、请求头 `Content-Type` 与 `x-oss-meta-sha256`，并暴露响应头 `ETag`。CORS 只控制浏览器跨域，不会改变 Bucket 私有读写权限；未配置 `ExposeHeader: ETag` 时前端会在上传后明确提示配置，而不是把对象误报为已确认。

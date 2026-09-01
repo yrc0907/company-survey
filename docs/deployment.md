@@ -337,4 +337,4 @@ OSS_ENDPOINT=https://oss-cn-shanghai.aliyuncs.com
 OSS_FORCE_HTTPS=true
 ```
 
-以上配置用于生产镜像的真实 OSS SDK、预签名 `PutObject/GetObject` 和受控 `DeleteObject`。应用只使用 ECS RAM Role 临时凭据，不保存永久 AccessKey；数据库先做所有者/项目权限过滤，再签发短期 URL。删除只针对隔离对象，已验证原件不可由取消接口删除。上线前仍需在目标 Bucket CORS 和香港 ECS 环境验证 `PutObject/GetObject/DeleteObject` 权限边界、跨用户拒绝、签名过期、重复上传和跨地域延迟。
+以上配置用于生产镜像的真实 OSS SDK、预签名 `PutObject/GetObject` 和受控 `DeleteObject`。应用只使用 ECS RAM Role 临时凭据，不保存永久 AccessKey；数据库先做所有者/项目权限过滤，再签发短期 URL。浏览器直传必须同时发送 `x-oss-meta-sha256`，适配器会兼容 `result.meta.sha256` 和原始响应头，缺失时由完成接口流式重算。删除只针对隔离对象，已验证原件不可由取消接口删除。上线前仍需在目标 Bucket CORS 和香港 ECS 环境验证 `PutObject/GetObject/DeleteObject` 权限边界、跨用户拒绝、签名过期、重复上传和跨地域延迟。

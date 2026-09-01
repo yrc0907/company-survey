@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { getOssConfig } from "@/lib/providers/oss/oss-config";
+import { extractOssSha256Metadata } from "@/lib/providers/oss/oss-client";
 import { assertAllowedUpload, assertStorageObjectKey, createObjectKey } from "@/lib/providers/oss/object-key";
 import { OssObjectStorageProvider } from "@/lib/providers/oss/oss-provider";
 
@@ -19,6 +20,13 @@ async function run(): Promise<void> {
   });
   if (!configured.configured) throw new Error(configured.reason);
   assert.equal(configured.configured, true);
+
+  const hash = "ab12cd34".repeat(8);
+  assert.equal(extractOssSha256Metadata({ sha256: hash }, null), hash, "ali-oss 规范 meta.sha256 必须可读取");
+  assert.equal(extractOssSha256Metadata({ "x-oss-meta-sha256": hash.toUpperCase() }, null), hash, "带前缀/大写元数据必须规范化");
+  assert.equal(extractOssSha256Metadata(null, { "X-Oss-Meta-Sha256": `\"${hash}\"` }), hash, "原始 HEAD 响应头必须作为兼容回退");
+  assert.equal(extractOssSha256Metadata({ sha256: "not-a-hash" }, { "x-oss-meta-sha256": hash }), hash, "无效 SDK 元数据应回退到原始响应头");
+  assert.equal(extractOssSha256Metadata({ sha256: "not-a-hash" }, null), null, "异常元数据不能当作完整性证据");
 
   assertAllowedUpload(".pdf", "application/pdf");
   assert.throws(() => assertAllowedUpload(".exe", "application/octet-stream"), /白名单/);

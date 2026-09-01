@@ -21,6 +21,28 @@ export interface OssObjectHead {
   sha256: string | null;
 }
 
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+
+/**
+ * 兼容不同 ali-oss 版本的 HEAD 用户元数据形状：SDK 通常把前缀剥成 `meta.sha256`，
+ * 某些代理/版本只保留原始响应头。值必须是 64 位小写 SHA-256，异常元数据按缺失处理，
+ * 由上层触发对象流式重算，而不是把不可信 header 当作完整性证据。
+ */
+export function extractOssSha256Metadata(
+  metadata: Record<string, unknown> | null | undefined,
+  headers: Record<string, unknown> | null | undefined,
+): string | null {
+  const read = (source: Record<string, unknown> | null | undefined, keys: string[]): string | null => {
+    if (!source) return null;
+    const keySet = new Set(keys.map((key) => key.toLowerCase()));
+    const entry = Object.entries(source).find(([key]) => keySet.has(key.toLowerCase()));
+    if (!entry) return null;
+    const value = String(entry[1]).trim().replace(/^"|"$/g, "").toLowerCase();
+    return SHA256_PATTERN.test(value) ? value : null;
+  };
+  return read(metadata, ["sha256", "x-oss-meta-sha256"]) ?? read(headers, ["x-oss-meta-sha256"]);
+}
+
 /** 使用 ECS IMDSv2 临时凭据创建 OSS 客户端；凭据只存在进程内并由 SDK 自动刷新。 */
 export async function createOssSigningClient(config: OssConfig): Promise<OssSigningClient> {
   const credentialConfig = new CredentialConfig({
@@ -52,13 +74,13 @@ export async function createOssSigningClient(config: OssConfig): Promise<OssSign
     asyncHeadObject: async (name) => {
       const result = await client.head(name);
       const headers = result.res.headers as Record<string, unknown>;
-      const metadata = result.meta as Record<string, unknown>;
+      const metadata = (result.meta ?? {}) as Record<string, unknown>;
       const rawLength = headers["content-length"] ?? headers["Content-Length"];
       const contentLength = rawLength === undefined ? null : Number(rawLength);
       return {
         etag: String(headers.etag ?? headers.ETag ?? "").replace(/^"|"$/g, "") || null,
         contentLength: Number.isFinite(contentLength) ? contentLength : null,
-        sha256: String(metadata["x-oss-meta-sha256"] ?? metadata.sha256 ?? "").toLowerCase() || null,
+        sha256: extractOssSha256Metadata(metadata, headers),
       };
     },
     asyncSha256Object: async (name) => {
