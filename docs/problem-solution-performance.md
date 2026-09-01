@@ -27,6 +27,14 @@
 - **复验**：香港 `retrieval_vector_capability` 返回 `extension_available=false`、`vector_column_available=false`、`index_kind=none`，迁移 `011` 仍成功。
 - **性能影响**：无扩展时不占用向量列/索引空间；检索继续受 48 个 active Chunk 的临时 Dense 上限约束。
 
+## AUTHOR-FOLLOW-001：关注关系被重复写入或泄漏私有资料
+
+- **场景**：用户反复关注/取消作者，匿名请求尝试写入，或作者主页查询携带私有项目 ID。
+- **方案**：`author_follow` 使用 `(follower_user_id, followed_user_id)` 主键、`active` 软删除和自关注 CHECK；写请求只接受已验证 Session，主页 SQL 只返回 active 用户的公开项目，关注计数在同一事务内聚合。
+- **实现**：迁移 `014_author_follows.sql`、作者主页/关注 API、`/u/:username` UI 和 `E2E-AUTHOR-001`。
+- **复验**：匿名主页/关注状态、登录关注、重复关注/取消和自关注拒绝契约均通过；香港迁移和 API 读取已验证。
+- **性能影响**：关注写入命中复合主键和 active 索引，不扫描项目正文；主页只查询公开项目投影。
+
 ## DEPLOY-FTS-001：表达式索引迁移失败
 
 - **场景**：香港 ECS 执行迁移 `007_source_chunk_fts.sql`。
