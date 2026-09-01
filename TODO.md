@@ -16,11 +16,17 @@
 - [ ] 建立 Auth.js、GitHub OAuth、邮箱密码注册、验证与找回密码
 - [ ] 将 Caddy 全站 Basic Auth 改为公开读 + 应用会话保护写接口
 - [ ] 建立用户、项目、成员、文件树、Branch、Commit、Revision、MR、Review、Attribution schema 与迁移
+- [ ] 建立 `uploaded_asset`、`ingestion_job`、`project_view_daily`、`project_stats` schema 与聚合任务
 - [ ] 接入 TipTap，正文 Block 使用稳定 ID，支持 Markdown 导入导出
+- [ ] 登录后创建空白项目，或通过 OSS 隔离上传创建私有草稿项目并进入三栏工作台
+- [ ] Markdown/TXT/PDF/DOCX/PNG/JPEG 白名单、MIME magic、大小、哈希、重复检测、解析状态和幂等重试
+- [ ] 原始上传文件不可变，可编辑派生正文与原始证据分离；向他人项目上传只能进入个人分支/MR
 - [ ] 游客 IndexedDB 草稿、自动保存、登录迁移和过期 base revision 恢复
 - [ ] Diff、三方合并、冲突处理、逐段评论、审核和单事务合并
 - [ ] 段落级贡献追踪、用户贡献历史和 AI 辅助标记
 - [ ] 公开首页、全站搜索、项目详情、编辑、审核、用户主页、收件箱和管理员页面
+- [ ] 迁移并核验慧策、十五五规划、跨境 ERP 等官方首发项目，确保正式首页非空
+- [ ] 首页列表式卡片展示 owner、published_at、main 最新合并、去重阅读、已合并贡献者、来源与 open MR
 - [ ] 匿名 AI 签名 Cookie、Redis 限流、额度、成本和滥用防护
 - [ ] 阿里云 OSS 文件/头像存储、许可证、举报、下架和审计
 - [ ] PostgreSQL FTS + pgvector + RRF + Reranker 持久化检索和后台索引 Worker

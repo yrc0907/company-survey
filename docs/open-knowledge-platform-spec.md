@@ -49,6 +49,7 @@ User / Profile
 KnowledgeProject
   -> ProjectMember
   -> KnowledgeNode (folder | document)
+  -> UploadedAsset / IngestionJob
   -> Branch
   -> Commit
        -> CommitChange
@@ -56,6 +57,7 @@ KnowledgeProject
        -> Review / ReviewThread
   -> Attribution
   -> Source / Citation / Claim
+  -> ProjectViewDaily / ProjectStats
   -> ProjectActivity / Notification
 AnonymousDraft
 ModerationReport / ModerationAction
@@ -73,6 +75,10 @@ ModerationReport / ModerationAction
 | `review` | 批准、要求修改、拒绝以及逐段评论 |
 | `attribution` | 当前段落和历史内容的原作者、贡献者、审核者与合并来源 |
 | `claim` | 可独立追踪的结论、证据状态与引用关系；V1 可只预留字段 |
+| `uploaded_asset` | 原始上传文件、OSS key、MIME、大小、哈希、上传者、许可证和隔离状态 |
+| `ingestion_job` | 文件解析、视觉识别、Chunk、索引和失败重试状态 |
+| `project_view_daily` | 按用户或签名访客去重后的每日阅读记录；不把静态资源、机器人和健康检查计入阅读量 |
+| `project_stats` | 异步聚合阅读数、已合并贡献者数、来源数、文件数和待审 MR 数，供首页高效读取 |
 
 禁止只保存 `updated_by`。每个可归因正文块至少保存 `block_id`、`origin_commit_id` 和 `last_touch_commit_id`；合并后通过 Attribution 索引查询完整贡献历史。
 
@@ -107,7 +113,31 @@ ModerationReport / ModerationAction
 
 没有实时多人编辑时不引入 CRDT。V1 采用 `base_revision_id` 乐观锁与三方合并；结构化正文优先按稳定 `block_id` 合并，纯文本文件使用 diff3，无法自动解决的内容必须人工处理。
 
-### 5.3 贡献署名
+### 5.3 登录用户上传与创建项目
+
+上传必须登录。点击“上传报告”时，未登录用户先进入登录页；不允许匿名文件先上传到服务器再要求登录，避免无归属文件、恶意占用和隐私泄露。
+
+```text
+登录用户点击“上传报告”
+  -> 选择单个或多个允许格式文件
+  -> 填写项目名称、简介、分类、许可证与内容权利声明
+  -> 浏览器直传阿里云 OSS 隔离区
+  -> 服务端验证大小、扩展名、MIME magic、哈希和重复文件
+  -> 创建私有草稿项目，上传者成为 owner
+  -> Ingestion Worker 解析原始文件、生成来源、可编辑文档和 Chunk
+  -> 用户进入文件树 / 正文 / AI 工作台校对解析结果
+  -> 用户主动发布第一个公开版本
+```
+
+V1 允许：Markdown、纯文本、PDF、DOCX、PNG/JPEG；格式与大小使用白名单，禁止可执行文件、脚本、压缩包和任意 HTML 上传。Excel/CSV 可在后续以结构化数据文件接入，不能在尚无安全解析时假装支持。
+
+原始文件保持不可变并保存哈希；AI 或解析器生成的 Markdown 是独立可编辑派生文件。界面必须区分“原始证据”和“可编辑正文”，编辑派生文件不能改变原始来源。
+
+用户向自己的项目上传时写入当前私有草稿；用户向他人项目补充文件时，只能写入个人分支并通过 MR 合并。上传者、原作者、项目所有者和最终贡献者分别记录。
+
+解析失败不能创建假正文。项目工作台展示排队、上传、解析、待校对、完成和失败状态，并允许在幂等 Job 上重试。
+
+### 5.4 贡献署名
 
 公开文件顶部展示主要作者和贡献者集合；章节边缘显示最后贡献者；“贡献追踪”模式逐段显示：
 
@@ -178,6 +208,8 @@ V1 不使用 LangGraph、RabbitMQ、Temporal、Kubernetes、Neo4j、Yjs 或真�
 ```text
 /                              公开项目列表和全站搜索
 /login  /register              登录注册
+/new                           登录后创建空白项目
+/upload                        登录后上传资料并创建项目
 /u/[username]                  用户主页与贡献历史
 /[owner]/[project]             项目内容
 /[owner]/[project]/edit/[id]   草稿分支编辑
@@ -189,7 +221,7 @@ V1 不使用 LangGraph、RabbitMQ、Temporal、Kubernetes、Neo4j、Yjs 或真�
 
 ## 10. V1 必做与暂缓
 
-V1 必做：公开列表、搜索、用户与头像、项目/文件树、草稿、Commit、Diff、MR、Review、Merge、段落署名、游客本地草稿、匿名限额 AI、通知收件箱、许可证、举报和管理员治理。
+V1 必做：非空公开首页、搜索、用户与头像、登录上传/创建项目、项目/文件树、草稿、Commit、Diff、MR、Review、Merge、段落署名、游客本地草稿、匿名限额 AI、通知收件箱、许可证、举报和管理员治理。
 
 暂缓：实时多人编辑、Fork、研究悬赏、知识关系图、积分排行榜、私信、动态广场、组织空间、付费订阅和公开 API。
 
@@ -197,11 +229,38 @@ V1 必做：公开列表、搜索、用户与头像、项目/文件树、草稿�
 
 1. 保持 `research.webyrc.com` 现有个人工作台可用，在独立分支和新子域开发；
 2. 建立用户、项目、文件树、权限和 Auth.js；
-3. 建立不可变 Revision、Branch、Commit、MR、Review 和 Attribution；
-4. 接入 TipTap 草稿编辑、本地游客草稿与登录迁移；
-5. 改造检索为 PostgreSQL FTS + pgvector，并将 AI 输出改为 Patch；
-6. 完成公开列表、个人主页、审核收件箱和内容治理；
-7. 进行权限、冲突、匿名限流、移动端和公网安全 E2E；
-8. 内测通过后再切换公开流量。
+3. 接入 OSS 隔离上传、文件校验、解析 Job，并创建私有草稿项目；
+4. 建立不可变 Revision、Branch、Commit、MR、Review 和 Attribution；
+5. 接入 TipTap 草稿编辑、本地游客草稿与登录迁移；
+6. 改造检索为 PostgreSQL FTS + pgvector，并将 AI 输出改为 Patch；
+7. 迁移并核验首批官方公开样例，确保首页上线即有真实内容；
+8. 完成公开列表、个人主页、审核收件箱和内容治理；
+9. 进行权限、冲突、匿名限流、移动端和公网安全 E2E；
+10. 内测通过后再切换公开流量。
+
+## 12. 首发内容与首页统计
+
+平台不能以空列表上线。首发由平台官方账号发布一组经过来源核验的示例项目，优先迁移现有工作台中的研究主题：
+
+- 慧策掌上先机：行业、产品与竞争压力调研；
+- 十五五规划：章节化政策原文与行业关联；
+- 跨境 ERP / 电商 SaaS 竞品研究；
+- 开放知识平台自身的产品与架构设计记录。
+
+样例必须标记平台官方维护、来源、许可证和最后核验时间；不能把现有 Mock 文本伪装成公开事实。正式发布前重新导入有权公开的原始资料并逐条确认引用。
+
+首页项目卡片的统计口径：
+
+| 字段 | 口径 |
+| --- | --- |
+| 所有者 | 当前项目 owner 的头像、用户名和主页链接 |
+| 发布时间 | 第一个公开版本的 `published_at`；原始上传时间保留在项目历史中 |
+| 最新修改 | 主分支最近一次 Merge Commit 时间；个人草稿变化不更新公开卡片 |
+| 阅读人数 | 登录用户 ID 或签名访客按日去重；排除健康检查、静态资源和已知机器人 |
+| 贡献者人数 | 至少有一次修改被合并的不同用户数；审核者单独统计 |
+| 来源数 | 当前公开主版本仍有效的去重来源数 |
+| 待审核修改 | 当前 open Merge Request 数；只作为协作状态，不参与热度刷榜 |
+
+阅读和贡献统计异步聚合到 `project_stats`，首页不能为每张卡片实时扫描 Commit、Citation 和 View 明细。
 
 可信内测版预计需要约 7-12 个有效开发日；只有页面可点击的演示版可以更快，但不能据此声称多人协作、权限和合并机制已完成。
