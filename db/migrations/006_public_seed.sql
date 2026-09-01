@@ -38,14 +38,15 @@ UPDATE knowledge_branch
 SET head_commit_id = 'commit-huice-seed-v1', version = 1, updated_at = '2026-09-01T09:20:00Z'
 WHERE id = 'branch-huice-main';
 
-INSERT INTO knowledge_node (id, project_id, kind, name, created_by_user_id, created_at)
+-- 节点稳定身份不保存展示名称；名称和树位置由对应分支的 node_state 保存。
+INSERT INTO knowledge_node (id, project_id, kind, created_by_user_id, created_at)
 VALUES
-  ('folder-huice-report', 'project-huice', 'folder', '报告', 'u-yu', '2026-08-12T08:00:00Z'),
-  ('doc-huice-overview', 'project-huice', 'document', '研究结论', 'u-yu', '2026-08-12T08:00:00Z'),
-  ('doc-huice-evidence', 'project-huice', 'document', '证据范围与边界', 'u-yu', '2026-08-12T08:00:00Z'),
-  ('doc-huice-risk', 'project-huice', 'document', '仍待核验的问题', 'u-yu', '2026-08-12T08:00:00Z'),
-  ('source-huice-official', 'project-huice', 'source', '官方资料.pdf', 'u-yu', '2026-08-12T08:00:00Z'),
-  ('source-huice-interview', 'project-huice', 'source', '公开访谈摘录.md', 'u-yu', '2026-08-12T08:00:00Z')
+  ('folder-huice-report', 'project-huice', 'folder', 'u-yu', '2026-08-12T08:00:00Z'),
+  ('doc-huice-overview', 'project-huice', 'document', 'u-yu', '2026-08-12T08:00:00Z'),
+  ('doc-huice-evidence', 'project-huice', 'document', 'u-yu', '2026-08-12T08:00:00Z'),
+  ('doc-huice-risk', 'project-huice', 'document', 'u-yu', '2026-08-12T08:00:00Z'),
+  ('source-huice-official', 'project-huice', 'source', 'u-yu', '2026-08-12T08:00:00Z'),
+  ('source-huice-interview', 'project-huice', 'source', 'u-yu', '2026-08-12T08:00:00Z')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO knowledge_node_state (project_id, branch_id, node_id, parent_node_id, name, position, deleted_at, updated_at)
