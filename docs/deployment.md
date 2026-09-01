@@ -234,3 +234,22 @@ docker compose start app
 | AI 或搜索不可用 | Provider 配置、网络、响应日志 | 伪造搜索结果或让模型无来源回答 |
 
 当资料、文件或并发量超过这台实例的承载范围时，优先扩容磁盘与内存，再评估独立 worker；不要先引入 Redis、RabbitMQ、Kubernetes 或本地模型。
+
+## 8. 开放知识平台 OSS 预配置
+
+未来上传功能使用私有 Bucket `reaserch`，地域 `cn-shanghai`，公网 HTTPS Endpoint 为 `https://oss-cn-shanghai.aliyuncs.com`。Bucket 已开启阻止公共访问，ACL 保持私有；不得为了公开报告或头像改为公共读写。
+
+ECS 已绑定 `research-oss` RAM 角色。IMDSv2 元数据验证返回角色名和临时凭据 `Code=Success`，凭据自动过期轮换。服务器不需要、也不应保存 `OSS_ACCESS_KEY_ID` 或 `OSS_ACCESS_KEY_SECRET`。
+
+目标环境变量：
+
+```dotenv
+OSS_AUTH_MODE=ecs_ram_role
+OSS_RAM_ROLE_NAME=research-oss
+OSS_BUCKET=reaserch
+OSS_REGION=cn-shanghai
+OSS_ENDPOINT=https://oss-cn-shanghai.aliyuncs.com
+OSS_FORCE_HTTPS=true
+```
+
+以上配置目前只是资源准备：当前生产镜像尚无 OSS SDK、预签名上传、CORS、对象路径校验和解析 Worker。实现后必须验证 `PutObject/GetObject/DeleteObject` 权限边界、跨用户拒绝、签名过期、重复上传和跨地域延迟，才能把上传标记为完成。

@@ -80,6 +80,8 @@ ModerationReport / ModerationAction
 | `project_view_daily` | 按用户或签名访客去重后的每日阅读记录；不把静态资源、机器人和健康检查计入阅读量 |
 | `project_stats` | 异步聚合阅读数、已合并贡献者数、来源数、文件数和待审 MR 数，供首页高效读取 |
 
+用户头像字段 `avatar_asset_id` 允许为空。未上传头像时，前端以用户名首个可见字符和稳定哈希背景色生成默认头像，不创建 OSS 对象；上传头像后保存私有 Asset 引用，不能把临时签名 URL写入用户表。
+
 禁止只保存 `updated_by`。每个可归因正文块至少保存 `block_id`、`origin_commit_id` 和 `last_touch_commit_id`；合并后通过 Attribution 索引查询完整贡献历史。
 
 ## 5. 核心流程
@@ -202,6 +204,26 @@ PostgreSQL FTS + pgvector 持久化 Dense
 | 部署 | Caddy、Next.js、PostgreSQL、Worker；OSS/Redis 使用托管服务 |
 
 V1 不使用 LangGraph、RabbitMQ、Temporal、Kubernetes、Neo4j、Yjs 或真正 Git 仓库。
+
+### 8.1 已准备的 OSS 资源
+
+以下是已创建并绑定到目标 ECS 的非敏感基础设施信息：
+
+| 配置 | 值 |
+| --- | --- |
+| Bucket | `reaserch`（名称不可修改，代码必须按原拼写使用） |
+| 地域 | 华东 2（上海），Region ID `cn-shanghai` |
+| Endpoint | `https://oss-cn-shanghai.aliyuncs.com` |
+| 存储 | 标准存储、同城冗余 |
+| ACL | 私有，阻止公共访问保持开启 |
+| ECS RAM 角色 | `research-oss` |
+| 认证方式 | ECS Instance RAM Role / IMDSv2 临时凭据，不使用永久 AccessKey |
+
+服务器元数据已返回 `research-oss` 且临时凭据状态为 `Success`，证明角色绑定和自动轮换生效；这不等于应用已经完成 OSS `PutObject/GetObject`。在 SDK、上传 API、CORS 和端到端测试完成前，上传功能仍应显示未实现。
+
+当前 ECS 与 Bucket 不在同一地域，因此使用上海公网 HTTPS Endpoint，会产生跨地域时延和可能的公网流量费用。内测规模可以接受；流量增长后应评估在服务器同地域创建新 Bucket 或迁移计算资源，不能使用跨地域不可达的内网 Endpoint。
+
+Bucket Policy 保持为空。应用通过 RAM 角色获取临时身份，公开内容也不改变 OSS ACL：平台验证权限后返回短期签名 URL，或通过私有回源 CDN/应用媒体端点提供访问。数据库只保存 `object_key` 和 Asset ID，不保存签名 URL。
 
 ## 9. V1 页面与路由
 

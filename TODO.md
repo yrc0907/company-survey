@@ -29,6 +29,8 @@
 - [ ] 首页列表式卡片展示 owner、published_at、main 最新合并、去重阅读、已合并贡献者、来源与 open MR
 - [ ] 匿名 AI 签名 Cookie、Redis 限流、额度、成本和滥用防护
 - [ ] 阿里云 OSS 文件/头像存储、许可证、举报、下架和审计
+- [~] 私有 Bucket `reaserch` 已创建，ECS 已绑定 `research-oss` 且 IMDSv2 临时凭据状态为 `Success`；OSS SDK、实际对象读写、CORS 和权限 E2E 尚未实现
+- [ ] 默认头像使用用户名首字符和稳定背景色；用户头像完成 MIME/大小校验、EXIF 清理、WebP 派生和私有 OSS 受控访问
 - [ ] PostgreSQL FTS + pgvector + RRF + Reranker 持久化检索和后台索引 Worker
 - [ ] 权限拒绝、游客迁移、版本冲突、署名一致性、移动端、Reduced Motion 和公网 E2E
 
