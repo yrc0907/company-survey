@@ -67,9 +67,10 @@ CREATE TABLE IF NOT EXISTS source_chunk (
 );
 
 CREATE INDEX IF NOT EXISTS source_chunk_text_fts_idx ON source_chunk USING GIN (to_tsvector('simple', text));
--- 查询正文、上下文前缀和标题路径；旧索引保留以兼容已有部署，迁移 007 为存量库补齐该索引。
+-- 查询正文和上下文前缀；数组标题路径保留在应用内关键词层，避免非 IMMUTABLE
+-- 的数组格式化函数进入表达式索引。旧索引保留以兼容已有部署，迁移 007 为存量库补齐该索引。
 CREATE INDEX IF NOT EXISTS source_chunk_contextual_fts_idx ON source_chunk USING GIN (
-  to_tsvector('simple', coalesce(text, '') || ' ' || coalesce(contextual_prefix, '') || ' ' || coalesce(array_to_string(heading_path, ' '), ''))
+  to_tsvector('simple', coalesce(text, '') || ' ' || coalesce(contextual_prefix, ''))
 );
 CREATE INDEX IF NOT EXISTS source_report_state_idx ON source (report_id, state, captured_at DESC);
 

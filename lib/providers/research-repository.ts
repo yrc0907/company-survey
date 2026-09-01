@@ -261,13 +261,14 @@ export class PostgresResearchRepository implements ResearchRepository {
   /**
    * PostgreSQL `to_tsvector` + `plainto_tsquery` 词法检索。
    * SQL 先过滤 active 来源和报告范围，再计算排名；参数化查询避免把查询词当作 SQL 片段。
-   * contextual_prefix 与 heading_path 纳入表达式索引，使上下文检索能力不退化为只查正文。
+   * contextual_prefix 纳入表达式索引；heading_path 仍由应用层确定性关键词层补充，
+   * 避免 PostgreSQL 非 IMMUTABLE 数组格式化函数阻止索引创建。
    */
   public async searchSourceChunks(query: string, options: { reportId?: string; limit: number }): Promise<SourceChunkSearchResult[]> {
     const normalizedQuery = query.trim();
     if (!normalizedQuery) return [];
     const boundedLimit = Math.min(Math.max(Math.trunc(options.limit), 1), 80);
-    const vectorExpression = "to_tsvector('simple', coalesce(chunk.text, '') || ' ' || coalesce(chunk.contextual_prefix, '') || ' ' || coalesce(array_to_string(chunk.heading_path, ' '), ''))";
+    const vectorExpression = "to_tsvector('simple', coalesce(chunk.text, '') || ' ' || coalesce(chunk.contextual_prefix, ''))";
     const rows = options.reportId
       ? await this.sql.unsafe<DatabaseRow[]>(`SELECT chunk.id AS chunk_id, chunk.source_id AS source_id,
           ts_rank_cd(${vectorExpression}, plainto_tsquery('simple', $1)) AS lexical_score

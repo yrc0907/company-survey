@@ -31,7 +31,7 @@
 - 报告、来源、Chunk、引用、关系和版本是结构化记录；AI 只能在受限证据上下文中回答或提出建议。
 - 外部网页、PDF、图片和模型输出均是不可信输入，不能变成系统指令。
 - AI 不会直接写报告。用户确认的保存请求才会创建一个新的 `report_revision`。
-- `source_chunk_contextual_fts_idx` 为正文、上下文前缀和标题路径建立 GIN 索引；PostgreSQL 模式由仓储执行参数化 `to_tsvector`/`plainto_tsquery`，只过滤 `active` 来源和指定报告。FTS 查询异常或内存演示仓储未提供该能力时，SearchService 返回确定性关键词降级状态；它仍在最多 48 个 active Chunk 的明确边界内执行远程 Dense + RRF，不能声称已经有生产级持久化混合 RAG。
+- `source_chunk_contextual_fts_idx` 为正文和上下文前缀建立 GIN 索引；PostgreSQL 模式由仓储执行参数化 `to_tsvector`/`plainto_tsquery`，只过滤 `active` 来源和指定报告，标题路径由应用层关键词层补充。FTS 查询异常或内存演示仓储未提供该能力时，SearchService 返回确定性关键词降级状态；它仍在最多 48 个 active Chunk 的明确边界内执行远程 Dense + RRF，不能声称已经有生产级持久化混合 RAG。
 - BGE-M3 是本机 GPU 的可选离线 embedding worker。线上 2C2G 服务器不运行任何本地模型，只存向量、查询数据库并调用外部 API。
 
 ## 远程模型与检索配置
