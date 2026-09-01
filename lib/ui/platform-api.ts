@@ -89,7 +89,7 @@ export function adaptPublicProject(value: unknown): SeedProject | null {
     tags: Array.isArray(source.tags) ? source.tags.filter((item): item is string => typeof item === "string").slice(0, 20) : [],
     verification: source.verification === "verified" ? "verified" : "needs_verification",
     verificationNote: text(source.verificationNote, "公开项目的核验状态由维护者维护。"), owner,
-    publishedAt, updatedAt, uniqueReaders: number(source.uniqueReaders), starCount: number(source.starCount), contributorCount,
+    publishedAt, updatedAt, uniqueReaders: number(source.uniqueReaders), starCount: number(source.starCount), commentCount: typeof source.commentCount === "number" ? number(source.commentCount) : undefined, contributorCount,
     contributors: rawContributors.length ? rawContributors : [owner], sourceCount: number(source.sourceCount), openMergeRequests: number(source.openMergeRequests),
     version: Math.max(1, number(source.version, 1)), assistantReportId: text(source.assistantReportId) || undefined,
     files: files(source.files), sections: sections(source.sections, owner, updatedAt),

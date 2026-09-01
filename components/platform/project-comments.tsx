@@ -12,6 +12,7 @@ interface ProjectCommentsProps {
   projectId: string;
   authenticated: boolean;
   onRequireLogin: () => void;
+  onCountChange?: (count: number) => void;
 }
 
 interface CommentResponse { comments?: ProjectCommentSummary[]; comment?: ProjectCommentSummary; error?: string; }
@@ -49,7 +50,7 @@ function relativeDate(value: string): string {
 }
 
 /** 项目级楼中楼评论：读取可匿名，写入与删除由服务端 Session/权限决定。 */
-export function ProjectComments({ projectId, authenticated, onRequireLogin }: ProjectCommentsProps) {
+export function ProjectComments({ projectId, authenticated, onRequireLogin, onCountChange }: ProjectCommentsProps) {
   const [comments, setComments] = useState<ProjectCommentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -67,13 +68,15 @@ export function ProjectComments({ projectId, authenticated, onRequireLogin }: Pr
       const response = await fetch(`/api/platform/projects/${encodeURIComponent(projectId)}/comments`, { cache: "no-store", credentials: "same-origin" });
       const payload = await response.json().catch(() => ({})) as CommentResponse;
       if (!response.ok) throw new Error(payload.error ?? "评论暂时无法加载");
-      setComments(payload.comments ?? []);
+      const nextComments = payload.comments ?? [];
+      setComments(nextComments);
+      onCountChange?.(nextComments.filter((comment) => !comment.deleted).length);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "评论暂时无法加载");
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [onCountChange, projectId]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -96,6 +99,7 @@ export function ProjectComments({ projectId, authenticated, onRequireLogin }: Pr
       const payload = await response.json().catch(() => ({})) as CommentResponse;
       if (!response.ok || !payload.comment) throw new Error(payload.error ?? "评论发布失败");
       setComments((current) => [...current, payload.comment!]);
+      onCountChange?.(comments.filter((comment) => !comment.deleted).length + (payload.comment.deleted ? 0 : 1));
       setBody("");
       setReplyTo(null);
       setSubmitState("success");
@@ -116,6 +120,7 @@ export function ProjectComments({ projectId, authenticated, onRequireLogin }: Pr
       const payload = await response.json().catch(() => ({})) as CommentResponse;
       if (!response.ok || !payload.comment) throw new Error(payload.error ?? "评论删除失败");
       setComments((current) => current.map((item) => item.id === comment.id ? payload.comment! : item));
+      if (!comment.deleted && payload.comment.deleted) onCountChange?.(Math.max(0, comments.filter((item) => !item.deleted).length - 1));
     } catch (requestError) {
       setDeleteError(requestError instanceof Error ? requestError.message : "评论删除失败");
     } finally {

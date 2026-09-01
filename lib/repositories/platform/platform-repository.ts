@@ -40,6 +40,8 @@ export interface PublicProjectRecord {
   uniqueReaders: number;
   /** 当前公开版本被真实登录用户收藏的数量；匿名用户不能写入 Star。 */
   starCount: number;
+  /** 当前公开项目未软删除的项目级评论数量；Seed 未接入真实评论时保持 undefined。 */
+  commentCount?: number;
   contributorCount: number;
   sourceCount: number;
   openMergeRequests: number;
@@ -67,6 +69,20 @@ export interface PublicProjectListInput {
   sort?: "recommended" | "latest" | "read";
   limit?: number;
   offset?: number;
+}
+
+/** 全站公开搜索结果；正文只返回短摘要，详情仍需通过项目权限接口读取。 */
+export interface PublicSearchResult {
+  kind: "project" | "author" | "document";
+  id: string;
+  title: string;
+  description: string;
+  projectId: string | null;
+  projectSlug: string | null;
+  projectTitle: string | null;
+  authorUsername: string | null;
+  authorDisplayName: string | null;
+  score: number;
 }
 
 /** 公开阅读上报输入；哈希由服务层生成，Repository 不接触原始 Cookie/设备标识。 */
@@ -138,6 +154,7 @@ export interface PlatformRepository {
   getBranchAccess(projectId: string, branchId: string): Promise<KnowledgeBranchAccess | null>;
   getNodeState(projectId: string, branchId: string, nodeId: string): Promise<KnowledgeNodeState | null>;
   listPublicProjects(input: PublicProjectListInput): Promise<PublicProjectRecord[]>;
+  searchPublicContent(query: string, limit: number): Promise<PublicSearchResult[]>;
   getPublicProject(projectIdOrSlug: string): Promise<PublicProjectRecord | null>;
   recordPublicProjectView(input: RecordPublicProjectViewInput): Promise<PublicProjectViewResult | null>;
   getPublicProjectStarState(projectIdOrSlug: string, userId: string | null): Promise<PublicProjectStarState | null>;

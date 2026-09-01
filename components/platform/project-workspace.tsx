@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, BookOpen, Bot, CheckCircle2, ChevronRight, CircleAlert, Eye, Files, GitBranch, GitMerge, GitPullRequest, History, Loader2, LogIn, PanelLeftClose, Search, Share2, Star, Users } from "lucide-react";
+import { ArrowLeft, BookOpen, Bot, CheckCircle2, ChevronRight, CircleAlert, Eye, Files, GitBranch, GitMerge, GitPullRequest, History, Loader2, LogIn, MessageCircle, PanelLeftClose, Search, Share2, Star, Users } from "lucide-react";
 import { getSession } from "next-auth/react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -38,7 +38,7 @@ function findNode(nodes: SeedFileNode[], nodeId: string): SeedFileNode | undefin
   return undefined;
 }
 
-function ProjectDocument({ project, viewCount, starCount, onActivity }: { project: SeedProject; viewCount: number; starCount: number; onActivity?: (message: string) => void }) {
+function ProjectDocument({ project, viewCount, starCount, commentCount, onActivity }: { project: SeedProject; viewCount: number; starCount: number; commentCount?: number; onActivity?: (message: string) => void }) {
   const sections = project.sections.length ? project.sections : [{
     id: "seed-boundary",
     heading: "Seed 展示边界",
@@ -56,7 +56,7 @@ function ProjectDocument({ project, viewCount, starCount, onActivity }: { projec
         <div className="document-status-line"><span className={project.verification === "verified" ? "verification verification--verified" : "verification verification--pending"}>{project.verification === "verified" ? "Seed 已核验" : "Seed 待核验"}</span><span>公开 · main@v{project.version}</span></div>
         <h1>{project.title}</h1>
         <p>{project.summary}</p>
-        <div className="document-byline"><UserAvatar name={project.owner.displayName} size="sm" /><span>由 <strong>{project.owner.displayName}</strong> 维护</span><span>·</span><span>{project.contributorCount ?? project.contributors.length} 位贡献者</span><span>·</span><span>{project.sourceCount} 个来源</span><span>·</span><span><Eye size={13} aria-hidden="true" /> {viewCount} 位读者</span><span>·</span><span><Star size={13} aria-hidden="true" /> {starCount} Star</span></div>
+        <div className="document-byline"><UserAvatar name={project.owner.displayName} size="sm" /><span>由 <strong>{project.owner.displayName}</strong> 维护</span><span>·</span><span>{project.contributorCount ?? project.contributors.length} 位贡献者</span><span>·</span><span>{project.sourceCount} 个来源</span><span>·</span><span><Eye size={13} aria-hidden="true" /> {viewCount} 位读者</span><span>·</span><span><Star size={13} aria-hidden="true" /> {starCount} Star</span>{commentCount !== undefined ? <><span>·</span><span><MessageCircle size={13} aria-hidden="true" /> {commentCount} 评论</span></> : null}</div>
       </header>
       <nav className="document-toc" aria-label="本文目录"><span>本文目录</span>{sections.map((section) => <a key={section.id} href={`#${section.id}`}>{section.heading}</a>)}</nav>
       <div className="document-body">
@@ -96,6 +96,7 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
   const [viewState, setViewState] = useState<"loading" | "ready" | "ignored" | "error">("loading");
   const [starred, setStarred] = useState(false);
   const [starCount, setStarCount] = useState(project.starCount ?? 0);
+  const [commentCount, setCommentCount] = useState<number | undefined>(project.commentCount);
   const [starState, setStarState] = useState<"loading" | "ready" | "saving" | "error">("loading");
   const activeNode = useMemo(() => findNode(project.files, activeNodeId), [activeNodeId, project.files]);
 
@@ -103,7 +104,8 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
     const firstDocument = project.files.flatMap((node) => node.children ?? [node]).find((node) => node.kind !== "folder");
     setActiveNodeId(firstDocument?.id ?? project.files[0]?.id ?? "");
     setTreeQuery("");
-  }, [project.id, project.files]);
+    setCommentCount(project.commentCount);
+  }, [project.id, project.files, project.commentCount]);
 
   useEffect(() => {
     let cancelled = false;
@@ -312,7 +314,7 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
       </aside>
 
       {treeCollapsed ? <Button className="tree-reopen" size="icon" variant="outline" onClick={() => setTreeCollapsed(false)} aria-label="展开文件树"><ChevronRight size={17} /></Button> : null}
-      <main className="document-pane">{activeTab === "content" ? <><ProjectDocument project={project} viewCount={viewCount} starCount={starCount} onActivity={setActivity} /><ProjectComments projectId={project.id} authenticated={authenticated} onRequireLogin={() => onRequireLogin("login")} /></> : <CollaborationPanel projectId={project.id} authenticated={authenticated} canReview={canReview} onRequireLogin={() => onRequireLogin("login")} refreshToken={collaborationRefresh} />}{viewState === "loading" || starState === "loading" ? <div className="workspace-activity" role="status" aria-live="polite" aria-busy="true"><span>{viewState === "loading" ? "正在记录阅读…" : "正在读取 Star 状态…"}</span></div> : null}{viewState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>阅读统计暂不可用，正文仍可继续浏览。</span></div> : null}{starState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>Star 服务暂不可用，正文仍可继续浏览。</span></div> : null}{viewState === "ready" ? <div className="workspace-activity" role="status" aria-live="polite"><span>阅读已记录 · 去重读者 {viewCount}</span><button type="button" onClick={() => setViewState("ignored")}>关闭</button></div> : null}{collaborationError ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{collaborationError}</span><button type="button" onClick={() => setCollaborationError("")}>关闭</button></div> : null}{dropNotice ? <div className="workspace-activity" role="status"><span>{dropNotice}</span><button type="button" onClick={() => setDropNotice("")}>关闭</button></div> : null}{activity ? <div className="workspace-activity" role="status"><span>{activity}</span><button type="button" onClick={() => setActivity("")}>关闭</button></div> : null}</main>
+      <main className="document-pane">{activeTab === "content" ? <><ProjectDocument project={project} viewCount={viewCount} starCount={starCount} commentCount={commentCount} onActivity={setActivity} /><ProjectComments projectId={project.id} authenticated={authenticated} onRequireLogin={() => onRequireLogin("login")} onCountChange={setCommentCount} /></> : <CollaborationPanel projectId={project.id} authenticated={authenticated} canReview={canReview} onRequireLogin={() => onRequireLogin("login")} refreshToken={collaborationRefresh} />}{viewState === "loading" || starState === "loading" ? <div className="workspace-activity" role="status" aria-live="polite" aria-busy="true"><span>{viewState === "loading" ? "正在记录阅读…" : "正在读取 Star 状态…"}</span></div> : null}{viewState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>阅读统计暂不可用，正文仍可继续浏览。</span></div> : null}{starState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>Star 服务暂不可用，正文仍可继续浏览。</span></div> : null}{viewState === "ready" ? <div className="workspace-activity" role="status" aria-live="polite"><span>阅读已记录 · 去重读者 {viewCount}</span><button type="button" onClick={() => setViewState("ignored")}>关闭</button></div> : null}{collaborationError ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{collaborationError}</span><button type="button" onClick={() => setCollaborationError("")}>关闭</button></div> : null}{dropNotice ? <div className="workspace-activity" role="status"><span>{dropNotice}</span><button type="button" onClick={() => setDropNotice("")}>关闭</button></div> : null}{activity ? <div className="workspace-activity" role="status"><span>{activity}</span><button type="button" onClick={() => setActivity("")}>关闭</button></div> : null}</main>
       <AssistantPanel project={project} activeFileName={activeNode?.name ?? "研究结论"} activeFileId={activeNode?.id} />
     </div>
   );

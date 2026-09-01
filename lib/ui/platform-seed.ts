@@ -41,6 +41,8 @@ export interface SeedProject {
   uniqueReaders: number;
   /** 首发 Seed 不伪造社区行为；数据库项目会返回真实 Star 聚合。 */
   starCount?: number;
+  /** 数据库项目返回真实未删除评论数；Seed 不填充虚构评论统计。 */
+  commentCount?: number;
   contributors: SeedUser[];
   /** 数据库摘要可能只有聚合计数，展示时优先使用该服务端计数。 */
   contributorCount?: number;

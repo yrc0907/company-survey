@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpenText, ChevronDown, Filter, LogIn, Plus, Search, Sparkles, Upload } from "lucide-react";
+import { BookOpenText, ChevronDown, FileText, Filter, Loader2, LogIn, Plus, Search, Sparkles, Upload, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ProjectCard } from "@/components/platform/project-card";
@@ -9,6 +9,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { matchesProjectSearch } from "@/lib/ui/platform-format";
 import type { ProjectCategory, SeedProject } from "@/lib/ui/platform-seed";
+
+interface SearchResult {
+  kind: "project" | "author" | "document";
+  id: string;
+  title: string;
+  description: string;
+  projectId: string | null;
+  projectSlug: string | null;
+  projectTitle: string | null;
+  authorUsername: string | null;
+  authorDisplayName: string | null;
+}
 
 interface PublicHomeProps {
   projects: SeedProject[];
@@ -26,6 +38,8 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<(typeof categories)[number]>("全部");
   const [sort, setSort] = useState<"recommended" | "latest" | "read">("recommended");
+  const [globalResults, setGlobalResults] = useState<SearchResult[]>([]);
+  const [globalSearchState, setGlobalSearchState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -38,6 +52,36 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
     window.addEventListener("keydown", focusSearch);
     return () => window.removeEventListener("keydown", focusSearch);
   }, []);
+
+  useEffect(() => {
+    const normalized = query.trim();
+    if (normalized.length < 2) {
+      setGlobalResults([]);
+      setGlobalSearchState("idle");
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setGlobalSearchState("loading");
+      try {
+        const response = await fetch(`/api/platform/search?q=${encodeURIComponent(normalized)}&limit=24`, { headers: { accept: "application/json" }, cache: "no-store", signal: controller.signal });
+        const payload = await response.json() as { results?: unknown[]; error?: string };
+        if (!response.ok) throw new Error(payload.error || "全站搜索失败");
+        if (!controller.signal.aborted) {
+          const next = Array.isArray(payload.results) ? payload.results.filter((item): item is SearchResult => {
+            if (!item || typeof item !== "object") return false;
+            const value = item as Partial<SearchResult>;
+            return (value.kind === "project" || value.kind === "author" || value.kind === "document") && typeof value.id === "string" && typeof value.title === "string";
+          }) : [];
+          setGlobalResults(next);
+          setGlobalSearchState("ready");
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) setGlobalSearchState(error instanceof Error && error.name === "AbortError" ? "idle" : "error");
+      }
+    }, 220);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [query]);
 
   const visibleProjects = useMemo(() => {
     const filtered = projects.filter((project) => {
@@ -67,6 +111,23 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
     document.querySelector(".project-feed")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function openSearchResult(result: SearchResult): void {
+    if (result.kind === "author" && result.authorUsername) {
+      window.location.assign(`/u/${encodeURIComponent(result.authorUsername)}`);
+      return;
+    }
+    if (result.projectId) {
+      onOpenProject(result.projectId);
+      setGlobalResults([]);
+    }
+  }
+
+  function resultIcon(kind: SearchResult["kind"]): JSX.Element {
+    if (kind === "author") return <UserRound size={15} aria-hidden="true" />;
+    if (kind === "document") return <FileText size={15} aria-hidden="true" />;
+    return <BookOpenText size={15} aria-hidden="true" />;
+  }
+
   return (
     <div className="public-home">
       <header className="public-header">
@@ -79,6 +140,16 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
           <input ref={searchInputRef} id="global-search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目、报告、公司、结论或来源" />
           <kbd>Ctrl K</kbd>
         </label>
+        {query.trim().length >= 2 ? <div className="global-search-results" role="region" aria-label="全站搜索结果" aria-live="polite">
+          {globalSearchState === "loading" ? <div className="global-search-state"><Loader2 size={15} className="animate-spin" aria-hidden="true" />正在搜索公开内容…</div> : null}
+          {globalSearchState === "error" ? <div className="global-search-state global-search-state--error">全站搜索暂时不可用，仍可筛选已加载项目。</div> : null}
+          {globalSearchState === "ready" && globalResults.length === 0 ? <div className="global-search-state">没有匹配的公开内容</div> : null}
+          {globalResults.length > 0 ? <div className="global-search-result-list">{globalResults.map((result) => <button type="button" key={`${result.kind}:${result.id}`} className="global-search-result" onClick={() => openSearchResult(result)}>
+            <span className="global-search-result__icon">{resultIcon(result.kind)}</span>
+            <span className="global-search-result__body"><strong>{result.title}</strong><small>{result.kind === "author" ? result.description : result.projectTitle ? `${result.projectTitle} · ${result.description}` : result.description}</small></span>
+            <span className="global-search-result__kind">{result.kind === "author" ? "作者" : result.kind === "document" ? "文档" : "项目"}</span>
+          </button>)}</div> : null}
+        </div> : null}
         <nav className="public-nav" aria-label="全站导航">
           <Button variant="ghost" onClick={resetExplore}>探索</Button>
           <DropdownMenu>

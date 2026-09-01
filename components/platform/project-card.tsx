@@ -1,4 +1,4 @@
-import { ArrowUpRight, BookOpen, Clock3, GitPullRequest, Library, Star, Users } from "lucide-react";
+import { ArrowUpRight, BookOpen, Clock3, GitPullRequest, Library, MessageCircle, Star, Users } from "lucide-react";
 
 import { UserAvatar } from "@/components/ui/avatar";
 import type { SeedProject } from "@/lib/ui/platform-seed";
@@ -48,6 +48,7 @@ export function ProjectCard({ project, onOpen, onSearch, onOpenOwner }: ProjectC
         <div className="project-metrics" aria-label="项目统计">
           <span title="按用户或签名访客逐日去重"><BookOpen size={14} aria-hidden="true" />{formatCompactCount(project.uniqueReaders)} 阅读</span>
           <span><Star size={14} aria-hidden="true" />{formatCompactCount(project.starCount ?? 0)} Star</span>
+          {project.commentCount !== undefined ? <span title="未删除的项目级评论"><MessageCircle size={14} aria-hidden="true" />{formatCompactCount(project.commentCount)} 评论</span> : null}
           <span><Users size={14} aria-hidden="true" />{project.contributorCount ?? project.contributors.length} 贡献者</span>
           <span><Library size={14} aria-hidden="true" />{project.sourceCount} 来源</span>
           <span><GitPullRequest size={14} aria-hidden="true" />{project.openMergeRequests} 待审核</span>

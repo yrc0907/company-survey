@@ -25,6 +25,14 @@ try {
     await page.getByRole("button", { name: /打开慧策/ }).waitFor();
   });
 
+  await check("E2E-HOME-003", async () => {
+    const response = await page.request.get(`${baseUrl}/api/platform/search?q=${encodeURIComponent("慧策")}&limit=20`, { headers: { accept: "application/json" } });
+    assert.equal(response.status(), 200);
+    const body = await response.json();
+    assert.ok(Array.isArray(body.results));
+    assert.ok(body.results.some((result) => result.kind === "project" && String(result.title).includes("慧策")));
+  });
+
   await check("E2E-HOME-002", async () => {
     await page.getByRole("button", { name: "# 十五五规划 12" }).click();
     assert.equal(await page.getByRole("textbox", { name: "Ctrl K" }).inputValue(), "十五五规划");

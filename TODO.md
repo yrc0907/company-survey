@@ -22,21 +22,21 @@
 - [~] Auth.js 邮箱/密码注册、登录和 Session/RBAC 校验已实现；GitHub OAuth、邮箱验证与找回密码待实现
 - [~] Caddy 已只保护旧版 `/api/research/*`，公开读与平台写接口由应用会话/权限处理；完整公网身份治理仍待补齐
 - [ ] 建立用户、项目、成员、文件树、Branch、Commit、Revision、MR、Review、Attribution schema 与迁移
-- [~] 建立 `uploaded_asset`、`ingestion_job`、`project_view_daily`、`project_stats` schema 与聚合任务；公开阅读统计已通过 `project_reader` + `project_view_daily` + `project_stats` 同步幂等聚合，评论/点赞/关注统计仍待实现
+- [~] 建立 `uploaded_asset`、`ingestion_job`、`project_view_daily`、`project_stats` schema 与聚合任务；公开阅读统计已通过 `project_reader` + `project_view_daily` + `project_stats` 同步幂等聚合，项目评论数已由 `project_comment` 实时聚合，点赞/关注统计仍待实现
 - [ ] 接入 TipTap，正文 Block 使用稳定 ID，支持 Markdown 导入导出
 - [ ] 登录后创建空白项目，或通过 OSS 隔离上传创建私有草稿项目并进入三栏工作台
-- [~] Markdown/TXT/PDF/DOCX/PNG/JPEG 白名单、MIME magic、大小、哈希、重复检测、解析状态和幂等重试；解析 Worker 已支持文本/原生 PDF/DOCX，图片与扫描 PDF 进入 `needs_review`，source/source_chunk 建立仍待接入
+- [~] Markdown/TXT/PDF/DOCX/PNG/JPEG 白名单、MIME magic、大小、哈希、重复检测、解析状态和幂等重试；解析 Worker 已支持文本/原生 PDF/DOCX，图片与扫描 PDF 进入 `needs_review`；ready 文本可通过受权限约束的索引接口写入 source/source_chunk
 - [ ] 原始上传文件不可变，可编辑派生正文与原始证据分离；向他人项目上传只能进入个人分支/MR
 - [ ] 游客 IndexedDB 草稿、自动保存、登录迁移和过期 base revision 恢复
 - [~] Diff、三方合并、冲突处理、审核和单事务合并；项目级楼中楼评论已完成，段落锚点评论仍待实现
 - [ ] 段落级贡献追踪、用户贡献历史和 AI 辅助标记
-- [ ] 公开首页、全站搜索、项目详情、编辑、审核、用户主页、收件箱和管理员页面
+- [~] 公开首页、全站搜索（项目/作者/公开文档 API）、项目详情、编辑、审核、用户主页、收件箱和管理员页面；全站搜索 UI 结果面板与收件箱/管理员页面仍待补齐
 - [ ] 迁移并核验慧策、十五五规划、跨境 ERP 等官方首发项目，确保正式首页非空
 - [~] 首页列表式卡片展示 owner、published_at、main 最新合并、去重阅读、已合并贡献者、来源与 open MR；去重阅读已由真实 PostgreSQL 统计提供，作者主页、关注与项目级评论已完成，段落评论/点赞仍待实现
-- [~] 项目 Star 已完成真实用户唯一关系、GET/POST/DELETE API 和详情页反馈；作者主页、关注关系与 GET/POST/DELETE API 已完成，评论与其他社交功能仍待实现
+- [~] 项目 Star 已完成真实用户唯一关系、GET/POST/DELETE API 和详情页反馈；作者主页、关注关系与 GET/POST/DELETE API 已完成，项目评论已完成，段落评论/评论点赞等社交功能仍待实现
 - [ ] 匿名 AI 签名 Cookie、Redis 限流、额度、成本和滥用防护
 - [ ] 阿里云 OSS 文件/头像存储、许可证、举报、下架和审计
-- [~] 私有 Bucket `reaserch` 已创建，ECS 已绑定 `research-oss` 且 IMDSv2 临时凭据状态为 `Success`；OSS SDK、预签名读写、隔离对象删除、所有者边界和 ECS 临时对象 Put/Head/Delete 已验证，目标 Bucket CORS、浏览器直传权限 E2E 与 source/source_chunk 产物索引仍待接入；解析 Worker 已实现租约、重试和明确待校对降级
+- [~] 私有 Bucket `reaserch` 已创建，ECS 已绑定 `research-oss` 且 IMDSv2 临时凭据状态为 `Success`；OSS SDK、预签名读写、隔离对象删除、所有者边界和 ECS 临时对象 Put/Head/Delete 已验证，目标 Bucket CORS、浏览器直传权限 E2E 仍待接入；解析 Worker 已实现租约、重试、明确待校对降级和 ready 文本的 source/source_chunk 索引接口
 - [ ] 默认头像使用用户名首字符和稳定背景色；用户头像完成 MIME/大小校验、EXIF 清理、WebP 派生和私有 OSS 受控访问
 - [ ] PostgreSQL FTS + pgvector + RRF + Reranker 持久化检索和后台索引 Worker
 - [ ] 权限拒绝、游客迁移、版本冲突、署名一致性、移动端、Reduced Motion 和公网 E2E

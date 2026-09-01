@@ -3,7 +3,7 @@ import postgres, { type Sql, type TransactionSql } from "postgres";
 import { AccountConflictError } from "@/lib/domain/platform/errors";
 import { ValidationError } from "@/lib/domain/errors";
 import type { AuthorFollowState, KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PlatformRole, PublicAuthorRecord } from "@/lib/domain/platform";
-import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicAuthorInput, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
+import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicAuthorInput, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, PublicSearchResult, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
 
 type DatabaseRow = Record<string, unknown>;
 type Queryable = Sql | TransactionSql;
@@ -46,7 +46,7 @@ function mapPublicProject(row: DatabaseRow): PublicProjectRecord {
     visibility: projectVisibility(row.visibility), status: projectStatus(row.status),
     owner: { id: String(row.owner_id), username: String(row.owner_username), displayName: String(row.owner_display_name), avatarAssetId: row.owner_avatar ? String(row.owner_avatar) : null },
     publishedAt: row.published_at ? iso(row.published_at) : null, updatedAt: iso(row.updated_at),
-    uniqueReaders: Number(row.unique_readers ?? 0), starCount: Number(row.star_count ?? 0), contributorCount: Number(row.contributor_count ?? 0),
+    uniqueReaders: Number(row.unique_readers ?? 0), starCount: Number(row.star_count ?? 0), commentCount: Number(row.comment_count ?? 0), contributorCount: Number(row.contributor_count ?? 0),
     sourceCount: Number(row.source_count ?? 0), openMergeRequests: Number(row.open_merge_requests ?? 0),
     version: Math.max(1, Number(row.version ?? 1)), license: String(row.license ?? "all-rights-reserved"),
     category: row.category === "企业" || row.category === "政策" || row.category === "行业" || row.category === "技术" ? row.category : "行业",
@@ -63,6 +63,7 @@ const PUBLIC_PROJECT_SELECT = `
          pr.avatar_asset_id AS owner_avatar,
          COALESCE((SELECT ps.unique_readers FROM project_stats ps WHERE ps.project_id = p.id), 0)::bigint AS unique_readers,
          (SELECT COUNT(*) FROM project_star ps WHERE ps.project_id = p.id AND ps.active = TRUE)::bigint AS star_count,
+         (SELECT COUNT(*) FROM project_comment pc WHERE pc.project_id = p.id AND pc.deleted_at IS NULL)::bigint AS comment_count,
          (1::bigint + (SELECT COUNT(DISTINCT ca.contributor_user_id) FROM content_attribution ca
             WHERE ca.project_id = p.id AND ca.active = TRUE AND ca.contributor_user_id <> p.owner_user_id)) AS contributor_count,
          (SELECT COUNT(*) FROM knowledge_node source_node
@@ -208,6 +209,75 @@ export class PostgresPlatformRepository implements PlatformRepository {
         AND ($1 = '' OR p.title ILIKE '%' || $1 || '%' OR p.summary ILIKE '%' || $1 || '%' OR p.slug ILIKE '%' || $1 || '%' OR pr.username ILIKE '%' || $1 || '%')
       ORDER BY ${order} LIMIT $2 OFFSET $3`, [query, limit, offset]);
     return rows.map(mapPublicProject);
+  }
+
+  /**
+   * 全站公开检索：项目、作者和保护分支文档统一走参数化 FTS，并以 ILIKE 作为中文分词不足时的兜底。
+   * CTE 的每一支都先限定 public/published，文档只取默认保护分支的最新版本，避免搜索接口穿透草稿。
+   */
+  public async searchPublicContent(query: string, limit: number): Promise<PublicSearchResult[]> {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery) return [];
+    const boundedLimit = Math.min(100, Math.max(1, Math.trunc(limit)));
+    const rows = await this.sql.unsafe<DatabaseRow[]>(`
+      WITH query_input AS (SELECT plainto_tsquery('simple', $1) AS tsq),
+      project_hits AS (
+        SELECT 'project'::text AS kind, p.id, p.title,
+          p.summary AS description, p.id AS project_id, p.slug AS project_slug,
+          p.title AS project_title, pr.username AS author_username,
+          pr.display_name AS author_display_name,
+          ts_rank_cd(to_tsvector('simple', coalesce(p.title, '') || ' ' || coalesce(p.summary, '') || ' ' || coalesce(p.slug, '') || ' ' || coalesce(pr.username, '')), q.tsq) AS score
+        FROM knowledge_project p
+        JOIN platform_profile pr ON pr.user_id = p.owner_user_id
+        CROSS JOIN query_input q
+        WHERE p.visibility = 'public' AND p.status = 'published'
+          AND (to_tsvector('simple', coalesce(p.title, '') || ' ' || coalesce(p.summary, '') || ' ' || coalesce(p.slug, '') || ' ' || coalesce(pr.username, '')) @@ q.tsq
+            OR p.title ILIKE '%' || $1 || '%' OR p.summary ILIKE '%' || $1 || '%' OR p.slug ILIKE '%' || $1 || '%' OR pr.username ILIKE '%' || $1 || '%')
+      ),
+      author_hits AS (
+        SELECT 'author'::text AS kind, u.id, pr.display_name AS title,
+          '@' || pr.username AS description, NULL::text AS project_id, NULL::text AS project_slug,
+          NULL::text AS project_title, pr.username AS author_username,
+          pr.display_name AS author_display_name,
+          ts_rank_cd(to_tsvector('simple', coalesce(pr.username, '') || ' ' || coalesce(pr.display_name, '') || ' ' || coalesce(pr.bio, '')), q.tsq) AS score
+        FROM platform_user u
+        JOIN platform_profile pr ON pr.user_id = u.id
+        CROSS JOIN query_input q
+        WHERE u.status = 'active'
+          AND EXISTS (SELECT 1 FROM knowledge_project p WHERE p.owner_user_id = u.id AND p.visibility = 'public' AND p.status = 'published')
+          AND (to_tsvector('simple', coalesce(pr.username, '') || ' ' || coalesce(pr.display_name, '') || ' ' || coalesce(pr.bio, '')) @@ q.tsq
+            OR pr.username ILIKE '%' || $1 || '%' OR pr.display_name ILIKE '%' || $1 || '%' OR pr.bio ILIKE '%' || $1 || '%')
+      ),
+      document_hits AS (
+        SELECT 'document'::text AS kind, ns.node_id AS id, ns.name AS title,
+          left(coalesce(dr.content_text, ''), 240) AS description,
+          p.id AS project_id, p.slug AS project_slug, p.title AS project_title,
+          pr.username AS author_username, pr.display_name AS author_display_name,
+          ts_rank_cd(to_tsvector('simple', coalesce(ns.name, '') || ' ' || coalesce(dr.content_text, '')), q.tsq) AS score
+        FROM knowledge_node_state ns
+        JOIN knowledge_node n ON n.id = ns.node_id AND n.project_id = ns.project_id
+        JOIN knowledge_project p ON p.id = ns.project_id AND p.visibility = 'public' AND p.status = 'published'
+        JOIN platform_profile pr ON pr.user_id = p.owner_user_id
+        JOIN knowledge_branch b ON b.id = ns.branch_id AND b.project_id = p.id AND b.is_protected = TRUE AND b.name = p.default_branch_name
+        JOIN LATERAL (SELECT r.content_text FROM document_revision r
+          WHERE r.project_id = p.id AND r.node_id = ns.node_id AND r.branch_id = b.id
+          ORDER BY r.created_at DESC LIMIT 1) dr ON TRUE
+        CROSS JOIN query_input q
+        WHERE ns.deleted_at IS NULL AND n.kind IN ('document', 'markdown')
+          AND (to_tsvector('simple', coalesce(ns.name, '') || ' ' || coalesce(dr.content_text, '')) @@ q.tsq
+            OR ns.name ILIKE '%' || $1 || '%' OR dr.content_text ILIKE '%' || $1 || '%')
+      )
+      SELECT kind, id, title, description, project_id, project_slug, project_title,
+        author_username, author_display_name, score
+      FROM (SELECT * FROM project_hits UNION ALL SELECT * FROM author_hits UNION ALL SELECT * FROM document_hits) hits
+      ORDER BY score DESC NULLS LAST, title ASC, id ASC
+      LIMIT $2`, [normalizedQuery, boundedLimit]);
+    return rows.map((row) => ({
+      kind: row.kind as PublicSearchResult["kind"], id: String(row.id), title: String(row.title), description: String(row.description ?? ""),
+      projectId: row.project_id ? String(row.project_id) : null, projectSlug: row.project_slug ? String(row.project_slug) : null,
+      projectTitle: row.project_title ? String(row.project_title) : null, authorUsername: row.author_username ? String(row.author_username) : null,
+      authorDisplayName: row.author_display_name ? String(row.author_display_name) : null, score: Number(row.score) || 0,
+    }));
   }
 
   /** 公开详情同时返回 main 分支的非删除文件树和最新文档正文片段。 */
@@ -397,7 +467,7 @@ export class PostgresPlatformRepository implements PlatformRepository {
           VALUES (${crypto.randomUUID()}, ${input.id}, 'main', NULL, TRUE, ${input.createdAt}, ${input.createdAt})`;
         const ownerRows = await tx.unsafe<DatabaseRow[]>(`SELECT p.id, p.slug, p.title, p.summary, p.visibility, p.status, p.license, p.published_at, p.updated_at,
           u.id AS owner_id, pr.username AS owner_username, pr.display_name AS owner_display_name, pr.avatar_asset_id AS owner_avatar,
-          0::bigint AS unique_readers, 0::bigint AS star_count, 1::bigint AS contributor_count, 0::bigint AS source_count, 0::bigint AS open_merge_requests, 0::bigint AS version
+          0::bigint AS unique_readers, 0::bigint AS star_count, 0::bigint AS comment_count, 1::bigint AS contributor_count, 0::bigint AS source_count, 0::bigint AS open_merge_requests, 0::bigint AS version
           FROM knowledge_project p JOIN platform_user u ON u.id = p.owner_user_id JOIN platform_profile pr ON pr.user_id = u.id WHERE p.id = $1 LIMIT 1`, [input.id]);
         const row = ownerRows[0];
         if (!row) throw new Error("项目创建后读取失败");

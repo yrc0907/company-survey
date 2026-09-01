@@ -40,6 +40,9 @@ async function run(): Promise<void> {
   const publicProject = { ...created.data, visibility: "public" as const, status: "published" as const, publishedAt: created.data.updatedAt };
   repository.seedPublicProject(publicProject);
   const projectService = new PublicProjectService(repository);
+  const countedProject = { ...publicProject, commentCount: 3 };
+  repository.seedPublicProject(countedProject);
+  assert.equal((await projectService.get(countedProject.id)).data?.commentCount, 3, "真实评论聚合必须通过公开项目投影传递");
   const firstView = await projectService.recordView({ projectIdOrSlug: publicProject.id, visitorId: "visitor-a", viewedOn: "2026-09-02" });
   const repeatedView = await projectService.recordView({ projectIdOrSlug: publicProject.id, visitorId: "visitor-a", viewedOn: "2026-09-02" });
   const secondVisitor = await projectService.recordView({ projectIdOrSlug: publicProject.slug, visitorId: "visitor-b", viewedOn: "2026-09-02" });

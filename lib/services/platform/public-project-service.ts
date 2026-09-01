@@ -41,7 +41,7 @@ function fromSeed(project: SeedProject): PublicProjectRecord {
   return {
     id: project.id, slug: project.slug, title: project.title, summary: project.summary, visibility: "public", status: "published",
     owner: { id: project.owner.id, username: project.owner.username, displayName: project.owner.displayName, avatarAssetId: null },
-    publishedAt: project.publishedAt, updatedAt: project.updatedAt, uniqueReaders: project.uniqueReaders, starCount: project.starCount ?? 0,
+    publishedAt: project.publishedAt, updatedAt: project.updatedAt, uniqueReaders: project.uniqueReaders, starCount: project.starCount ?? 0, commentCount: project.commentCount,
     contributorCount: project.contributors.length, sourceCount: project.sourceCount, openMergeRequests: project.openMergeRequests,
     version: project.version, license: "cc-by-4.0", category: project.category, tags: [...project.tags], verification: project.verification,
     verificationNote: project.verificationNote, assistantReportId: project.assistantReportId, files: flattenSeedFiles(project.files),

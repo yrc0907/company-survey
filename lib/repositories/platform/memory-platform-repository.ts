@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { AccountConflictError } from "@/lib/domain/platform/errors";
 import { ValidationError } from "@/lib/domain/errors";
 import type { AuthorFollowState, KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PublicAuthorRecord } from "@/lib/domain/platform";
-import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicAuthorInput, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
+import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicAuthorInput, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, PublicSearchResult, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
 
 /** 契约测试使用的内存仓储；复制所有返回值，避免测试误改内部事实。 */
 export class MemoryPlatformRepository implements PlatformRepository {
@@ -94,6 +94,35 @@ export class MemoryPlatformRepository implements PlatformRepository {
     const sorted = [...filtered].sort((left, right) => input.sort === "read" ? right.uniqueReaders - left.uniqueReaders : Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
     const offset = Math.max(0, input.offset ?? 0);
     return structuredClone(sorted.slice(offset, offset + Math.min(100, Math.max(1, input.limit ?? 50))));
+  }
+
+  /**
+   * 内存搜索只用于本地契约/无数据库首页；范围与 PostgreSQL 保持一致，只遍历已发布公开项目、作者和公开章节。
+   * 返回短摘要而不是整份正文，避免客户端把搜索接口误当作详情读取接口。
+   */
+  public async searchPublicContent(query: string, limit: number): Promise<PublicSearchResult[]> {
+    const normalized = query.trim().toLocaleLowerCase("zh-CN");
+    if (!normalized) return [];
+    const boundedLimit = Math.min(100, Math.max(1, Math.trunc(limit)));
+    const results: PublicSearchResult[] = [];
+    const projects = Array.from(this.publicProjects.values()).filter((project) => project.visibility === "public" && project.status === "published");
+    const includes = (value: string): boolean => value.toLocaleLowerCase("zh-CN").includes(normalized);
+    const authors = new Set<string>();
+    for (const project of projects) {
+      if (includes(`${project.title} ${project.summary} ${project.slug} ${(project.tags ?? []).join(" ")}`)) {
+        results.push({ kind: "project", id: project.id, title: project.title, description: project.summary, projectId: project.id, projectSlug: project.slug, projectTitle: project.title, authorUsername: project.owner.username, authorDisplayName: project.owner.displayName, score: 1 });
+      }
+      const authorKey = project.owner.id;
+      if (!authors.has(authorKey) && includes(`${project.owner.username} ${project.owner.displayName}`)) {
+        authors.add(authorKey);
+        results.push({ kind: "author", id: authorKey, title: project.owner.displayName, description: `@${project.owner.username}`, projectId: null, projectSlug: null, projectTitle: null, authorUsername: project.owner.username, authorDisplayName: project.owner.displayName, score: 1 });
+      }
+      for (const section of project.sections ?? []) {
+        if (!includes(`${section.heading} ${section.content}`)) continue;
+        results.push({ kind: "document", id: section.id, title: section.heading, description: section.content.slice(0, 240), projectId: project.id, projectSlug: project.slug, projectTitle: project.title, authorUsername: project.owner.username, authorDisplayName: project.owner.displayName, score: 1 });
+      }
+    }
+    return structuredClone(results.slice(0, boundedLimit));
   }
 
   public async getPublicProject(projectIdOrSlug: string): Promise<PublicProjectRecord | null> {

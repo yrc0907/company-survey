@@ -19,6 +19,8 @@
 
 `ProjectComments` 独立负责加载、空状态、失败/重试、发布中、发布成功、发布失败/重试、删除中和删除失败。评论按 `parentId` 组织，最多递归八层，异常孤儿节点降级到根层。未登录的发布按钮会打开登录入口，不产生写请求。
 
+项目公开摘要现在从 PostgreSQL 聚合 `commentCount`（只统计 `deleted_at IS NULL`），首页卡片和详情元信息仅在真实数据库投影提供该字段时显示；typed seed 不填虚构数字。详情页在评论加载、发布和软删除后用服务端返回列表同步更新元信息，不做客户端猜测自增。
+
 ## 验证记录
 
 契约测试：`lib/services/collaboration/project-comments.contract.ts`
