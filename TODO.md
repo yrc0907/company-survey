@@ -5,9 +5,26 @@
 ## 下一步优先级
 
 1. **P0: 收紧公网运维边界并建立备份。** HTTPS、Basic Auth、PostgreSQL 持久化和模型链路已上线；下一步限制 SSH 来源、删除无用 RDP 规则，并完成首轮异机备份与恢复演练。
-2. **P1: 扩展真实资料进入系统的范围。** 手动文本导入、来源快照和 Chunk 写入已实现；下一步才是受限 URL/PDF/图片导入与解析，不能为了“导入更多类型”放开任意抓取。
-3. **P2: 把有界运行时混合检索升级为可评测的持久化检索。** 远程 Embedding、余弦、RRF 和 Reranker 降级已接入；下一步是 PostgreSQL FTS SQL、pgvector、向量版本与 Golden Set。
-4. **P3: 再补可审查的研究闭环。** 来源刷新/变化检测、引用校验、Diff/回滚、导出和独立应用会话保护。
+2. **P1: 按开放知识平台规格重建身份、项目和协作边界。** 当前单用户 Basic Auth 不能承载公开阅读、用户草稿、MR、审核和贡献署名；先完成 Auth.js、项目/文件树、权限和不可变版本模型。
+3. **P2: 落地 shadcn/ui 公开首页与项目工作区。** 第一屏是列表和搜索，项目页为文件树/正文/AI 三栏；动效只表达状态和空间变化。
+4. **P3: 把有界运行时检索升级为公开平台的持久化检索。** 接入 PostgreSQL FTS SQL、pgvector、索引 Worker、权限过滤、向量版本和 Golden Set。
+
+## 开放知识平台迁移（目标，尚未实现）
+
+- [x] 完成开放知识平台产品、权限、版本、合并、署名和技术架构文档
+- [x] 完成 shadcn/ui 页面、组件、响应式、状态和动效规范文档
+- [ ] 建立 Auth.js、GitHub OAuth、邮箱密码注册、验证与找回密码
+- [ ] 将 Caddy 全站 Basic Auth 改为公开读 + 应用会话保护写接口
+- [ ] 建立用户、项目、成员、文件树、Branch、Commit、Revision、MR、Review、Attribution schema 与迁移
+- [ ] 接入 TipTap，正文 Block 使用稳定 ID，支持 Markdown 导入导出
+- [ ] 游客 IndexedDB 草稿、自动保存、登录迁移和过期 base revision 恢复
+- [ ] Diff、三方合并、冲突处理、逐段评论、审核和单事务合并
+- [ ] 段落级贡献追踪、用户贡献历史和 AI 辅助标记
+- [ ] 公开首页、全站搜索、项目详情、编辑、审核、用户主页、收件箱和管理员页面
+- [ ] 匿名 AI 签名 Cookie、Redis 限流、额度、成本和滥用防护
+- [ ] 阿里云 OSS 文件/头像存储、许可证、举报、下架和审计
+- [ ] PostgreSQL FTS + pgvector + RRF + Reranker 持久化检索和后台索引 Worker
+- [ ] 权限拒绝、游客迁移、版本冲突、署名一致性、移动端、Reduced Motion 和公网 E2E
 
 ## 0. 项目与交付
 
