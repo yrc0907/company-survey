@@ -18,7 +18,9 @@ export class MemoryKnowledgeCommandStore implements KnowledgeCommandStore {
   }
 
   public async listChildren(branchId: string, parentId: string | null): Promise<KnowledgeNodeRecord[]> {
-    return [...(this.nodesByBranch.get(branchId)?.values() ?? [])].filter((node) => node.parentId === parentId).map((node) => structuredClone(node));
+    const nodes = this.nodesByBranch.get(branchId);
+    if (!nodes) return [];
+    return Array.from(nodes.values()).filter((node) => node.parentId === parentId).map((node) => structuredClone(node));
   }
 
   public async isDescendant(branchId: string, possibleDescendantId: string, ancestorId: string): Promise<boolean> {

@@ -37,9 +37,11 @@ RUN groupadd --system --gid 1001 nodejs \
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/run-migrations.mjs ./scripts/run-migrations.mjs
+COPY --from=builder --chown=nextjs:nodejs /app/db/migrations ./db/migrations
 
 USER nextjs
 EXPOSE 3000
 
-# Next.js standalone 的 server.js 只监听容器内端口，由 Caddy 对外暴露 HTTPS。
+# 生产编排由独立 migrate 服务先执行迁移；默认命令仍只启动 Next.js。
 CMD ["node", "server.js"]

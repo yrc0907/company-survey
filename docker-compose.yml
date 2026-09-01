@@ -56,6 +56,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     expose:
       - "3000"
     volumes:
@@ -81,6 +83,32 @@ services:
         limits:
           cpus: "0.70"
           memory: 640M
+
+  migrate:
+    image: ${APP_IMAGE:-research-workbench:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "no"
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=192
+    command: ["node", "scripts/run-migrations.mjs"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: local
+      options:
+        max-size: "5m"
+        max-file: "2"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
 
   postgres:
     image: postgres:16.4-alpine
