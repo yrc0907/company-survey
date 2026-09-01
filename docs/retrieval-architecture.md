@@ -191,7 +191,7 @@ source_chunk / query
   -> BGE reranker fallback
 ```
 
-API Key 只从进程环境读取。Embedding 与 Reranker 使用独立配置，避免未来更换其中一个模型时重建另一部分链路。当前代码已经读取 `EMBEDDING_*` 与 `RERANK_*` 配置，并在最多 48 个 active Chunk 上运行临时 Dense/RRF/Rerank；尚无 pgvector 字段。后续持久化向量必须保存 `embedding_model`、`embedding_dimensions`、`embedding_version` 和输入文本哈希，模型或维度变化时禁止混用旧索引。
+API Key 只从进程环境读取。Embedding 与 Reranker 使用独立配置，避免未来更换其中一个模型时重建另一部分链路。迁移 `011_pgvector_optional.sql` 会始终加入向量元数据（模型、维度、版本、输入文本哈希和状态），只有数据库能提供 `vector` 扩展时才动态加入真实向量列和 HNSW/IVFFlat 索引。`PGVECTOR_ENABLED=auto`（默认）先探测扩展和列，`PGVECTOR_ENABLED=disabled` 可强制关闭；`PGVECTOR_WRITE_ENABLED=true` 才允许索引 Worker/批处理写入，用户检索不会隐式开启批量写入。
 
 ### 7.1 BGE-M3 本地 GPU 回退
 
@@ -220,9 +220,20 @@ BGE-M3 是适合本项目的多语言检索模型候选，可提供 Dense、Spar
 
 ### 7.2 当前 Dense + RRF 实现边界
 
-现有 `DenseRetrievalService` 已接入搜索路径：对当前工作区最多 48 个 `active` Chunk，将 `query + contextual embedding text` 发给配置的 Embedding Provider，按余弦相似度生成 Dense 排名，并与关键词排名使用 RRF 融合；融合后的有限候选才进入 Reranker。
+现有 `DenseRetrievalService` 已接入搜索路径：默认优先按报告、active 来源、模型、维度、向量版本和逐 Chunk 文本哈希读取 pgvector；命中后再与关键词排名使用 RRF。没有持久化命中时，对当前工作区最多 48 个 `active` Chunk，将 `query + contextual embedding text` 发给配置的 Embedding Provider，按余弦相似度生成临时 Dense 排名。显式打开 `PGVECTOR_WRITE_ENABLED` 时，本次成功计算的 Chunk 向量会按同一元数据契约写回数据库，失败不会影响当前结果。
 
-这是一条可运行、可验证的小资料库路径，而不是 pgvector/ANN 的替代品。没有配置 Key、模型返回异常、Chunk 超过 48 条、文本过长时，服务不出网或停止语义召回，返回 `dense=degraded` 并保留关键词排序。向量只在当前 Node 进程的有界缓存中复用，尚未写入 PostgreSQL；因此服务器重启、模型/维度切换或语料超过边界时，必须在 pgvector 迁移完成后再声称持久化混合检索。
+这是“可选持久化 + 确定性降级”的路径，而不是强制要求香港 2C2G 安装扩展。没有配置 Key、模型返回异常、扩展/列未安装或迁移不完整时，服务保留 FTS/关键词排序并标记 `dense=degraded`；已有向量的模型、维度、版本或输入文本哈希不匹配时绝不混用。向量 SQL 同时过滤 `source.state='active'`、报告 ID、允许的 source ID 和期望哈希，应用层还会二次确认返回的 Chunk 属于当前快照。扩展存在但没有 ANN 索引时允许受限精确扫描，并在能力结果中说明原因。
+
+### 7.3 可选 pgvector 迁移与运行契约
+
+| 场景 | 能力结果 | 行为 |
+| --- | --- | --- |
+| 标准 `postgres:16-alpine`，没有扩展 | `available=false`、`indexKind=none` | 迁移成功，FTS/关键词结果继续可用；不发送向量 SQL |
+| 扩展与 `embedding` 列存在，写入关闭 | `available=true`、`canWrite=false` | 读取已完成向量；没有命中时回到临时 Dense 或确定性降级 |
+| 扩展、列和写入开关均存在 | `available=true`、`canWrite=true` | 受控批处理按版本/哈希写入并可持久化复用 |
+| 扩展刚被卸载或列被回滚 | 探测失败/`degraded` | 捕获 SQL 错误，保留 FTS，不把空结果当成语义无关 |
+
+`source_chunk.embedding_text_hash` 覆盖 contextual prefix、标题路径和正文；任何这些输入变化都必须产生新版本或将状态置为 `stale`。向量写入契约不会删除历史正文，也不会跨 `report_id`、`source_id` 或权限 Scope 查询。
 
 本地 worker 的运行、离线约束和切换配置见 [local-bge-m3-worker.md](local-bge-m3-worker.md)。
 

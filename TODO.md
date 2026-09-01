@@ -22,7 +22,7 @@
 - [~] Auth.js 邮箱/密码注册、登录和 Session/RBAC 校验已实现；GitHub OAuth、邮箱验证与找回密码待实现
 - [~] Caddy 已只保护旧版 `/api/research/*`，公开读与平台写接口由应用会话/权限处理；完整公网身份治理仍待补齐
 - [ ] 建立用户、项目、成员、文件树、Branch、Commit、Revision、MR、Review、Attribution schema 与迁移
-- [ ] 建立 `uploaded_asset`、`ingestion_job`、`project_view_daily`、`project_stats` schema 与聚合任务
+- [~] 建立 `uploaded_asset`、`ingestion_job`、`project_view_daily`、`project_stats` schema 与聚合任务；公开阅读统计已通过 `project_reader` + `project_view_daily` + `project_stats` 同步幂等聚合，评论/点赞/关注统计仍待实现
 - [ ] 接入 TipTap，正文 Block 使用稳定 ID，支持 Markdown 导入导出
 - [ ] 登录后创建空白项目，或通过 OSS 隔离上传创建私有草稿项目并进入三栏工作台
 - [~] Markdown/TXT/PDF/DOCX/PNG/JPEG 白名单、MIME magic、大小、哈希、重复检测、解析状态和幂等重试；解析 Worker 已支持文本/原生 PDF/DOCX，图片与扫描 PDF 进入 `needs_review`，source/source_chunk 建立仍待接入
@@ -32,7 +32,7 @@
 - [ ] 段落级贡献追踪、用户贡献历史和 AI 辅助标记
 - [ ] 公开首页、全站搜索、项目详情、编辑、审核、用户主页、收件箱和管理员页面
 - [ ] 迁移并核验慧策、十五五规划、跨境 ERP 等官方首发项目，确保正式首页非空
-- [ ] 首页列表式卡片展示 owner、published_at、main 最新合并、去重阅读、已合并贡献者、来源与 open MR
+- [~] 首页列表式卡片展示 owner、published_at、main 最新合并、去重阅读、已合并贡献者、来源与 open MR；去重阅读已由真实 PostgreSQL 统计提供，作者主页/关注/评论/点赞仍待实现
 - [ ] 匿名 AI 签名 Cookie、Redis 限流、额度、成本和滥用防护
 - [ ] 阿里云 OSS 文件/头像存储、许可证、举报、下架和审计
 - [~] 私有 Bucket `reaserch` 已创建，ECS 已绑定 `research-oss` 且 IMDSv2 临时凭据状态为 `Success`；OSS SDK、预签名读写、隔离对象删除、所有者边界和 ECS 临时对象 Put/Head/Delete 已验证，目标 Bucket CORS、浏览器直传权限 E2E 与 source/source_chunk 产物索引仍待接入；解析 Worker 已实现租约、重试和明确待校对降级
@@ -100,9 +100,9 @@
 
 ## 4. 远程混合检索与 BGE-M3
 
-- [~] 已实现最多 48 个 active Chunk 的远程 `gemini-embedding-2-preview` 临时 Dense 召回、余弦排名与 RRF；pgvector 持久化向量、模型版本、维度和文本哈希仍待实现
-- [ ] 加入 pgvector 扩展、向量字段和索引迁移；文本、上下文前缀、模型或维度变化后使旧向量失效并重建
-- [~] 当前内存快照可执行关键词 + Dense RRF；PostgreSQL FTS SQL 已与 Dense RRF 并行召回，pgvector 持久化缓存和 ANN 索引仍待实现
+- [x] 已实现最多 48 个 active Chunk 的远程 `gemini-embedding-2-preview` 临时 Dense 召回、余弦排名与 RRF；迁移 `011_pgvector_optional.sql` 提供可选 pgvector 持久化、能力探测、模型版本/维度/文本哈希校验和 FTS 降级
+- [~] pgvector 向量列与 HNSW/IVFFlat 索引在扩展可用时动态创建；无扩展环境保持迁移成功，ANN 重建 Worker 和大规模评测仍待实现
+- [x] 当前内存快照可执行关键词 + Dense RRF；PostgreSQL FTS 与可选 pgvector Dense 并行召回，向量 SQL 在报告/source/active/hash 范围内过滤，缺能力时确定性降级
 - [x] 接入 `qwen3-rerank`：`429`、超时或 `5xx` 时依次尝试 `Pro/BAAI/bge-reranker-v2-m3`、`BAAI/bge-reranker-v2-m3`；均失败时确定性跳过重排
 - [x] 检测本机 GPU、CUDA、显存和 BGE-M3 权重，创建 `device=auto`、CUDA fp16、CPU 离线回退、仅 loopback 的 Embedding Worker；当前缓存仅有 refs 指针，未加载权重
 - [ ] BGE-M3 只在本机 GPU 作为可选离线 Worker 运行；线上 2C2G 服务器绝不加载模型权重，只保存向量、查询 PostgreSQL/pgvector 并调用外部 API

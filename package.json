@@ -8,10 +8,11 @@
     "test:e2e:platform": "node scripts/platform-e2e.mjs",
     "start": "next start",
     "db:migrate": "node scripts/run-migrations.mjs",
+    "db:check:pgvector": "node scripts/check-pgvector.mjs",
     "asset:ingestion": "tsx scripts/run-asset-ingestion-worker.ts",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx lib/services/research-service.contract.ts && tsx lib/providers/embedding-provider.contract.ts && tsx lib/providers/oss/oss-provider.contract.ts && tsx lib/commands/knowledge/command-registry.contract.ts && tsx lib/services/platform/platform-auth.contract.ts && tsx lib/services/platform/public-project.contract.ts && tsx lib/services/memory/memory-service.contract.ts && tsx lib/services/assets/asset-service.contract.ts && tsx lib/services/assets/asset-ingestion.contract.ts && tsx lib/services/collaboration/collaboration.contract.ts && tsx lib/ui/platform-ui.contract.ts"
+    "test": "tsx lib/services/research-service.contract.ts && tsx lib/providers/embedding-provider.contract.ts && tsx lib/services/vector-persistence.contract.ts && tsx lib/providers/oss/oss-provider.contract.ts && tsx lib/commands/knowledge/command-registry.contract.ts && tsx lib/services/platform/platform-auth.contract.ts && tsx lib/services/platform/public-project.contract.ts && tsx lib/services/memory/memory-service.contract.ts && tsx lib/services/assets/asset-service.contract.ts && tsx lib/services/assets/asset-ingestion.contract.ts && tsx lib/services/collaboration/collaboration.contract.ts && tsx lib/ui/platform-ui.contract.ts"
   },
   "dependencies": {
     "@alicloud/credentials": "^2.4.7",

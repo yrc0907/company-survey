@@ -13,6 +13,17 @@ import type {
   WorkbenchSnapshot,
 } from "@/lib/domain/research";
 import { PersistenceRequiredError, VersionConflictError } from "@/lib/domain/errors";
+import {
+  degradedPgVectorCapability,
+  getPgVectorConfig,
+  toPgVectorLiteral,
+  type ChunkEmbeddingInput,
+  type PgVectorCapability,
+  type PgVectorStore,
+  type PersistedVectorSearchResult,
+  type VectorSearchOptions,
+  type VectorWriteResult,
+} from "@/lib/services/vector-persistence-service";
 
 /**
  * 数据访问边界。领域服务只能依赖这个接口，因此演示内存数据与 PostgreSQL 可以安全替换。
@@ -29,6 +40,12 @@ export interface ResearchRepository {
    * 方法只返回 Chunk/来源 ID 与数据库词法分数，权限和 active 过滤必须在 SQL 内完成。
    */
   searchSourceChunks?(query: string, options: { reportId?: string; limit: number }): Promise<SourceChunkSearchResult[]>;
+  /** pgvector 是可选能力；未迁移或无扩展时必须返回明确降级，不影响 PostgreSQL FTS。 */
+  getPgVectorCapability?(): Promise<PgVectorCapability>;
+  /** 仅索引 Worker 可调用的向量写入；服务端请求默认不打开写入开关。 */
+  upsertChunkEmbeddings?(input: ChunkEmbeddingInput[]): Promise<VectorWriteResult>;
+  /** 带 active/source/report/hash 过滤的向量召回；正文仍由快照映射。 */
+  searchSimilarChunks?(vector: number[], options: VectorSearchOptions): Promise<PersistedVectorSearchResult[]>;
   health(): Promise<{ ok: boolean; persistence: "memory_demo" | "postgres" }>;
 }
 
@@ -125,8 +142,8 @@ function toIso(value: unknown): string {
  * PostgreSQL 仓储。
  * 该实现只访问固定表和固定字段；所有业务过滤与关系查询仍由领域服务完成。
  */
-export class PostgresResearchRepository implements ResearchRepository {
-  public constructor(private readonly sql: Sql) {}
+export class PostgresResearchRepository implements ResearchRepository, PgVectorStore {
+  public constructor(private readonly sql: Sql, private readonly environment: Record<string, string | undefined> = process.env) {}
 
   /** 从已配置的连接串创建仓储；调用方负责连接生命周期。 */
   public static fromConnectionString(connectionString: string): PostgresResearchRepository {
@@ -293,6 +310,137 @@ export class PostgresResearchRepository implements ResearchRepository {
       sourceId: String(row.source_id),
       lexicalScore: Number(row.lexical_score) || 0,
     }));
+  }
+
+  /**
+   * 探测迁移后的 pgvector 能力，而不是根据环境变量直接假定可用。
+   * 只读查询在标准 postgres 镜像上也能成功；缺扩展时返回可审计的 degraded 能力。
+   */
+  public async getPgVectorCapability(): Promise<PgVectorCapability> {
+    const config = getPgVectorConfig(this.environment);
+    if (config.mode === "disabled") return degradedPgVectorCapability(config, "PGVECTOR_ENABLED=disabled，保持 FTS/确定性检索。");
+    try {
+      const rows = await this.sql<DatabaseRow[]>`SELECT
+        (SELECT extversion FROM pg_extension WHERE extname = 'vector') AS extension_version,
+        (SELECT udt_name FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'source_chunk' AND column_name = 'embedding'
+          LIMIT 1) AS embedding_type,
+        (SELECT CASE
+          WHEN indexdef ILIKE '%USING hnsw%' THEN 'hnsw'
+          WHEN indexdef ILIKE '%USING ivfflat%' THEN 'ivfflat'
+          ELSE 'none'
+        END
+          FROM pg_indexes
+          WHERE schemaname = 'public' AND tablename = 'source_chunk' AND indexname = 'source_chunk_embedding_idx'
+          LIMIT 1) AS index_kind`;
+      const row = rows[0];
+      const extensionVersion = row?.extension_version ? String(row.extension_version) : null;
+      const embeddingType = row?.embedding_type ? String(row.embedding_type) : null;
+      const indexKind = row?.index_kind === "hnsw" || row?.index_kind === "ivfflat" ? row.index_kind : "none";
+      if (!extensionVersion) return degradedPgVectorCapability(config, "数据库未安装 pgvector 扩展，保留 FTS/确定性检索。");
+      if (embeddingType !== "vector") return degradedPgVectorCapability(config, "pgvector 扩展存在但 source_chunk.embedding 列未完成迁移。");
+      return {
+        mode: config.mode,
+        enabled: true,
+        available: true,
+        canWrite: config.writeEnabled,
+        extensionVersion,
+        indexKind,
+        reason: config.writeEnabled ? null : "PGVECTOR_WRITE_ENABLED 未开启，仅允许读取已建立的向量。",
+      };
+    } catch {
+      return degradedPgVectorCapability(config, "pgvector 能力探测失败，保留 FTS/确定性检索。");
+    }
+  }
+
+  /**
+   * 以文本哈希、模型、维度和版本成组写入向量。
+   * WHERE 同时限定 chunk/source，避免错误的调用者把向量写入别的来源；事务失败整体降级。
+   */
+  public async upsertChunkEmbeddings(input: ChunkEmbeddingInput[]): Promise<VectorWriteResult> {
+    if (input.length === 0) return { status: "completed", written: 0, reason: null };
+    const capability = await this.getPgVectorCapability();
+    if (!capability.available || !capability.canWrite) {
+      return { status: "degraded", written: 0, reason: capability.reason ?? "pgvector 不可写。" };
+    }
+    try {
+      const prepared = input.map((item) => {
+        if (!/^[a-f0-9]{64}$/.test(item.textHash) || !/^[a-zA-Z0-9._-]{1,64}$/.test(item.version)) {
+          throw new Error("向量文本哈希或版本格式无效。");
+        }
+        if (!item.model.trim() || item.model.length > 160) throw new Error("向量模型标识无效。");
+        if (!Number.isInteger(item.dimensions) || item.dimensions <= 0 || item.vector.length !== item.dimensions) {
+          throw new Error("向量维度与元数据不一致。");
+        }
+        return { ...item, literal: toPgVectorLiteral(item.vector) };
+      });
+      let written = 0;
+      await this.sql.begin(async (transaction) => {
+        for (const item of prepared) {
+          const rows = await transaction<DatabaseRow[]>`UPDATE source_chunk
+            SET embedding = ${item.literal}::vector,
+                embedding_model = ${item.model},
+                embedding_dimensions = ${item.dimensions},
+                embedding_version = ${item.version},
+                embedding_text_hash = ${item.textHash},
+                embedding_status = 'ready',
+                embedding_updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${item.chunkId} AND source_id = ${item.sourceId}
+            RETURNING id`;
+          written += rows.length;
+        }
+      });
+      return { status: "completed", written, reason: null };
+    } catch (error) {
+      return { status: "degraded", written: 0, reason: error instanceof Error ? error.message : "向量写入失败，保留确定性检索。" };
+    }
+  }
+
+  /**
+   * 余弦距离召回只读取 active 来源，并以报告、source ID、模型、版本和每个 Chunk 的期望哈希过滤。
+   * expectedChunks 用 unnest 成对连接，避免仅按 hash 集合过滤造成错配或过期向量穿透。
+   */
+  public async searchSimilarChunks(vector: number[], options: VectorSearchOptions): Promise<PersistedVectorSearchResult[]> {
+    if (vector.length === 0 || options.sourceIds.length === 0 || options.expectedChunks.length === 0) return [];
+    const boundedLimit = Math.min(Math.max(Math.trunc(options.limit), 1), 100);
+    if (!Number.isInteger(options.dimensions) || vector.length !== options.dimensions) return [];
+    if (!options.model.trim() || options.model.length > 160 || !/^[a-zA-Z0-9._-]{1,64}$/.test(options.version)) return [];
+    if (options.expectedChunks.some((item) => !/^[a-f0-9]{64}$/.test(item.textHash))) return [];
+    let literal: string;
+    try {
+      literal = toPgVectorLiteral(vector);
+    } catch {
+      return [];
+    }
+    const chunkIds = options.expectedChunks.map((item) => item.chunkId);
+    const textHashes = options.expectedChunks.map((item) => item.textHash);
+    try {
+      const rows = await this.sql.unsafe<DatabaseRow[]>(`SELECT chunk.id AS chunk_id, chunk.source_id AS source_id,
+          1 - (chunk.embedding <=> $1::vector) AS similarity
+        FROM source_chunk AS chunk
+        JOIN source AS source_record ON source_record.id = chunk.source_id
+        JOIN unnest($3::text[], $4::text[]) AS expected(chunk_id, text_hash)
+          ON expected.chunk_id = chunk.id AND expected.text_hash = chunk.embedding_text_hash
+        WHERE source_record.state = 'active'
+          AND chunk.source_id = ANY($2::text[])
+          AND ($5::text IS NULL OR source_record.report_id = $5)
+          AND chunk.embedding_status = 'ready'
+          AND chunk.embedding_model = $6
+          AND chunk.embedding_dimensions = $7
+          AND chunk.embedding_version = $8
+          AND chunk.embedding IS NOT NULL
+        ORDER BY chunk.embedding <=> $1::vector ASC, chunk.position ASC, chunk.id ASC
+        LIMIT $9`, [literal, options.sourceIds, chunkIds, textHashes, options.reportId ?? null, options.model, options.dimensions, options.version, boundedLimit]);
+      return rows.map((row, index) => ({
+        chunkId: String(row.chunk_id),
+        sourceId: String(row.source_id),
+        similarity: Number(row.similarity) || 0,
+        rank: index + 1,
+      }));
+    } catch {
+      // 扩展缺失、迁移尚未完成或索引竞争均不能阻断 FTS；调用方会回到确定性 Dense/关键词路径。
+      return [];
+    }
   }
 
   /** 真实数据库健康检查，不能只根据环境变量声称 PostgreSQL 可用。 */

@@ -3,6 +3,7 @@ import type { ResearchRepository } from "@/lib/providers/research-repository";
 import { getRerankerProvider } from "@/lib/providers/rerank-provider";
 import { ValidationError } from "@/lib/domain/errors";
 import { DenseRetrievalService, type DenseRetriever } from "@/lib/services/dense-retrieval-service";
+import type { PgVectorStore } from "@/lib/services/vector-persistence-service";
 
 /** 将用户问题切为稳定关键词；中英文短语保留整体，避免中文按字符产生噪声。 */
 function queryTerms(rawQuery: string): string[] {
@@ -28,7 +29,10 @@ function keywordScore(chunk: SourceChunk, terms: string[]): number {
  * 只从 active 来源召回，随后返回父章节和相邻片段以实现 Parent Retrieval 的安全子集。
  */
 export class SearchService {
-  public constructor(private readonly repository: ResearchRepository, private readonly denseRetrieval: DenseRetriever = new DenseRetrievalService()) {}
+  public constructor(
+    private readonly repository: ResearchRepository,
+    private readonly denseRetrieval: DenseRetriever = new DenseRetrievalService(process.env, undefined, undefined, asPgVectorStore(repository)),
+  ) {}
 
   /** 在当前工作台已导入的资料中检索，不读取磁盘或调用互联网。 */
   public async search(query: string, options: { reportId?: string; limit?: number } = {}): Promise<SearchHit[]> {
@@ -74,7 +78,7 @@ export class SearchService {
       keywordRanked = fallbackKeywordRanked();
       lexical = { status: "degraded", provider: "keyword_fallback", reason: "当前仓储未提供 PostgreSQL FTS，使用本地关键词评分。" };
     }
-    const dense = await this.denseRetrieval.rank(query, activeChunks);
+    const dense = await this.denseRetrieval.rank(query, activeChunks, { reportId: options.reportId });
 
     // RRF 只融合排名而不比较关键词分和余弦分。若 Dense 降级，候选仍来自确定性关键词排序。
     const candidatesByChunkId = new Map<string, { chunk: SourceChunk; source: (typeof keywordRanked)[number]["source"]; score: number }>();
@@ -113,6 +117,13 @@ export class SearchService {
         dense: { status: dense.status, provider: dense.provider, model: dense.model, reason: dense.reason },
       }));
   }
+}
+
+/** 只有完整实现了可选向量仓储的 PostgreSQL 实例才接入 Dense 持久化；内存仓储保持原行为。 */
+function asPgVectorStore(repository: ResearchRepository): PgVectorStore | undefined {
+  return repository.getPgVectorCapability && repository.upsertChunkEmbeddings && repository.searchSimilarChunks
+    ? repository as PgVectorStore
+    : undefined;
 }
 
 /** 供上下文投影复用的只读对象查找，不导出可修改的仓储引用。 */
