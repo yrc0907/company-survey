@@ -22,6 +22,16 @@
 
 “最佳”取决于语料、语言、时效、成本和评测结果。上述方案是本项目在企业、政策、竞品和网页研究场景中的高标准目标；只有通过 Golden Set 和真实资料评测，才可以决定是否保留向量、Reranker、Graph 或更高级组件。
 
+### 当前代码状态
+
+当前已实现的是该链路的受限子集，而不是完整混合检索：
+
+- `source_chunk` schema 有 FTS GIN 索引，实际 `SearchService` 当前从 repository 快照读取 Chunk，做确定性关键词评分；尚未执行 PostgreSQL FTS/BM25 查询；
+- 命中会带 Parent Section 与相邻 Chunk；`contextual_prefix` 会参与当前关键词评分，但没有导入流水线自动生成它；
+- `GraphService` 只做报告内、有来源边、深度 2、最多 12 条路径的 BFS；没有图谱写入 API 或图谱 UI；
+- `ContextProjectionService` 在每次助手请求重组当前报告、规则、选区或检索证据；无命中时返回拒答原因；
+- pgvector、远程 embedding、RRF、远程 rerank、索引重建和 Golden Set 尚未接入应用。已独立验证的 Cloudmist API 只能说明 Provider 协议可用，不能说明工作台已有语义检索。
+
 ## 2. 公开参考方向
 
 | 公开方向 | 可借鉴的机制 | 本项目采用方式 |
@@ -91,16 +101,16 @@ workspace
 -> 用户指定的企业/报告/政策对象
 ```
 
-个人版没有多租户，但仍保留 `workspace_id`，避免未来扩展时重新设计数据边界。
+个人版当前没有多租户，当前 schema 也尚未写入 `workspace_id`；若未来需要工作区隔离，应先通过迁移明确该数据边界，不能假定它已存在。
 
 ### 4.2 召回与融合
 
 | 路径 | 解决的问题 | 初版实现 |
 | --- | --- | --- |
-| PostgreSQL FTS / BM25 | 企业名、产品名、政策章节、日期、原句、价格等精确检索 | V1 使用 PostgreSQL FTS；BM25 扩展按评测决定 |
-| Dense Vector | 同义表达、跨语言概念、自然语言研究问题 | V2 使用 BGE-M3 Embedding + pgvector |
-| GraphRAG-lite | 企业—产品—行业—竞品—政策—来源的多跳关系 | V1 关系表 + 递归/受限 SQL 查询 |
-| Parent Retrieval | 命中小段后补足其所属章节上下文 | V1 即实现 |
+| PostgreSQL FTS / BM25 | 企业名、产品名、政策章节、日期、原句、价格等精确检索 | FTS 索引已定义；查询路径待实现，BM25 扩展按评测决定 |
+| Dense Vector | 同义表达、跨语言概念、自然语言研究问题 | 已有 `gemini-embedding-2-preview` 的有界运行时召回；pgvector 持久化待实现，本机 BGE-M3 是可选离线 Worker |
+| GraphRAG-lite | 企业—产品—行业—竞品—政策—来源的多跳关系 | schema 与有界内存 BFS 已实现；写入、API 和 UI 待实现 |
+| Parent Retrieval | 命中小段后补足其所属章节上下文 | 已实现：返回父章节与相邻 Chunk |
 
 混合召回的推荐流程：
 
@@ -120,8 +130,9 @@ RRF（Reciprocal Rank Fusion）只合并不同检索器的排名，不直接比�
 
 Reranker 输入是“用户问题 + 候选 Chunk”，用于从粗召回的几十条候选中挑出最值得进入上下文的少量证据。
 
-- 初版：词法/元数据加权与最大相关性去重；
-- V2：接入可配置 Reranker Provider；
+- 目标默认：`qwen3-rerank` API 对融合后的候选精排；
+- 目标降级：`429`、超时或 `5xx` 时依次尝试 `Pro/BAAI/bge-reranker-v2-m3` 与 `BAAI/bge-reranker-v2-m3`；
+- 目标最终降级：所有远程 Reranker 都失败时，保留 RRF/元数据排序并明确标记 `degraded`；
 - 不在 2 GiB 云服务器本地常驻大型 Cross Encoder；
 - Reranker 只决定相关性，不能替代来源可信度、时间过滤和引用校验。
 
@@ -168,7 +179,21 @@ relation_edge(id, from_entity_id, to_entity_id, relation_type,
 
 关键 ID、来源时间、企业名、政策章节、价格、日期与结论状态来自结构化记录，不依赖摘要。每轮请求重新投影当前需要的事实，避免历史压缩后丢失关键限定条件。
 
-## 7. BGE-M3 本地 GPU Embedding Worker
+## 7. 在线检索 API 与本地 BGE-M3
+
+当前线上运行时使用远程 API，使 2C2G 服务器在用户电脑关机时仍能完成有界语义检索：
+
+```text
+source_chunk / query
+  -> gemini-embedding-2-preview (3072 dimensions)
+  -> PostgreSQL pgvector
+  -> qwen3-rerank
+  -> BGE reranker fallback
+```
+
+API Key 只从进程环境读取。Embedding 与 Reranker 使用独立配置，避免未来更换其中一个模型时重建另一部分链路。当前代码已经读取 `EMBEDDING_*` 与 `RERANK_*` 配置，并在最多 48 个 active Chunk 上运行临时 Dense/RRF/Rerank；尚无 pgvector 字段。后续持久化向量必须保存 `embedding_model`、`embedding_dimensions`、`embedding_version` 和输入文本哈希，模型或维度变化时禁止混用旧索引。
+
+### 7.1 BGE-M3 本地 GPU 回退
 
 BGE-M3 是适合本项目的多语言检索模型候选，可提供 Dense、Sparse 和 Multi-Vector 表示。初版只将其用于 Dense Embedding；Sparse/Multi-Vector/ColBERT 类能力需在评测显示收益后再启用。
 
@@ -192,6 +217,14 @@ BGE-M3 是适合本项目的多语言检索模型候选，可提供 Dense、Spar
 - 向量模型和重排模型均通过 Provider 接口隔离，方便本地 GPU 与外部 API 切换。
 
 在接入前应先检测本地 GPU、显存、CUDA 与模型权重位置，不能假设任意机器都能运行 BGE-M3。
+
+### 7.2 当前 Dense + RRF 实现边界
+
+现有 `DenseRetrievalService` 已接入搜索路径：对当前工作区最多 48 个 `active` Chunk，将 `query + contextual embedding text` 发给配置的 Embedding Provider，按余弦相似度生成 Dense 排名，并与关键词排名使用 RRF 融合；融合后的有限候选才进入 Reranker。
+
+这是一条可运行、可验证的小资料库路径，而不是 pgvector/ANN 的替代品。没有配置 Key、模型返回异常、Chunk 超过 48 条、文本过长时，服务不出网或停止语义召回，返回 `dense=degraded` 并保留关键词排序。向量只在当前 Node 进程的有界缓存中复用，尚未写入 PostgreSQL；因此服务器重启、模型/维度切换或语料超过边界时，必须在 pgvector 迁移完成后再声称持久化混合检索。
+
+本地 worker 的运行、离线约束和切换配置见 [local-bge-m3-worker.md](local-bge-m3-worker.md)。
 
 ## 8. 检索评测与上线门槛
 

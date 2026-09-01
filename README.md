@@ -1,46 +1,78 @@
 # Research Workbench
 
-个人部署的企业、行业、竞品和政策调研工作台。
+个人部署的企业、行业、竞品和政策调研工作台。它的目标是让资料、证据、结论和报告版本留在同一个可审查的工作区，而不是做一个能任意访问系统或网页的通用 Agent。
 
-## 状态
+## 当前实现状态
 
-当前处于产品规格阶段，尚未初始化前端或部署服务。实现目标是一个可在个人服务器运行的研究工具，而不是一个通用聊天站或不受控网页自动化工具。
+工作台和 API 已经在当前代码库中实现，但尚未完成服务器部署验收。没有 `DATABASE_URL` 时系统只加载不可持久化的演示数据，并在 UI 中禁用新建和保存；设置 PostgreSQL 后，报告创建、编辑和不可变版本保存才会写入数据库。
 
-## 核心能力
+已实现：
 
-- 新建企业、行业、竞品和政策调研报告；
-- 导入网页、PDF、图片和手动文本，并保留来源与引用位置；
-- 对报告、来源和政策进行全文检索、RAG 问答与跨对象关系查询；
-- 选中文字向 AI 提问，获得解释、补充来源或改写 Diff；
-- 将结论标记为事实、推断、待核验或冲突；
-- 保存报告版本、回滚、导出 Markdown/PDF；
-- 进行企业横向比较与关系图浏览；
-- 手动刷新来源，提示可能过期的结论。
+- Next.js 三栏工作台、演示对象导航、报告章节编辑、目录锚点和 `Ctrl/Cmd+K` 命令搜索；
+- 报告创建/保存 API，带输入校验、事务和乐观锁冲突拒绝；
+- 当前报告的手动文本资料导入：标题/正文校验、SHA-256、`active` 来源、连续 Chunk、PostgreSQL 原子写入和 memory_demo 明确拒绝；
+- PostgreSQL schema/repository、真实数据库健康检查，以及与其同接口的内存演示 repository；
+- 基于 active 来源的关键词 + 有界 Dense RRF 检索，返回父章节、相邻 Chunk 和显式降级状态；
+- 有界 GraphRAG-lite 查询：关系边必须来自 active 来源，深度与返回路径数受限；
+- Context Projection：选区只传选区，检索问题只传当前报告的精简证据和规则；
+- 模型未配置或请求失败时显式降级，不伪造回答；
+- Docker Compose、Caddy Basic Auth、HTTPS 配置和 2C2G 资源限制。
 
-## 范围边界
+尚未实现或未验证：
 
-- 仅供个人使用，但公网部署仍需单账号保护。
-- AI 仅能访问本项目的调研工作区，不能读取服务器任意文件或执行任意操作。
-- 联网搜索与模型调用通过可配置 Provider 完成；未配置 Key 时必须显示未配置状态。
-- 初版不包含团队协作、分享链接、自动外发、浏览器绕过、复杂 Agent、任务队列或 Kubernetes。
+- URL/PDF/图片导入、文件上传、PDF/视觉解析、来源刷新和变化检测；手动文本是当前唯一支持的导入类型；
+- 真正的 PostgreSQL FTS 查询、pgvector 持久化/ANN、检索评测；远程 Embedding、Dense RRF 与 Rerank 已有有界运行时实现；
+- 企业 CRUD、图谱写入/API/UI、版本 Diff/回滚、Markdown/PDF 导出；
+- 应用内会话认证，当前公网访问依赖 Caddy Basic Auth；
+- 服务器 HTTPS、数据库持久化、模型/搜索调用、备份恢复和公网 E2E 验收。
+
+## 数据与 AI 边界
+
+- 报告、来源、Chunk、引用、关系和版本是结构化记录；AI 只能在受限证据上下文中回答或提出建议。
+- 外部网页、PDF、图片和模型输出均是不可信输入，不能变成系统指令。
+- AI 不会直接写报告。用户确认的保存请求才会创建一个新的 `report_revision`。
+- `source_chunk_text_fts_idx` 已在 schema 中定义，但现有搜索服务尚未执行 PostgreSQL FTS；它在最多 48 个 active Chunk 的明确边界内执行远程 Dense + RRF，超限或 Provider 故障时返回 `degraded`，不能声称已经有生产级混合 RAG。
+- BGE-M3 是本机 GPU 的可选离线 embedding worker。线上 2C2G 服务器不运行任何本地模型，只存向量、查询数据库并调用外部 API。
+
+## 远程模型与检索配置
+
+默认 Base URL 为 `https://v2.cloudmist.cloud/v1`。实际密钥只放在 Git 忽略的本地/服务器环境文件中，仓库和文档绝不保存真实 Key。
+
+| 用途 | 配置名 | 目标模型 | 当前状态 |
+| --- | --- | --- | --- |
+| 报告问答 | `MODEL_API_KEY` | `gpt-5.6-terra` | Provider 代码已实现，服务器调用待验收 |
+| Dense Embedding | `EMBEDDING_API_KEY` | `gemini-embedding-2-preview` | 最多 48 个 active Chunk 的临时向量、余弦排序与 RRF 已实现；持久化待 pgvector |
+| Rerank | `RERANK_API_KEY` | `qwen3-rerank` | 有界候选精排、429/超时/5xx 回退链与 deterministic degraded 已实现 |
+
+Rerank 的目标降级顺序为：`qwen3-rerank` -> `Pro/BAAI/bge-reranker-v2-m3` -> `BAAI/bge-reranker-v2-m3` -> 保留确定性融合排序并标记 `degraded`。`429`、超时和 `5xx` 都不能被伪装成精排成功。
+
+## 本地运行与部署
+
+```bash
+pnpm install
+pnpm dev
+```
+
+本地无数据库时，只能查看内存演示数据。生产部署前须在服务器创建 `.env`，填写新的数据库密码、Caddy bcrypt 哈希和经过轮换的 Provider Key；不要把这些值提交、截图或发送到聊天。
+
+部署架构：
+
+```text
+Internet
+  -> Caddy (HTTPS + Basic Auth)
+  -> Next.js Web/API
+  -> PostgreSQL + Docker volumes
+  -> 外部模型 / 搜索 / embedding / rerank Provider
+```
+
+详细步骤与资源边界见 [部署说明](docs/deployment.md)。当前目标服务器的公网入口、证书、安全组和模型连通性都仍需实测。
 
 ## 文档
 
-- [产品规格](docs/product-spec.md)
+- [产品规格与当前范围](docs/product-spec.md)
+- [检索、GraphRAG-lite 与上下文投影](docs/retrieval-architecture.md)
+- [本地 BGE-M3 worker 的离线边界与启动方式](docs/local-bge-m3-worker.md)
+- [交付、Provider 和 Git 规范](docs/delivery-and-integrations.md)
+- [部署说明](docs/deployment.md)
+- [可核验任务清单](TODO.md)
 - [开发护栏](AGENTS.md)
-- [交付、Git 与模型集成规范](docs/delivery-and-integrations.md)
-- [高标准检索、GraphRAG-lite 与微上下文架构](docs/retrieval-architecture.md)
-- [开发 TODO](TODO.md)
-
-## 目标部署
-
-```text
-Caddy/Nginx
-  -> Next.js Web/API
-  -> PostgreSQL
-  -> 受控文件卷或 MinIO
-  -> 搜索 Provider
-  -> 模型 Provider
-```
-
-技术栈和阶段划分见 [产品规格](docs/product-spec.md)。

@@ -3,6 +3,9 @@ node_modules/
 .env
 .env.local
 coverage/
+tsconfig.tsbuildinfo
 data/uploads/
 data/backups/
 *.log
+__pycache__/
+*.py[cod]

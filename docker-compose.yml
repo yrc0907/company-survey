@@ -1,0 +1,131 @@
+name: research-workbench
+
+services:
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      # 这些值只从服务器 .env 或 CI Secret 读取，禁止写入仓库。
+      DOMAIN: ${DOMAIN:?Set DOMAIN in the server .env file}
+      APP_USERNAME: ${APP_USERNAME:-researcher}
+      CADDY_BASIC_AUTH_HASH: ${CADDY_BASIC_AUTH_HASH:?Set CADDY_BASIC_AUTH_HASH in the server .env file}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      # 验证容器内的 Caddy 二进制可用；公开 /healthz 由外部监控检查。
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: local
+      options:
+        max-size: "5m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  app:
+    # APP_IMAGE 可指向 CI 推送的镜像；默认标签用于本地构建后 docker save/load 部署。
+    image: ${APP_IMAGE:-research-workbench:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      # 限制 Node 堆，给 PostgreSQL、Caddy 与系统保留内存。
+      NODE_OPTIONS: --max-old-space-size=384
+      UPLOAD_DIR: ${UPLOAD_DIR:-/app/data/uploads}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "3000"
+    volumes:
+      - uploads_data:/app/data/uploads
+    healthcheck:
+      # 只检查不读取业务数据的专用健康端点，避免首页渲染或认证变化导致误判。
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/api/healthz').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 45s
+    logging:
+      driver: local
+      options:
+        max-size: "5m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.70"
+          memory: 640M
+
+  postgres:
+    image: postgres:16.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-research_workbench}
+      POSTGRES_USER: ${POSTGRES_USER:-research}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the server .env file}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=256MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - max_connections=20
+      - -c
+      - log_min_duration_statement=1000
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # PostgreSQL 官方入口只会在空数据卷首次初始化时执行此 schema；运行中变更必须走迁移。
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    logging:
+      driver: local
+      options:
+        max-size: "5m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.65"
+          memory: 512M
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:
+  uploads_data:

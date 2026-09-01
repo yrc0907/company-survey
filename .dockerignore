@@ -1,0 +1,20 @@
+# 本地依赖、构建产物和开发状态不能进入生产构建上下文。
+node_modules/
+.next/
+.git/
+.ui-craft/
+
+# 部署密钥、资料、数据库备份和运行日志只留在服务器卷中。
+.env
+.env.*
+!.env.example
+data/uploads/
+data/backups/
+coverage/
+*.log
+
+# 编辑器与系统临时文件。
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

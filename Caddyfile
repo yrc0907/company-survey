@@ -1,0 +1,36 @@
+# DOMAIN、APP_USERNAME 和 CADDY_BASIC_AUTH_HASH 来自 docker-compose 的服务器环境变量。
+# CADDY_BASIC_AUTH_HASH 必须是 `caddy hash-password` 生成的哈希，禁止填入明文密码。
+{$DOMAIN} {
+    encode zstd gzip
+
+    # 不返回版本信息，并为浏览器建立保守的默认安全边界。
+    header {
+        -Server
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+        Cross-Origin-Opener-Policy "same-origin"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+
+    # 健康检查不返回业务信息，供外部监控和部署验收使用。
+    @health path /healthz
+    handle @health {
+        respond "ok" 200
+    }
+
+    # 个人部署也必须认证。未设置哈希时 Caddy 应拒绝启动，避免意外公开资料。
+    handle {
+        basic_auth {
+            {$APP_USERNAME} {$CADDY_BASIC_AUTH_HASH}
+        }
+
+        reverse_proxy app:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+}

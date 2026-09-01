@@ -1,80 +1,89 @@
 # Research Workbench TODO
 
-> 目标：先完成个人可部署版，再按评测决定是否增加高级检索组件。`[x]` 必须有代码、测试或可运行配置证据，不能用文档代替实现。
+> 本清单按当前工作区代码核对。`[x]` 代表已有源码、测试或可运行配置；`[~]` 代表有明确的部分实现但尚不构成完整用户闭环；`[ ]` 代表尚未实现或未做运行验收。不能用设计文档替代实现证据。
+
+## 下一步优先级
+
+1. **P0: 先完成服务器部署验收。** 在服务器本地 `.env` 写入新轮换的密码和 Key，启动 Compose，确认 HTTPS、Caddy Basic Auth、PostgreSQL 持久化和 `/api/healthz`；不要把任何凭据提交或发送到聊天。
+2. **P1: 扩展真实资料进入系统的范围。** 手动文本导入、来源快照和 Chunk 写入已实现；下一步才是受限 URL/PDF/图片导入与解析，不能为了“导入更多类型”放开任意抓取。
+3. **P2: 把有界运行时混合检索升级为可评测的持久化检索。** 远程 Embedding、余弦、RRF 和 Reranker 降级已接入；下一步是 PostgreSQL FTS SQL、pgvector、向量版本与 Golden Set。
+4. **P3: 再补可审查的研究闭环。** 来源刷新/变化检测、引用校验、Diff/回滚、导出和独立应用会话保护。
 
 ## 0. 项目与交付
 
-- [ ] 初始化 Git 首次提交，并配置 GitHub `main` 与 Gitee `master` 双远端同步
+- [x] Git 已初始化，`main` 已配置 GitHub `origin` 与 Gitee `gitee` 双远端
 - [x] 写入产品规格、交付规范、检索架构与开发护栏
-- [x] 建立 `.env.example`，所有模型与搜索 Key 保持空值
-- [ ] 配置双来源搜索路由：DeepSeek 原生 `web_search`、可选国内 Provider
-- [ ] 配置 YMO `gpt5.6-Terra` 模型 Provider 与可选思考强度
+- [x] `.env.example` 保持 Key 为空，并将部署密码保留为占位符
+- [x] 实现 OpenAI-compatible 模型 Provider、显式未配置降级和思考强度白名单
+- [~] DeepSeek 原生 `web_search` 请求构造已存在；没有执行搜索的 Job、路由或来源落库
+- [x] 实测 Cloudmist 模型目录、`gemini-embedding-2-preview` Embedding 与三种 Reranker API
 - [ ] 在轮换后的服务器环境验证模型、搜索和视觉输入，不提交凭据
+- [ ] 将当前实现提交并同步到 GitHub `main` 与 Gitee `master`
 
 ## 1. 前端工作台 V1
 
-- [ ] 三栏桌面布局：资料库、报告编辑区、AI 侧边栏
-- [ ] 企业、行业、竞品、政策对象的本地 Seed 与导航
-- [ ] 新建企业/报告对话框、报告模板选择和表单错误状态
-- [ ] Markdown 报告预览、可点击目录、章节锚点和全文搜索跳转
-- [ ] 选中文字工具栏：问 AI、解释、补来源、改写
-- [ ] AI 回答状态：未配置、思考、工具调用、完成、错误、重试
-- [ ] 引用卡片：来源范围、URL、页码/段落、抓取时间与来源状态
-- [ ] 改写 Diff、确认保存、版本时间线和回滚交互
-- [ ] 个人级设置：模型状态、搜索范围、资料刷新和导出
-- [ ] 桌面、平板、窄屏响应式与键盘快捷键 `Ctrl/Cmd+K`、`Ctrl/Cmd+S`
+- [x] 三栏桌面工作台：对象/报告导航、报告阅读编辑、证据型 AI 助手
+- [x] 演示 Seed、企业/行业/竞品/政策导航及报告切换
+- [~] 仅支持新建**报告**，有表单校验；尚无企业新建、模板选择或归档 UI
+- [~] 章节编辑、可点击目录、锚点跳转和命令搜索已实现；不是 Markdown 渲染/编辑器
+- [x] 选中文字工具栏：问 AI、解释、补来源、改写，并把选区交给受限上下文 API
+- [~] AI 状态覆盖未配置、准备上下文、结果和错误；没有真实工具调用时间线、流式输出或重试策略
+- [~] 已展示已有引用、来源 URL、页码和摘要；没有来源范围、刷新状态或引用编辑 UI
+- [x] 当前报告可打开“添加文本资料”对话框，粘贴标题和正文后刷新来源列表；内存演示模式明确禁用
+- [~] 保存会生成不可变 revision 且乐观锁拒绝冲突；没有 Diff、版本浏览、回滚 UI 或 API
+- [ ] 设置、来源刷新和 Markdown/PDF 导出
+- [~] `Ctrl/Cmd+K`、窄屏 CSS 和 reduced-motion 已有；`Ctrl/Cmd+S`、键盘全流程和多视口验收尚未完成
 
 ## 2. 数据与 API V1
 
-- [ ] PostgreSQL schema：company、report、section、source、chunk、citation、revision、entity、edge、job
-- [ ] 服务器端单账号认证与会话保护
-- [ ] 企业/报告 CRUD API，带版本号与冲突拒绝
-- [ ] 报告全文搜索 API，返回标题层级与段落定位
-- [ ] URL/文本/PDF/图片来源导入 API，限制类型、大小、URL 与内网地址
-- [ ] 原生文本 PDF 解析；扫描 PDF/图片走可配置视觉 Provider
-- [ ] 来源快照、哈希、抓取时间、刷新与变化检测
-- [ ] 文本 Chunk、父章节、页码和引用写入
-- [ ] 报告 Diff 与审计记录 API
+- [~] PostgreSQL schema 已有 `company`、`report`、`report_section`、`source`、`source_chunk`、`citation`、`report_revision`、`entity`、`relation_edge`；尚无 `workspace`、`research_job`、迁移机制或生产数据初始化
+- [x] PostgreSQL Repository、真实 `SELECT 1` 健康检查、内存演示 Repository 与统一接口
+- [~] 报告创建/保存 API、版本冲突 `409` 和事务写入已实现；没有企业 CRUD、报告归档或删除 API
+- [x] 已导入资料的受限搜索 API，返回命中、父章节和相邻 Chunk
+- [x] 手动文本来源导入 API：输入上限、SHA-256、`active` 状态、连续 Chunk、PostgreSQL 事务写入与 memory_demo 拒绝
+- [ ] URL/PDF/图片来源导入 API，以及 URL 重定向/DNS 级 SSRF 防护；现有 `assertSafeSourceUrl` 只是可复用校验函数
+- [ ] 原生文本 PDF 解析、扫描 PDF/图片视觉解析、文件上传存储与任务状态
+- [~] 手动文本已写入来源快照、内容哈希、时间和 `active` 状态；来源刷新、变更检测和状态迁移待实现
+- [~] 手动文本已写入带偏移和上下文前缀的 Chunk；页码、文件解析、引用和图谱的写入流水线待实现
+- [~] revision 数据已持久化；没有 Diff 计算、审计查询、回滚 API 或 UI
+- [ ] 应用内登录会话、CSRF 策略和细粒度授权；当前公网保护仅是 Caddy Basic Auth
 
-## 3. RAG 与 GraphRAG-lite
+## 3. 当前检索、GraphRAG-lite 与上下文
 
-- [ ] PostgreSQL FTS、来源范围/语言/时间/版本过滤
-- [ ] Parent Retrieval：命中 Chunk 后返回父章节与相邻段落
-- [ ] Contextual Retrieval：构造并保存结构化上下文前缀
-- [ ] 关系图 CRUD：企业、产品、竞品、行业、政策、来源和结论
-- [ ] 受限关系查询：深度、节点数、来源状态和返回字段均有限制
-- [ ] RAG 回答必须携带引用、证据状态和拒答原因
-- [ ] 选区问答走选区上下文，不做全库检索
-- [ ] 微上下文投影：任务、对象、规则、结构化事实和精排证据包
+- [~] PostgreSQL schema 已创建 FTS GIN 索引；`SearchService` 当前仍读取快照并做确定性关键词评分，未执行 PostgreSQL FTS 查询
+- [x] Parent Retrieval：搜索命中携带父章节和相邻 Chunk
+- [x] `contextual_prefix` 已进入领域模型、演示数据、关键词评分和手动文本导入；URL/PDF/图片导入时的上下文生成待实现
+- [~] `entity`/`relation_edge` schema 与有界 BFS 查询已实现；没有图谱写入、HTTP API、跨报告查询或图谱 UI
+- [x] 图查询限制深度 2、最多 12 条路径，并过滤无来源或非 active 来源的关系边
+- [~] RAG 助手把当前报告的命中证据、拒答原因和受限规则交给模型；模型回答中的引用格式尚未程序化校验
+- [x] 选区问答只传选区和相关章节，不触发全库检索
+- [x] Context Projection：每次请求重新投影任务、报告、规则、证据和受限图路径
 
-## 4. BGE-M3 与高标准混合检索
+## 4. 远程混合检索与 BGE-M3
 
-- [ ] 检测本地 GPU、CUDA、显存与 BGE-M3 权重位置
-- [ ] BGE-M3 Embedding Worker：`device=auto`、GPU fp16、CPU 离线回退
-- [ ] pgvector 与向量版本字段；文本/模型变化后失效并重建
-- [ ] Dense 检索与 PostgreSQL FTS 并行召回
-- [ ] RRF 融合、去重和元数据过滤
-- [ ] 可配置 Reranker Provider；未配置时使用确定性降级
-- [ ] Golden Set：精确、语义、多语言、关系、冲突、过期和拒答案例
-- [ ] 记录 Recall@K、Citation Coverage、Citation Correctness、Abstention 与延迟
-- [ ] 根据评测决定是否接入 BGE-M3 Sparse/Multi-Vector、Late Chunking、RAPTOR 或 ColBERT
+- [~] 已实现最多 48 个 active Chunk 的远程 `gemini-embedding-2-preview` 临时 Dense 召回、余弦排名与 RRF；pgvector 持久化向量、模型版本、维度和文本哈希仍待实现
+- [ ] 加入 pgvector 扩展、向量字段和索引迁移；文本、上下文前缀、模型或维度变化后使旧向量失效并重建
+- [~] 当前内存快照可执行关键词 + Dense RRF；PostgreSQL FTS SQL 与 pgvector 并行召回、持久化缓存、ANN 索引仍待实现
+- [x] 接入 `qwen3-rerank`：`429`、超时或 `5xx` 时依次尝试 `Pro/BAAI/bge-reranker-v2-m3`、`BAAI/bge-reranker-v2-m3`；均失败时确定性跳过重排
+- [x] 检测本机 GPU、CUDA、显存和 BGE-M3 权重，创建 `device=auto`、CUDA fp16、CPU 离线回退、仅 loopback 的 Embedding Worker；当前缓存仅有 refs 指针，未加载权重
+- [ ] BGE-M3 只在本机 GPU 作为可选离线 Worker 运行；线上 2C2G 服务器绝不加载模型权重，只保存向量、查询 PostgreSQL/pgvector 并调用外部 API
+- [ ] Golden Set：精确、中文政策、语义、多语言、关系、冲突、过期和无证据拒答案例
+- [ ] 记录 Recall@K、MRR/nDCG、Citation Coverage、Citation Correctness、Abstention、Embedding/Rerank/模型延迟和成本
+- [ ] 根据评测决定是否启用 BGE-M3 Sparse/Multi-Vector、Late Chunking、RAPTOR 或 ColBERT
 
 ## 5. 部署与运维
 
-- [ ] Dockerfile 与 Docker Compose：Caddy、Web、PostgreSQL、文件卷
-- [ ] Caddy HTTPS、单账号保护、健康检查和安全响应头
-- [ ] Ubuntu 2C2G 优化：1 GiB swap、PostgreSQL 内存限制、上传大小限制、容器资源限制
-- [ ] 本地构建镜像或 CI 构建，避免在 2 GiB 服务器构建 OOM
-- [ ] 服务器 `.env` 配置、密钥轮换、模型/搜索连通测试
-- [ ] 数据库与上传文件定期备份、恢复演练、磁盘和流量告警
-- [ ] 安全组检查：SSH 来源限制、仅开放 80/443、域名与 DNS 配置
+- [x] Dockerfile、Compose、Caddy、PostgreSQL、命名卷、健康检查和部署预检脚本
+- [x] Compose 中为 2C2G 设置 Caddy/App/PostgreSQL 内存与 CPU 上限；文档提供 1 GiB swap 建议
+- [~] Caddy 配置 HTTPS、安全响应头和 Basic Auth；域名、证书、阿里云安全组和公网访问尚需实际验收
+- [ ] 服务器 `.env`、密码/Key 轮换、模型/搜索连通性和 PostgreSQL 持久化验收
+- [ ] 备份计划、异机备份、恢复演练、磁盘/流量/容器告警
+- [ ] 限制 SSH 来源，仅开放 `80/443`，并验证不暴露 `3000/5432`
 
 ## 6. 验收
 
-- [ ] `pnpm typecheck`
-- [ ] `pnpm lint`
-- [ ] 服务与 API 契约测试
-- [ ] 浏览器 E2E：新建企业 -> 导入来源 -> 检索 -> 引用 -> 改写 Diff -> 保存版本 -> 导出
-- [ ] RAG Golden Set 评测与无证据拒答验证
-- [ ] Docker Compose 启动、健康检查、备份恢复与低内存回归
-- [ ] GitHub/Gitee 双远端均同步到最新已验证提交
+- [x] 服务契约测试覆盖保存、版本冲突、手动文本导入/重复拒绝/报告不存在、memory_demo 持久化拒绝、active 来源过滤、图边过滤、选区隔离、SSRF 基础拒绝和客户端快照裁剪
+- [ ] 重新运行并记录 `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm build` 的本次提交结果
+- [ ] 浏览器 E2E：PostgreSQL 模式下新建报告 -> 编辑 -> 冲突拒绝 -> 搜索 -> AI 降级/回答；来源导入、Diff、导出需在实现后纳入
+- [ ] Docker Compose 启动、健康检查、Basic Auth、HTTPS 和低内存回归
+- [ ] RAG Golden Set、无证据拒答、Reranker 降级和向量重建评测

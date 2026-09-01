@@ -26,8 +26,8 @@ git push gitee main:master
 
 | 配置项 | 值 |
 | --- | --- |
-| Base URL | `https://api.ymocode.com` |
-| 默认模型 | `gpt5.6-Terra` |
+| Base URL | `https://v2.cloudmist.cloud/v1` |
+| 默认模型 | `gpt-5.6-terra` |
 | 默认思考强度 | `medium` |
 | 思考模式 | 用户可选；仅在 Provider 声明支持时传递 |
 
@@ -41,7 +41,44 @@ git push gitee main:master
 4. 流式输出、视觉输入、结构化输出和错误返回的实际行为；
 5. Provider 不可用时，页面是否明确降级而非伪造 AI 结果。
 
-### 2.1 DeepSeek 备用模型与原生联网搜索
+### 2.1 Cloudmist 检索 API 实测与默认选择
+
+目标在线检索使用同一个 OpenAI-compatible 基地址，但聊天、向量与重排分别使用独立环境变量，便于单独轮换 Key、限流和替换模型：
+
+| 阶段 | 默认模型 | 已验证接口 | 当前结论 |
+| --- | --- | --- | --- |
+| 报告问答 | `gpt-5.6-terra` | 本机与目标服务器 `POST /v1/chat/completions` 均实测成功 | 只接收受控 Context Projection |
+| Dense Embedding | `gemini-embedding-2-preview` | 本机与目标服务器 `POST /v1/embeddings` 均实测成功 | 返回 `3072` 维向量；应用已用于有界 Dense 召回 |
+| Rerank | `qwen3-rerank` | 本机与目标服务器 `POST /v1/rerank` 均实测成功 | 应用已接入；曾出现一次瞬时 `429`，必须降级 |
+| Rerank fallback 1 | `Pro/BAAI/bge-reranker-v2-m3` | `POST /v1/rerank` | 实测成功 |
+| Rerank fallback 2 | `BAAI/bge-reranker-v2-m3` | `POST /v1/rerank` | 实测成功 |
+
+运行时链路：
+
+```text
+PostgreSQL FTS + gemini-embedding-2-preview Dense 召回
+  -> RRF 融合与去重
+  -> qwen3-rerank
+  -> 429 / 超时 / 5xx 时依次切换两个 BGE Reranker
+  -> 全部失败时保留融合排序并标记 degraded，禁止伪造重排成功
+```
+
+文档只记录 Base URL、模型 ID 和环境变量名。真实 Key 只能保存在 Git 忽略的本地 `.env.local` 或服务器 `chmod 600` 的 `.env` 中；`MODEL_API_KEY`、`EMBEDDING_API_KEY` 和 `RERANK_API_KEY` 可以使用同一凭据，但应用配置仍保持职责分离。
+
+### 2.1.1 配置与应用接入不是同一状态
+
+本节的 Provider 实测是外部接口证据，不是工作台端到端验收。当前代码实际读取并调用的是 `MODEL_*` 的 OpenAI-compatible 文本 Provider；`EMBEDDING_*`、`RERANK_*`、pgvector、RRF 和 rerank fallback 尚无应用代码路径。因此部署前、面试材料和产品页面必须使用如下表述：
+
+| 能力 | 当前真实状态 |
+| --- | --- |
+| Cloudmist 模型目录、Embedding/Rerank API | 已独立实测 |
+| 模型 Provider 的受限 Context Projection 调用 | 已有代码，服务器真实调用待验收 |
+| 远程 Dense embedding、pgvector、RRF 与 Reranker fallback | 已确定模型和降级契约，待实现 |
+| BGE-M3 | 仅计划在本机 GPU 离线执行，线上服务器不加载权重 |
+
+实现远程重排时，失败语义必须稳定：`429`、网络超时或 `5xx` 依次切换 `Pro/BAAI/bge-reranker-v2-m3`、`BAAI/bge-reranker-v2-m3`；两个 fallback 仍不可用时跳过重排并返回 `degraded`。不得改写或伪造原始融合排名。
+
+### 2.2 DeepSeek 备用模型与原生联网搜索
 
 DeepSeek 官方文档显示其 OpenAI-compatible API 使用 `https://api.deepseek.com`，可调用 `deepseek-v4-flash`；思考模式可通过 `thinking` 与 `reasoning_effort` 配置。图片输入需要使用实验性 `deepseek-v4-flash-vision-exp`，不能假设普通文本模型具备视觉能力。
 
@@ -91,14 +128,14 @@ Provider 未配置/失败 -> 显示明确未配置或失败状态，不使用模
 | Provider | 当前状态 | 用途 | 启用条件 |
 | --- | --- | --- | --- |
 | DeepSeek 原生 `web_search` | 协议已确认，运行时待轮换 Key 验证 | 国际/通用公开资料检索 | 默认优先；结果标记 `scope=global_or_unknown` |
-| YMO 模型 Provider | 模型调用待验证，原生搜索能力未确认 | 报告改写、摘要、RAG 回答 | 只有提供商文档或实测确认 `web_search` 后才加入搜索路由 |
-| 博查国内搜索 | 禁用，不配置 Key | 中文政策、国内企业与中文网页的范围可控检索 | DeepSeek/YMO 搜索不可用，或需要稳定国内来源分组时启用 |
+| Cloudmist 模型 Provider | 模型目录和检索端点已验证，原生搜索能力未确认 | 报告改写、摘要、RAG 回答、向量与重排 | 只有提供商文档或实测确认 `web_search` 后才加入搜索路由 |
+| 博查国内搜索 | 禁用，不配置 Key | 中文政策、国内企业与中文网页的范围可控检索 | DeepSeek/Cloudmist 搜索不可用，或需要稳定国内来源分组时启用 |
 
 决策规则：
 
 ```text
 DeepSeek 原生搜索可用 -> 先使用，不接博查
-YMO 原生搜索也验证可用 -> 按模型选择或成本路由使用，不接博查
+Cloudmist 原生搜索也验证可用 -> 按模型选择或成本路由使用，不接博查
 两者任一不可用 -> 另一模型仍可承接通用搜索
 两者均不可用，或用户明确要求国内来源 -> 启用博查国内搜索 Provider
 ```
