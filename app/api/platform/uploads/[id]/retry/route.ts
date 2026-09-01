@@ -12,7 +12,7 @@ import { json } from "@/lib/api/http";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** 解析失败只允许同一上传者显式重试，SQL 状态条件保证重复点击不会增加 attempt。 */
+/** 解析失败或待校对只允许同一上传者显式重试，SQL 状态条件保证重复点击不会并发领取同一任务。 */
 export async function POST(request: Request, context: { params: { id: string } }) {
   try { assertTrustedJsonRequest(request); const actor = await requireAuthenticatedActor(); const id = z.string().trim().min(1).max(128).parse(context.params.id); const oss = await getAssetsOssProvider(); const job = await new AssetService(getAssetsRepository(), getPlatformRepository(), oss).retry(actor, id); return json({ ingestion: job }, { headers: { "cache-control": "no-store" } }); } catch (error) { return assetErrorResponse(error); }
 }
