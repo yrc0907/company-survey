@@ -3,7 +3,7 @@ import postgres, { type Sql, type TransactionSql } from "postgres";
 
 import { KnowledgeCommandRegistry } from "@/lib/commands/knowledge";
 import type { KnowledgeBranchContext, KnowledgeCommandStore, KnowledgeNodeRecord, KnowledgeTreeChange } from "@/lib/commands/knowledge/types";
-import { calculateDiff, CollaborationConflictError, CollaborationInvalidStateError, CollaborationNotFoundError, type BranchSummary, type CollaborationNodeSnapshot, type CollaborationSnapshot, type CommitSummary, type CreateBranchInput, type CreateMergeRequestInput, type CreateProjectInput, type CreateReviewInput, type MergeRequestSummary, type ProjectSummary, type ReviewSummary, applyDiff } from "@/lib/domain/collaboration";
+import { calculateDiff, CollaborationConflictError, CollaborationInvalidStateError, CollaborationNotFoundError, type BranchSummary, type CollaborationNodeSnapshot, type CollaborationSnapshot, type CommitSummary, type CreateBranchInput, type CreateMergeRequestInput, type CreateProjectCommentInput, type CreateProjectInput, type CreateReviewInput, type MergeRequestSummary, type ProjectCommentSummary, type ProjectSummary, type ReviewSummary, applyDiff } from "@/lib/domain/collaboration";
 import type { AuthenticatedActor, KnowledgeNodeKind } from "@/lib/domain/platform";
 import type { CollaborationRepository, CollaborationQueryable } from "@/lib/repositories/collaboration/collaboration-repository";
 import { collaborationIdempotencyFingerprint } from "@/lib/services/collaboration/idempotency";
@@ -39,10 +39,26 @@ function mapReview(row: Row): ReviewSummary {
   return { id: text(row.id), mergeRequestId: text(row.merge_request_id), reviewerUserId: text(row.reviewer_user_id), verdict: row.verdict as ReviewSummary["verdict"], body: text(row.body), nodeId: nullable(row.node_id), blockId: nullable(row.block_id), createdAt: iso(row.created_at) };
 }
 
+/** 评论行映射为公开投影；删除后正文不再从数据库返回，避免软删除重新泄漏。 */
+function mapProjectComment(row: Row): ProjectCommentSummary {
+  const deleted = row.deleted_at != null;
+  return {
+    id: text(row.id), projectId: text(row.project_id), parentId: nullable(row.parent_id),
+    authorUserId: text(row.author_user_id), authorUsername: text(row.author_username),
+    authorDisplayName: text(row.author_display_name), authorAvatarAssetId: nullable(row.author_avatar_asset_id),
+    body: deleted ? null : text(row.body), deleted, canDelete: false,
+    createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
+  };
+}
+
 const PROJECT_SELECT = `SELECT p.id, p.owner_user_id, p.slug, p.title, p.summary, p.visibility, p.status, p.license, p.published_at, p.created_at, p.updated_at,
   pr.username AS owner_username, pr.display_name AS owner_display_name, pr.avatar_asset_id AS owner_avatar_asset_id
   FROM knowledge_project p JOIN platform_profile pr ON pr.user_id = p.owner_user_id`;
 const MERGE_SELECT = `SELECT id, project_id, source_branch_id, target_branch_id, author_user_id, title, description, status, base_commit_id, head_commit_id, merged_commit_id, merged_by_user_id, target_version, conflict_status, conflict_details, idempotency_fingerprint, created_at, updated_at, merged_at FROM merge_request`;
+const COMMENT_SELECT = `SELECT c.id, c.project_id, c.parent_id, c.author_user_id, c.body, c.deleted_at, c.idempotency_key, c.idempotency_fingerprint, c.created_at, c.updated_at,
+  pr.username AS author_username, pr.display_name AS author_display_name, pr.avatar_asset_id AS author_avatar_asset_id
+  FROM project_comment c JOIN platform_user u ON u.id = c.author_user_id
+  JOIN platform_profile pr ON pr.user_id = u.id`;
 
 /** PostgreSQL 协作仓储：事务负责锁定 Branch/MR，所有结果经过固定 SQL 映射。 */
 export class PostgresCollaborationRepository implements CollaborationRepository {
@@ -57,6 +73,69 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
   public async getProject(projectId: string): Promise<ProjectSummary | null> {
     const rows = await this.sql<Row[]>`${this.sql.unsafe(PROJECT_SELECT)} WHERE p.id = ${projectId} LIMIT 1`;
     return rows[0] ? mapProject(rows[0]) : null;
+  }
+
+  /** 只返回已发布公开项目的评论；匿名读取不会接触草稿或私有项目评论。 */
+  public async listProjectComments(projectId: string): Promise<ProjectCommentSummary[]> {
+    const rows = await this.sql<Row[]>`${this.sql.unsafe(COMMENT_SELECT)}
+      JOIN knowledge_project kp ON kp.id = c.project_id
+      WHERE c.project_id = ${projectId} AND kp.visibility = 'public' AND kp.status = 'published'
+      ORDER BY c.created_at ASC, c.id ASC LIMIT 1000`;
+    return rows.map(mapProjectComment);
+  }
+
+  /** 通过固定 ID 查询单条评论，删除权限由服务层按项目角色二次判定。 */
+  public async getProjectComment(commentId: string): Promise<ProjectCommentSummary | null> {
+    const rows = await this.sql<Row[]>`${this.sql.unsafe(COMMENT_SELECT)} WHERE c.id = ${commentId} LIMIT 1`;
+    return rows[0] ? mapProjectComment(rows[0]) : null;
+  }
+
+  /** 幂等读取必须绑定项目和作者，并校验请求指纹，防止复用键覆盖另一条评论。 */
+  public async getProjectCommentByIdempotency(projectId: string, authorUserId: string, idempotencyKey: string, fingerprint?: string): Promise<ProjectCommentSummary | null> {
+    const rows = await this.sql<Row[]>`${this.sql.unsafe(COMMENT_SELECT)}
+      WHERE c.project_id = ${projectId} AND c.author_user_id = ${authorUserId} AND c.idempotency_key = ${idempotencyKey} LIMIT 1`;
+    const row = rows[0];
+    if (row && fingerprint && text(row.idempotency_fingerprint) !== fingerprint) throw new CollaborationInvalidStateError("幂等键已用于另一条评论");
+    return row ? mapProjectComment(row) : null;
+  }
+
+  /** 在事务中校验公开项目与父评论归属后写入；父评论可软删除但不能跨项目引用。 */
+  public async createProjectComment(input: CreateProjectCommentInput, actor: AuthenticatedActor, fingerprint?: string): Promise<ProjectCommentSummary> {
+    const id = randomUUID();
+    try {
+      await this.sql.begin(async (tx: TransactionSql) => {
+        const projects = await tx<Row[]>`SELECT id FROM knowledge_project WHERE id = ${input.projectId} AND visibility = 'public' AND status = 'published' FOR SHARE`;
+        if (!projects[0]) throw new CollaborationNotFoundError("公开项目不存在");
+        if (input.parentId) {
+          const parent = await tx<Row[]>`SELECT id FROM project_comment WHERE id = ${input.parentId} AND project_id = ${input.projectId} FOR SHARE`;
+          if (!parent[0]) throw new CollaborationNotFoundError("父评论不存在");
+        }
+        await tx`INSERT INTO project_comment (id, project_id, parent_id, author_user_id, body, idempotency_key, idempotency_fingerprint)
+          VALUES (${id}, ${input.projectId}, ${input.parentId ?? null}, ${actor.userId}, ${input.body}, ${input.idempotencyKey ?? null}, ${fingerprint ?? null})`;
+      });
+    } catch (error) {
+      if (isUniqueViolation(error) && input.idempotencyKey) {
+        const replay = await this.getProjectCommentByIdempotency(input.projectId, actor.userId, input.idempotencyKey, fingerprint);
+        if (replay) return replay;
+      }
+      throw error;
+    }
+    const created = await this.getProjectComment(id);
+    if (!created) throw new CollaborationNotFoundError("评论写入后无法读取");
+    return created;
+  }
+
+  /** 软删除只清空正文并保留树节点，保证已有回复不会失去父级。 */
+  public async softDeleteProjectComment(commentId: string, _actor: AuthenticatedActor): Promise<ProjectCommentSummary> {
+    const updated = await this.sql.begin(async (tx: TransactionSql) => {
+      const rows = await tx<Row[]>`SELECT id FROM project_comment WHERE id = ${commentId} FOR UPDATE`;
+      if (!rows[0]) throw new CollaborationNotFoundError("评论不存在");
+      await tx`UPDATE project_comment SET body = '', deleted_at = COALESCE(deleted_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ${commentId}`;
+      const result = await tx<Row[]>`${tx.unsafe(COMMENT_SELECT)} WHERE c.id = ${commentId} LIMIT 1`;
+      return result[0] ? mapProjectComment(result[0]) : null;
+    });
+    if (!updated) throw new CollaborationNotFoundError("评论删除后无法读取");
+    return updated;
   }
 
   public async createProject(input: CreateProjectInput, owner: AuthenticatedActor): Promise<ProjectSummary> {

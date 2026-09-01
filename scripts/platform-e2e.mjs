@@ -52,6 +52,15 @@ try {
     await feedback.waitFor();
   });
 
+  await check("E2E-PROJECT-003", async () => {
+    await page.getByRole("heading", { name: "讨论" }).waitFor();
+    const composer = page.getByRole("textbox", { name: "评论内容" });
+    await composer.fill("匿名评论应先要求登录");
+    await page.getByRole("button", { name: "发布评论" }).click();
+    await page.getByRole("heading", { name: "登录开放知识平台" }).waitFor();
+    await page.keyboard.press("Escape");
+  });
+
   await check("E2E-ASSISTANT-001", async () => {
     const composer = page.locator(".assistant-input textarea");
     await composer.fill("@");

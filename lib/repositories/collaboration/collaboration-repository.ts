@@ -14,9 +14,10 @@ import type {
   ProjectSummary,
   ReviewSummary,
 } from "@/lib/domain/collaboration";
+import type { ProjectCommentRepository } from "@/lib/domain/collaboration";
 
 /** 协作仓储接口；服务层只依赖这些原子操作，不直接拼接 SQL。 */
-export interface CollaborationRepository {
+export interface CollaborationRepository extends ProjectCommentRepository {
   listPublicProjects(search?: string): Promise<ProjectSummary[]>;
   getProject(projectId: string): Promise<ProjectSummary | null>;
   createProject(input: CreateProjectInput, owner: AuthenticatedActor): Promise<ProjectSummary>;
