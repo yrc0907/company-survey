@@ -86,7 +86,7 @@
 | 企业与报告 CRUD | 能创建、编辑、归档企业和报告，不删除历史版本 | 仅报告创建/保存实现；无企业 CRUD、归档或删除 |
 | 报告编辑 | 标题、目录、引用、结论标记和全文预览 | 章节编辑、目录、已有引用和结论状态已实现；非 Markdown 渲染 |
 | 来源导入 | URL、PDF、图片、粘贴文本均生成来源记录和解析状态 | 仅粘贴文本已实现：限制标题/正文、保存哈希/偏移/Chunk；URL/PDF/图片待实现 |
-| 多模态解析 | 文本 PDF 提取原生文字；扫描 PDF/图片可渲染页面后交给视觉模型 | 未实现 |
+| 文件解析 | Markdown/TXT、原生文字 PDF 和 DOCX 由 Worker 提取；扫描 PDF/图片进入 `needs_review`，视觉模型接入待配置 | 部分实现：租约/产物/重试已实现，source/source_chunk 索引待接入 |
 | 全文检索 | 搜索报告、章节、来源和标签，结果能跳转到具体段落 | PostgreSQL 模式使用 active 来源的参数化 FTS；内存演示或 FTS 异常时显式降级为确定性关键词评分 |
 | 选区 AI 助手 | AI 读取选中段落及相邻上下文，返回带引用的回答或 Diff | 受限上下文与 Provider 调用已实现；没有程序化引用校验或 Diff 生成 |
 | RAG 问答 | 仅从当前工作区的来源片段检索，并显示引用 | 有检索和证据投影；仅限已有 Chunk，外部模型/回答仍待服务器验收 |
@@ -156,7 +156,7 @@
 | --- | --- |
 | `company` | 已实现：名称、类型、摘要、标签和时间 |
 | `report` / `report_section` | 已实现：归属、标题、版本、章节、锚点、位置和结论状态 |
-| `source` / `source_chunk` | 已实现 schema 和手动文本导入：来源快照/哈希/状态，以及 Chunk 的偏移/上下文前缀；页码与文件解析待实现 |
+| `source` / `source_chunk` | 已实现 schema 和手动文本导入；文件 Worker 先写独立 `ingestion_artifact`（含哈希/解析器/页数元数据），转换为来源 Chunk 待接入 |
 | `citation` | 已实现 schema 和展示读取；没有新建/编辑 API |
 | `entity` / `relation_edge` | 已实现 schema 和只读有界遍历；没有写入、HTTP API 或图谱 UI |
 | `report_revision` | 已实现：报告快照、版本、作者和时间；没有 Diff 记录或回滚 API |

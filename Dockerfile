@@ -45,3 +45,21 @@ EXPOSE 3000
 
 # 生产编排由独立 migrate 服务先执行迁移；默认命令仍只启动 Next.js。
 CMD ["node", "server.js"]
+
+# 可选解析 Worker 镜像。默认 Compose 不构建/启动该 target，避免 2C2G 实例常驻额外进程；
+# 该镜像保留 TypeScript 运行时与源码，仅用于私网 one-shot/定时任务，不暴露 HTTP 端口。
+FROM dependencies AS ingestion
+
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
+
+COPY . .
+
+RUN groupadd --system --gid 1001 nodejs \
+    && useradd --system --uid 1001 --gid nodejs worker \
+    && chown -R worker:nodejs /app
+
+USER worker
+
+CMD ["node_modules/.bin/tsx", "scripts/run-asset-ingestion-worker.ts"]

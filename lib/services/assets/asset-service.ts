@@ -50,7 +50,7 @@ export class AssetService {
     const asset = duplicate ?? this.newAsset(actor.userId, input, filename, extension as AssetRecord["extension"], contentType, sha256);
     const idempotencyKey = hashForIdempotency(actor.userId, input.clientUploadId, sha256);
     const now = new Date().toISOString();
-    const ingestion: IngestionJobRecord = duplicate ? (await this.assets.getIngestionJob(asset.id, actor.userId))! : { id: randomUUID(), assetId: asset.id, idempotencyKey, status: "queued", attempt: 0, errorCode: null, errorMessage: null, derivedAssetId: null, createdAt: now, startedAt: null, completedAt: null, updatedAt: now };
+    const ingestion: IngestionJobRecord = duplicate ? (await this.assets.getIngestionJob(asset.id, actor.userId))! : { id: randomUUID(), assetId: asset.id, idempotencyKey, status: "queued", attempt: 0, errorCode: null, errorMessage: null, derivedAssetId: null, createdAt: now, startedAt: null, completedAt: null, updatedAt: now, leaseOwner: null, leaseExpiresAt: null };
     if (!ingestion) throw new AssetConflictError();
     const created = duplicate ? { asset, ingestion, created: false } : await this.assets.createIntent({ asset, ingestion });
     const upload = await this.oss.createUploadGrant({ objectKey: created.asset.objectKey, contentType: created.asset.mimeType, contentLength: created.asset.expectedSize, sha256: created.asset.expectedSha256 });
@@ -90,7 +90,7 @@ export class AssetService {
     return this.assets.completeVerification({ assetId, ownerUserId, etag: actualEtag, actualSize: head.contentLength, actualSha256 });
   }
 
-  public async getStatus(actor: AuthenticatedActor, assetId: string): Promise<{ asset: AssetRecord; ingestion: IngestionJobRecord }> { const asset = await this.assets.getOwnedAsset(assetId, actor.userId); if (!asset) throw new AssetNotFoundError(); const ingestion = await this.assets.getIngestionJob(assetId, actor.userId); if (!ingestion) throw new AssetNotFoundError(); return { asset, ingestion }; }
+  public async getStatus(actor: AuthenticatedActor, assetId: string): Promise<{ asset: AssetRecord; ingestion: IngestionJobRecord; artifact: Awaited<ReturnType<AssetRepository["getIngestionArtifact"]>> }> { const asset = await this.assets.getOwnedAsset(assetId, actor.userId); if (!asset) throw new AssetNotFoundError(); const ingestion = await this.assets.getIngestionJob(assetId, actor.userId); if (!ingestion) throw new AssetNotFoundError(); return { asset, ingestion, artifact: await this.assets.getIngestionArtifact(assetId, actor.userId) }; }
   public async retry(actor: AuthenticatedActor, assetId: string): Promise<IngestionJobRecord> { return this.assets.retryIngestion(assetId, actor.userId); }
   /** 取消上传队列：未确认对象标记失败；已确认原件只取消解析 Job，不删除不可变原始证据。 */
   public async cancel(actor: AuthenticatedActor, assetId: string): Promise<void> {

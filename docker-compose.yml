@@ -110,6 +110,39 @@ services:
           cpus: "0.25"
           memory: 256M
 
+  ingestion:
+    # 解析 Worker 是 one-shot 可选服务；默认 profile 不启动，按需 drain 队列后自动退出。
+    profiles: ["ingestion"]
+    image: ${INGESTION_IMAGE:-research-workbench:ingestion}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ingestion
+    restart: "no"
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=384
+      ASSET_INGESTION_DRAIN: ${ASSET_INGESTION_DRAIN:-false}
+      ASSET_INGESTION_MAX_JOBS: ${ASSET_INGESTION_MAX_JOBS:-1}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: ["node_modules/.bin/tsx", "scripts/run-asset-ingestion-worker.ts"]
+    logging:
+      driver: local
+      options:
+        max-size: "5m"
+        max-file: "2"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+
   postgres:
     image: postgres:16.4-alpine
     restart: unless-stopped

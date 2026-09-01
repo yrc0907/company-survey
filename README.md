@@ -20,7 +20,7 @@
 
 尚未实现或未验证：
 
-- URL/PDF/图片导入、文件上传、PDF/视觉解析、来源刷新和变化检测；手动文本是当前唯一支持的导入类型；
+- URL/PDF/图片来源刷新和变化检测仍未实现；私有文件上传与解析 Worker 已支持 Markdown/TXT、原生文字 PDF、DOCX，扫描 PDF/图片会安全降级为 `needs_review`，视觉 OCR 尚未接入；
 - pgvector 持久化/ANN、检索评测；远程 Embedding、Dense RRF 与 Rerank 已有有界运行时实现，PostgreSQL FTS 查询已接入；
 - 企业 CRUD、图谱写入/API/UI、版本 Diff/回滚、Markdown/PDF 导出；
 - 应用内会话认证已实现；旧版 Research API 仍依赖 Caddy Basic Auth，公开平台写操作依赖 Auth.js/RBAC；

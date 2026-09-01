@@ -19,3 +19,8 @@ export class AssetQuotaExceededError extends ValidationError {
 export class AssetVerificationError extends ValidationError {
   public constructor(message = "上传对象校验失败，请重新上传") { super(message); this.name = "AssetVerificationError"; }
 }
+
+/** Worker 租约失效时丢弃晚到结果，避免两个 Worker 覆盖同一份解析产物。 */
+export class IngestionLeaseLostError extends ValidationError {
+  public constructor(message = "解析任务租约已失效，请等待任务重新排队") { super(message); this.name = "IngestionLeaseLostError"; }
+}

@@ -1,6 +1,6 @@
 # 私有 OSS 上传实现
 
-状态：后端私有 OSS 上传、下载和隔离对象清理闭环已实现；文件内容解析 Worker 仍按 `TODO.md` 接入。
+状态：后端私有 OSS 上传、下载、隔离对象清理和解析 Worker 闭环已实现。文本/原生文字 PDF/DOCX 会生成独立解析产物；图片和无文字层 PDF 明确进入 `needs_review`，不会伪造 OCR 正文。
 
 ## 安全边界
 
@@ -34,7 +34,7 @@ x-oss-meta-sha256: <预期 SHA-256>
 
 ### `GET /api/platform/uploads/{assetId}`
 
-只返回当前登录用户自己的资产和解析状态。其他用户统一返回 404。
+只返回当前登录用户自己的资产、解析状态和（若存在）解析产物。其他用户统一返回 404。
 
 ### `POST /api/platform/uploads/{assetId}/retry`
 
@@ -52,9 +52,32 @@ x-oss-meta-sha256: <预期 SHA-256>
 
 ```text
 Asset: pending_upload -> verified | failed
-Job: queued -> uploading -> processing -> ready | failed -> queued (retry)
+Job: queued -> processing -> ready | needs_review | failed -> queued (retry)
 ```
 
-`uploaded_asset` 保存不可变原始对象元数据；解析器生成的 Markdown/结构化文档必须创建独立 `asset_kind=derived` 记录，并通过 `original_asset_id` 关联，编辑派生内容不能覆盖原始证据。`DeleteObject` 只允许隔离前缀，不能删除 `verified` 原件；已取消或校验失败对象的 OSS 清理可安全幂等重试。
+`uploaded_asset` 保存不可变原始对象元数据；Worker 先把文本结果按 attempt 追加到独立 `ingestion_artifact`，读取接口只返回最新产物，后续 source/source_chunk 索引可从该产物重建。正式派生文件仍必须创建独立 `asset_kind=derived` 记录并通过 `original_asset_id` 关联，编辑派生内容不能覆盖原始证据。`DeleteObject` 只允许隔离前缀，不能删除 `verified` 原件；已取消或校验失败对象的 OSS 清理可安全幂等重试。
 
-解析 Worker 通过 `AssetRepository.updateIngestionStatus` 领取和更新任务；状态更新应使用条件 SQL、attempt 和幂等键，失败保留错误码和可恢复提示。当前 API 不声称解析已经完成。
+## 解析 Worker
+
+`AssetIngestionService.processNext(workerId)` 使用 `AssetRepository.claimNextIngestion` 领取一个 `verified` 原件：
+
+1. PostgreSQL `FOR UPDATE SKIP LOCKED` 分配任务并写入租约；`processing/uploading` 的过期租约可被回收。
+2. Worker 从私有 OSS 受限流式读取对象，并再次比较长度和 SHA-256；校验失败只记录 `PARSER_FAILED`。
+   对 PDF/DOCX/PNG/JPEG/WebP 还会检查文件签名（magic bytes），仅凭客户端 MIME/扩展名不能绕过该边界。
+3. `.md/.txt` 使用严格 UTF-8；原生文字 PDF 使用有限 PDF text operator 提取；DOCX 仅读取 `word/document.xml`，支持 ZIP stored/deflate，不执行宏或外部实体。
+4. 图片、扫描 PDF、无支持解析器的格式写入 `kind=needs_review` 产物并将 Job 置为 `needs_review`，错误码为 `PARSER_REQUIRES_VISION` 或 `PARSER_REQUIRES_DOCUMENT_PARSER`。
+5. 只有持有租约且未过期的 Worker 能够 `completeIngestion`/`markIngestionNeedsReview`；晚到结果被条件更新拒绝。重复完成不会覆盖已有产物。
+
+当前 Worker 不调用视觉模型，也不声称图片 OCR 已完成；配置视觉解析器后可对 `needs_review` Job 使用原有重试接口。
+
+契约测试：`pnpm test` 中的 `lib/services/assets/asset-ingestion.contract.ts` 覆盖文本完成、图片待校对、PDF 文字层/扫描降级、OSS 完整性失败、显式重试和重复消费边界。
+
+### 运行方式
+
+在已加载服务器 `.env` 的应用/Worker 运行环境执行：
+
+```text
+pnpm asset:ingestion
+```
+
+默认只领取一个任务；批量排空可设置 `ASSET_INGESTION_DRAIN=true` 和 `ASSET_INGESTION_MAX_JOBS=100`。脚本无任务时以成功状态退出并输出处理数量；错误日志只包含资产/任务 ID、错误码和可读原因，不输出 OSS 凭据或对象内容。生产容器应以独立 one-shot/定时 Worker 运行该入口，不要把它暴露成公开 HTTP 接口。

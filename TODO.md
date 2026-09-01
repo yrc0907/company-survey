@@ -25,7 +25,7 @@
 - [ ] 建立 `uploaded_asset`、`ingestion_job`、`project_view_daily`、`project_stats` schema 与聚合任务
 - [ ] 接入 TipTap，正文 Block 使用稳定 ID，支持 Markdown 导入导出
 - [ ] 登录后创建空白项目，或通过 OSS 隔离上传创建私有草稿项目并进入三栏工作台
-- [ ] Markdown/TXT/PDF/DOCX/PNG/JPEG 白名单、MIME magic、大小、哈希、重复检测、解析状态和幂等重试
+- [~] Markdown/TXT/PDF/DOCX/PNG/JPEG 白名单、MIME magic、大小、哈希、重复检测、解析状态和幂等重试；解析 Worker 已支持文本/原生 PDF/DOCX，图片与扫描 PDF 进入 `needs_review`，source/source_chunk 建立仍待接入
 - [ ] 原始上传文件不可变，可编辑派生正文与原始证据分离；向他人项目上传只能进入个人分支/MR
 - [ ] 游客 IndexedDB 草稿、自动保存、登录迁移和过期 base revision 恢复
 - [ ] Diff、三方合并、冲突处理、逐段评论、审核和单事务合并
@@ -35,7 +35,7 @@
 - [ ] 首页列表式卡片展示 owner、published_at、main 最新合并、去重阅读、已合并贡献者、来源与 open MR
 - [ ] 匿名 AI 签名 Cookie、Redis 限流、额度、成本和滥用防护
 - [ ] 阿里云 OSS 文件/头像存储、许可证、举报、下架和审计
-- [~] 私有 Bucket `reaserch` 已创建，ECS 已绑定 `research-oss` 且 IMDSv2 临时凭据状态为 `Success`；OSS SDK、预签名读写、隔离对象删除、所有者边界和 ECS 临时对象 Put/Head/Delete 已验证，目标 Bucket CORS、浏览器直传权限 E2E 与解析 Worker 仍待接入
+- [~] 私有 Bucket `reaserch` 已创建，ECS 已绑定 `research-oss` 且 IMDSv2 临时凭据状态为 `Success`；OSS SDK、预签名读写、隔离对象删除、所有者边界和 ECS 临时对象 Put/Head/Delete 已验证，目标 Bucket CORS、浏览器直传权限 E2E 与 source/source_chunk 产物索引仍待接入；解析 Worker 已实现租约、重试和明确待校对降级
 - [ ] 默认头像使用用户名首字符和稳定背景色；用户头像完成 MIME/大小校验、EXIF 清理、WebP 派生和私有 OSS 受控访问
 - [ ] PostgreSQL FTS + pgvector + RRF + Reranker 持久化检索和后台索引 Worker
 - [ ] 权限拒绝、游客迁移、版本冲突、署名一致性、移动端、Reduced Motion 和公网 E2E
@@ -81,7 +81,7 @@
 - [x] 已导入资料的受限搜索 API，返回命中、父章节和相邻 Chunk
 - [x] 手动文本来源导入 API：输入上限、SHA-256、`active` 状态、连续 Chunk、PostgreSQL 事务写入与 memory_demo 拒绝
 - [ ] URL/PDF/图片来源导入 API，以及 URL 重定向/DNS 级 SSRF 防护；现有 `assertSafeSourceUrl` 只是可复用校验函数
-- [ ] 原生文本 PDF 解析、扫描 PDF/图片视觉解析、文件上传存储与任务状态
+- [~] 原生文本 PDF、DOCX 解析、扫描 PDF/图片视觉解析边界、文件上传存储与任务状态；当前扫描件/图片不调用视觉模型，写入 `needs_review` 并允许显式重试
 - [~] 手动文本已写入来源快照、内容哈希、时间和 `active` 状态；来源刷新、变更检测和状态迁移待实现
 - [~] 手动文本已写入带偏移和上下文前缀的 Chunk；页码、文件解析、引用和图谱的写入流水线待实现
 - [~] revision 数据已持久化；没有 Diff 计算、审计查询、回滚 API 或 UI

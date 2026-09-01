@@ -5,7 +5,7 @@ export const ASSET_ALLOWED_EXTENSIONS = [".md", ".txt", ".pdf", ".docx", ".png",
 export type AssetExtension = (typeof ASSET_ALLOWED_EXTENSIONS)[number];
 export type AssetKind = "original" | "derived" | "avatar";
 export type AssetStatus = "pending_upload" | "uploaded" | "verified" | "failed" | "quarantined";
-export type IngestionStatus = "queued" | "uploading" | "processing" | "ready" | "failed";
+export type IngestionStatus = "queued" | "uploading" | "processing" | "ready" | "needs_review" | "failed";
 
 export interface UploadIntentInput {
   filename: string;
@@ -53,6 +53,23 @@ export interface IngestionJobRecord {
   startedAt: string | null;
   completedAt: string | null;
   updatedAt: string;
+  /** Worker 租约持有人；仅服务端内部使用，不暴露给浏览器。 */
+  leaseOwner: string | null;
+  leaseExpiresAt: string | null;
+}
+
+/** 解析产物的最小持久化记录；原件仍不可变，文本是独立产物。 */
+export interface IngestionArtifactRecord {
+  id: string;
+  ingestionJobId: string;
+  assetId: string;
+  attempt: number;
+  kind: "text" | "needs_review";
+  mimeType: string;
+  content: string | null;
+  contentHash: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface UploadIntentResult {

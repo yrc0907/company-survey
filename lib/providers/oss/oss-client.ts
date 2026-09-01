@@ -13,6 +13,8 @@ export interface OssSigningClient {
   asyncSha256Object?(name: string): Promise<string>;
   /** 删除隔离区对象；只由 Provider 在完成所有者校验后调用。 */
   asyncDeleteObject?(name: string): Promise<void>;
+  /** 解析 Worker 受限读取私有对象；调用方必须自行执行长度与 SHA-256 校验。 */
+  asyncGetObjectBuffer?(name: string, maxBytes: number): Promise<Buffer>;
 }
 
 export interface OssObjectHead {
@@ -92,6 +94,17 @@ export async function createOssSigningClient(config: OssConfig): Promise<OssSign
     asyncDeleteObject: async (name) => {
       // OSS DELETE 对不存在对象保持幂等，便于用户重复点击取消或清理失败重试。
       await client.delete(name);
+    },
+    asyncGetObjectBuffer: async (name, maxBytes) => {
+      const result = await client.getStream(name);
+      const chunks: Buffer[] = [];
+      let total = 0;
+      for await (const chunk of result.stream as AsyncIterable<Uint8Array>) {
+        total += chunk.byteLength;
+        if (total > maxBytes) throw new Error("OSS 对象超过解析读取上限。");
+        chunks.push(Buffer.from(chunk));
+      }
+      return Buffer.concat(chunks, total);
     },
   };
 }

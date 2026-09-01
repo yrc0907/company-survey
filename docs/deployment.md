@@ -338,3 +338,14 @@ OSS_FORCE_HTTPS=true
 ```
 
 以上配置用于生产镜像的真实 OSS SDK、预签名 `PutObject/GetObject` 和受控 `DeleteObject`。应用只使用 ECS RAM Role 临时凭据，不保存永久 AccessKey；数据库先做所有者/项目权限过滤，再签发短期 URL。浏览器直传必须同时发送 `x-oss-meta-sha256`，适配器会兼容 `result.meta.sha256` 和原始响应头，缺失时由完成接口流式重算。删除只针对隔离对象，已验证原件不可由取消接口删除。上线前仍需在目标 Bucket CORS 和香港 ECS 环境验证 `PutObject/GetObject/DeleteObject` 权限边界、跨用户拒绝、签名过期、重复上传和跨地域延迟。
+
+### 可选解析 Worker
+
+解析 Worker 不属于默认常驻服务。Dockerfile 提供 `ingestion` target，Compose 通过 `ingestion` profile 按需构建并运行 one-shot 任务：
+
+```bash
+ASSET_INGESTION_DRAIN=true ASSET_INGESTION_MAX_JOBS=100 \
+  docker compose --profile ingestion run --rm ingestion
+```
+
+该镜像使用与仓库一致的 `tsx` 运行时和 `scripts/run-asset-ingestion-worker.ts`，通过 Compose 内网访问 PostgreSQL，并以 ECS RAM Role 读取私有 OSS；无任务时正常退出，不监听端口。默认 `docker compose up -d` 不构建、不启动此服务，不增加应用常驻内存。Worker 会在迁移 `008_asset_ingestion_worker.sql` 成功后才可运行。

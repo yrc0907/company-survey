@@ -1,4 +1,4 @@
-import type { AssetRecord, AssetStatus, IngestionJobRecord, IngestionStatus } from "@/lib/domain/assets";
+import type { AssetRecord, AssetStatus, IngestionArtifactRecord, IngestionJobRecord, IngestionStatus } from "@/lib/domain/assets";
 
 export interface CreateAssetRecord {
   asset: AssetRecord;
@@ -20,6 +20,43 @@ export interface AssetRepository {
   retryIngestion(assetId: string, ownerUserId: string): Promise<IngestionJobRecord>;
   updateIngestionStatus(assetId: string, status: IngestionStatus, error?: { code: string; message: string }): Promise<IngestionJobRecord | null>;
   markDerivedAsset(input: { sourceAssetId: string; ownerUserId: string; derived: AssetRecord }): Promise<AssetRecord>;
+  /** 在数据库锁下领取一个 verified 任务；过期租约可被其他 Worker 回收。 */
+  claimNextIngestion(workerId: string, leaseSeconds: number): Promise<IngestionClaim | null>;
+  /** 只有持有当前租约的 Worker 才能写入结果，返回 false 表示租约已失效。 */
+  completeIngestion(input: CompleteIngestionInput): Promise<IngestionJobRecord | null>;
+  markIngestionNeedsReview(input: NeedsReviewIngestionInput): Promise<IngestionJobRecord | null>;
+  failIngestion(input: FailIngestionInput): Promise<IngestionJobRecord | null>;
+  getIngestionArtifact(assetId: string, ownerUserId: string): Promise<IngestionArtifactRecord | null>;
+}
+
+export interface IngestionClaim {
+  asset: AssetRecord;
+  job: IngestionJobRecord;
+  leaseOwner: string;
+}
+
+export interface CompleteIngestionInput {
+  assetId: string;
+  jobId: string;
+  leaseOwner: string;
+  artifact: IngestionArtifactRecord;
+}
+
+export interface NeedsReviewIngestionInput {
+  assetId: string;
+  jobId: string;
+  leaseOwner: string;
+  artifact: IngestionArtifactRecord;
+  code: string;
+  message: string;
+}
+
+export interface FailIngestionInput {
+  assetId: string;
+  jobId: string;
+  leaseOwner: string;
+  code: string;
+  message: string;
 }
 
 export type AssetStatusFilter = AssetStatus;

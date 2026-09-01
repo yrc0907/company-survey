@@ -75,6 +75,18 @@ export class OssObjectStorageProvider {
     await this.client.asyncDeleteObject(objectKey);
   }
 
+  /**
+   * 解析 Worker 只读已通过路径校验的对象，并在流式读取时限制最大字节数。
+   * 该方法不返回签名 URL，也不允许读取任意用户控制的 Bucket/Key。
+   */
+  public async readObject(objectKey: string, maxBytes = 25 * 1024 * 1024): Promise<Buffer> {
+    assertStorageObjectKey(objectKey);
+    if (!objectKey.startsWith("quarantine/")) throw new Error("解析只能读取隔离区原始对象。");
+    if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 25 * 1024 * 1024) throw new Error("解析读取上限无效。");
+    if (!this.client.asyncGetObjectBuffer) throw new Error("OSS Provider 未配置对象读取能力。");
+    return this.client.asyncGetObjectBuffer(objectKey, maxBytes);
+  }
+
   /** 为已通过权限检查的对象创建短期 GET URL；数据库只保存 objectKey，不保存该 URL。 */
   public async createDownloadGrant(objectKey: string): Promise<SignedDownloadGrant> {
     assertStorageObjectKey(objectKey);
