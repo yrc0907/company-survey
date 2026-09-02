@@ -10,13 +10,13 @@ type UploadPayload = { asset: { id: string; filename: string; expectedSize: numb
 type ProjectPayload = { project: { id: string; title: string } };
 type BranchPayload = { branch: { id: string; name: string } };
 
-const ACCEPT = ".md,.txt,.pdf,.docx,.png,.jpg,.jpeg,.webp";
+const ACCEPT = ".md,.txt,.pdf,.docx,.png,.jpg,.jpeg,.webp,.gif";
 const MAX_BYTES = 25 * 1024 * 1024;
 
 function formatBytes(value: number): string { return value < 1024 * 1024 ? `${Math.ceil(value / 1024)} KB` : `${(value / (1024 * 1024)).toFixed(1)} MB`; }
 function slugFromTitle(value: string): string { const slug = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50); return `${/^[a-z0-9][a-z0-9-]*$/.test(slug) ? slug : "research"}-${crypto.randomUUID().slice(0, 8)}`; }
 async function sha256(file: File): Promise<string> { const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer()); return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(""); }
-function contentTypeForFile(file: File): string { if (file.type) return file.type; const extension = file.name.toLowerCase().split(".").pop(); return extension === "md" ? "text/markdown" : extension === "txt" ? "text/plain" : extension === "pdf" ? "application/pdf" : extension === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : extension === "png" ? "image/png" : extension === "jpg" || extension === "jpeg" ? "image/jpeg" : extension === "webp" ? "image/webp" : ""; }
+function contentTypeForFile(file: File): string { if (file.type) return file.type; const extension = file.name.toLowerCase().split(".").pop(); return extension === "md" ? "text/markdown" : extension === "txt" ? "text/plain" : extension === "pdf" ? "application/pdf" : extension === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : extension === "png" ? "image/png" : extension === "jpg" || extension === "jpeg" ? "image/jpeg" : extension === "webp" ? "image/webp" : extension === "gif" ? "image/gif" : ""; }
 
 /** 登录后的资料入口：项目、分支、私有 OSS 直传和解析状态均由后端创建与校验。 */
 export function UploadPanel() {

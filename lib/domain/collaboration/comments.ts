@@ -1,4 +1,5 @@
 import type { AuthenticatedActor } from "@/lib/domain/platform";
+import type { CommentAttachmentSummary } from "@/lib/domain/collaboration/comment-attachments";
 
 /** 项目级评论的公开安全投影；已删除评论保留作者和时间，但正文为空。 */
 export interface ProjectCommentSummary {
@@ -18,6 +19,8 @@ export interface ProjectCommentSummary {
   canDelete: boolean;
   createdAt: string;
   updatedAt: string;
+  /** 已签发的短期下载地址；未配置附件服务时为空数组。 */
+  attachments?: CommentAttachmentSummary[];
 }
 
 /** 创建项目评论；身份由服务端 actor 提供，输入不能携带 authorUserId。 */
@@ -29,6 +32,7 @@ export interface CreateProjectCommentInput {
   quote?: string | null;
   body: string;
   idempotencyKey?: string;
+  attachmentAssetIds?: string[];
 }
 
 /** 评论仓储的最小接口；具体 SQL、事务和用户资料投影留在 repository 层。 */

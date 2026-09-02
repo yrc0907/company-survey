@@ -8,6 +8,7 @@ import { collaborationErrorResponse, ProjectCommentService } from "@/lib/service
 import { getCollaborationRepository } from "@/lib/repositories/collaboration";
 import { getPlatformRepository } from "@/lib/repositories/platform/platform-repository-factory";
 import { readIdempotencyKey } from "@/lib/services/collaboration/idempotency";
+import { getAssetsOssProvider } from "@/lib/services/assets/oss-provider-factory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,13 +19,22 @@ const createSchema = z.object({
   blockId: z.string().trim().min(1).max(128).nullable().optional(),
   quote: z.string().trim().min(1).max(2000).nullable().optional(),
   body: z.string().trim().min(1).max(10000),
+  attachmentAssetIds: z.array(z.string().trim().min(1).max(128)).max(4).optional(),
 }).strict().superRefine((input, context) => {
   const anchored = [input.nodeId, input.blockId, input.quote].filter((value) => value != null).length;
   if (anchored !== 0 && anchored !== 3) context.addIssue({ code: z.ZodIssueCode.custom, path: ["quote"], message: "段落评论必须同时提供文件、段落和引用片段" });
 });
 
 function service(): ProjectCommentService {
-  return new ProjectCommentService(getCollaborationRepository(), getPlatformRepository());
+  const repository = getCollaborationRepository();
+  const attachments = typeof repository.listCommentAttachments === "function" ? repository : null;
+  // 延迟创建 OSS Provider：没有附件的匿名评论读取不应因 OSS 配置暂时缺失而失败。
+  let provider: ReturnType<typeof getAssetsOssProvider> | null = null;
+  const signAttachment = attachments ? async (objectKey: string) => {
+    provider ??= getAssetsOssProvider();
+    return (await provider).createDownloadGrant(objectKey);
+  } : null;
+  return new ProjectCommentService(repository, getPlatformRepository(), attachments, signAttachment);
 }
 
 /** 公开项目评论匿名可读；正文和作者资料来自 PostgreSQL，不使用演示用户。 */
@@ -44,7 +54,7 @@ export async function POST(request: Request, context: { params: { id: string } }
     assertTrustedJsonRequest(request);
     const actor = await requireAuthenticatedActor();
     const input = createSchema.parse(await request.json());
-    const comment = await service().create({ projectId: context.params.id, parentId: input.parentId ?? null, nodeId: input.nodeId ?? null, blockId: input.blockId ?? null, quote: input.quote ?? null, body: input.body, idempotencyKey: readIdempotencyKey(request) }, actor);
+    const comment = await service().create({ projectId: context.params.id, parentId: input.parentId ?? null, nodeId: input.nodeId ?? null, blockId: input.blockId ?? null, quote: input.quote ?? null, body: input.body, attachmentAssetIds: input.attachmentAssetIds ?? [], idempotencyKey: readIdempotencyKey(request) }, actor);
     return json({ comment, source: "postgres" }, { status: 201, headers: { "cache-control": "no-store" } });
   } catch (error) {
     return collaborationErrorResponse(error) ?? authErrorResponse(error);

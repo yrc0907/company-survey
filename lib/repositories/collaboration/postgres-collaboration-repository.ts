@@ -3,7 +3,7 @@ import postgres, { type Sql, type TransactionSql } from "postgres";
 
 import { KnowledgeCommandRegistry } from "@/lib/commands/knowledge";
 import type { KnowledgeBranchContext, KnowledgeCommandStore, KnowledgeNodeRecord, KnowledgeTreeChange } from "@/lib/commands/knowledge/types";
-import { calculateDiff, CollaborationConflictError, CollaborationInvalidStateError, CollaborationNotFoundError, type BranchSummary, type CollaborationNodeSnapshot, type CollaborationSnapshot, type CommitSummary, type CreateBranchInput, type CreateMergeRequestInput, type CreateProjectCommentInput, type CreateProjectInput, type CreateReviewInput, type MergeRequestSummary, type ProjectCommentSummary, type ProjectSummary, type ReviewSummary, applyDiff } from "@/lib/domain/collaboration";
+import { calculateDiff, CollaborationConflictError, CollaborationInvalidStateError, CollaborationNotFoundError, type BranchSummary, type CollaborationNodeSnapshot, type CollaborationSnapshot, type CommitSummary, type CreateBranchInput, type CreateMergeRequestInput, type CreateProjectCommentInput, type CreateProjectInput, type CreateReviewInput, type MergeRequestSummary, type ProjectCommentSummary, type ProjectSummary, type ReviewSummary, type CommentAttachmentRecord, applyDiff } from "@/lib/domain/collaboration";
 import type { AuthenticatedActor, KnowledgeNodeKind } from "@/lib/domain/platform";
 import type { CollaborationRepository, CollaborationQueryable } from "@/lib/repositories/collaboration/collaboration-repository";
 import { collaborationIdempotencyFingerprint } from "@/lib/services/collaboration/idempotency";
@@ -52,6 +52,13 @@ function mapProjectComment(row: Row): ProjectCommentSummary {
   };
 }
 
+function mapCommentAttachment(row: Row): CommentAttachmentRecord {
+  return {
+    id: text(row.id), commentId: text(row.comment_id), assetId: text(row.asset_id), filename: text(row.filename),
+    mimeType: text(row.mime_type), size: Number(row.actual_size ?? row.expected_size ?? 0), objectKey: text(row.object_key),
+  };
+}
+
 const PROJECT_SELECT = `SELECT p.id, p.owner_user_id, p.slug, p.title, p.summary, p.visibility, p.status, p.license, p.published_at, p.created_at, p.updated_at,
   pr.username AS owner_username, pr.display_name AS owner_display_name, pr.avatar_asset_id AS owner_avatar_asset_id
   FROM knowledge_project p JOIN platform_profile pr ON pr.user_id = p.owner_user_id`;
@@ -83,6 +90,49 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
       WHERE c.project_id = ${projectId} AND kp.visibility = 'public' AND kp.status = 'published'
       ORDER BY c.created_at ASC, c.id ASC LIMIT 1000`;
     return rows.map(mapProjectComment);
+  }
+
+  /** 仅返回评论已绑定的资产元数据；objectKey 只留在服务端用于签发 URL。 */
+  public async listCommentAttachments(commentIds: string[]): Promise<CommentAttachmentRecord[]> {
+    const ids = Array.from(new Set(commentIds.filter(Boolean)));
+    if (!ids.length) return [];
+    const rows = await this.sql<Row[]>`SELECT pca.id, pca.comment_id, pca.asset_id, ua.filename, ua.mime_type, ua.actual_size, ua.expected_size, ua.object_key
+      FROM project_comment_attachment pca JOIN uploaded_asset ua ON ua.id = pca.asset_id
+      WHERE pca.comment_id = ANY(${this.sql.array(ids)}::text[]) AND ua.status = 'verified'
+      ORDER BY pca.comment_id, pca.position ASC, pca.created_at ASC`;
+    return rows.map(mapCommentAttachment);
+  }
+
+  /** 在单事务内确认资产所有者/状态/类型和项目范围后绑定，重复请求只返回已有关系。 */
+  public async attachCommentAttachments(input: { projectId: string; commentId: string; assetIds: string[]; ownerUserId: string }): Promise<CommentAttachmentRecord[]> {
+    const assetIds = Array.from(new Set(input.assetIds.filter(Boolean)));
+    if (assetIds.length > 4) throw new CollaborationInvalidStateError("一条评论最多添加 4 个图片或 GIF 附件");
+    if (!assetIds.length) return [];
+    return this.sql.begin(async (tx: TransactionSql) => {
+      const comments = await tx<Row[]>`SELECT id FROM project_comment WHERE id = ${input.commentId} AND project_id = ${input.projectId} FOR SHARE`;
+      if (!comments[0]) throw new CollaborationNotFoundError("评论不存在");
+      const assets = await tx<Row[]>`SELECT id, filename, mime_type, actual_size, expected_size, object_key
+        FROM uploaded_asset
+        WHERE id = ANY(${tx.array(assetIds)}::text[])
+          AND owner_user_id = ${input.ownerUserId}
+          AND status = 'verified'
+          AND asset_kind = 'original'
+          AND mime_type IN ('image/png', 'image/jpeg', 'image/webp', 'image/gif')
+          AND (project_id IS NULL OR project_id = ${input.projectId})
+        FOR SHARE`;
+      if (assets.length !== assetIds.length) throw new CollaborationInvalidStateError("附件不存在、未完成校验或不属于当前用户");
+      for (let position = 0; position < assetIds.length; position += 1) {
+        const assetId = assetIds[position]!;
+        await tx`INSERT INTO project_comment_attachment (id, project_id, comment_id, asset_id, position)
+          VALUES (${randomUUID()}, ${input.projectId}, ${input.commentId}, ${assetId}, ${position})
+          ON CONFLICT (comment_id, asset_id) DO NOTHING`;
+      }
+      const rows = await tx<Row[]>`SELECT pca.id, pca.comment_id, pca.asset_id, ua.filename, ua.mime_type, ua.actual_size, ua.expected_size, ua.object_key
+        FROM project_comment_attachment pca JOIN uploaded_asset ua ON ua.id = pca.asset_id
+        WHERE pca.comment_id = ${input.commentId} AND ua.status = 'verified'
+        ORDER BY pca.position ASC, pca.created_at ASC`;
+      return rows.map(mapCommentAttachment);
+    });
   }
 
   /** 通过固定 ID 查询单条评论，删除权限由服务层按项目角色二次判定。 */

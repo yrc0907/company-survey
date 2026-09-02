@@ -1,7 +1,7 @@
 import type { AuthenticatedActor } from "@/lib/domain/platform";
 
 export const ASSET_MAX_BYTES = 25 * 1024 * 1024;
-export const ASSET_ALLOWED_EXTENSIONS = [".md", ".txt", ".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp"] as const;
+export const ASSET_ALLOWED_EXTENSIONS = [".md", ".txt", ".pdf", ".docx", ".png", ".jpg", ".jpeg", ".webp", ".gif"] as const;
 export type AssetExtension = (typeof ASSET_ALLOWED_EXTENSIONS)[number];
 export type AssetKind = "original" | "derived" | "avatar";
 export type AssetStatus = "pending_upload" | "uploaded" | "verified" | "failed" | "quarantined";

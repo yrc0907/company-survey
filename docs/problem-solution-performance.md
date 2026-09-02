@@ -211,3 +211,11 @@
 - **方案**：迁移 `018_activity_events.sql` 增加 `activity_event`，由 PostgreSQL 触发器从真实表追加事件；账本禁止更新/删除，公开 API 只按项目公开状态和操作者 active 状态过滤，并用时间游标分页。
 - **复验**：`public-activity.contract.ts` 覆盖 404、非法游标 400、无持久化时 409；生产数据库需验证评论、Star、Commit、MR/Review 各触发一次并检查 append-only 约束。
 - **性能影响**：每个行为写入增加一次轻量 JSONB 事件 INSERT；读取使用 `(project_id, occurred_at DESC, id DESC)` 部分索引和最多 100 条分页，避免扫描全库或从页面临时聚合。
+
+## COMMENT-ATTACHMENT-001：评论图片/GIF 被伪造、越权或泄露永久地址
+
+- **场景**：客户端把任意 `assetId` 塞进评论，或把 OSS 公共地址直接写入评论；匿名读者随后可访问未验证、其他用户或私有项目的文件。
+- **根因**：评论正文接口和文件存储接口边界混淆；仅校验文件名/MIME 不能证明对象已完整上传，也不能证明当前用户拥有该对象。
+- **方案**：附件必须先走既有上传意图、私有 OSS PUT、Head/大小/SHA-256 完成校验；评论服务只接受当前 Session 用户拥有、`verified`、图片/GIF MIME 且项目范围匹配的资产，关系落在 `project_comment_attachment`。读取时只对公开已发布项目签发短期 GET URL，数据库和 API 不暴露 `objectKey`；软删除评论同时隐藏附件。
+- **复验**：`project-comments.contract.ts` 覆盖登录绑定、匿名重新签名和无附件兼容；`pnpm typecheck`、`pnpm lint`、`pnpm test` 全部通过。生产还需用真实私有 Bucket 验证 CORS `ExposeHeader: ETag` 和过期 URL 返回 403。
+- **性能影响**：评论读取增加一次按评论 ID 的附件索引查询，并按附件数量（最多 4）签名；图片使用浏览器懒加载，避免把二进制内容经过应用服务器中转。
