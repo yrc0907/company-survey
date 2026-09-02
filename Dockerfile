@@ -46,6 +46,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/scripts/run-migrations.mjs ./scri
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/seed-community.mjs ./scripts/seed-community.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/enrich-enterprise-reports.mjs ./scripts/enrich-enterprise-reports.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/refresh-market-data.mjs ./scripts/refresh-market-data.mjs
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/refresh-analyst-theses.mjs ./scripts/refresh-analyst-theses.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/db/migrations ./db/migrations
 
 USER nextjs
