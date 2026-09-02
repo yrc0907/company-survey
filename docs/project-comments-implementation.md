@@ -14,6 +14,7 @@
 - `DELETE /api/platform/projects/:id/comments/:commentId`：作者本人或项目 owner/maintainer 可执行；同时校验 URL 项目 ID 与评论归属。
 - 评论 POST 可携带最多 4 个 `attachmentAssetIds`；资产必须由当前 Session 用户拥有、已完成 OSS Head/大小/SHA-256 校验、MIME 为 PNG/JPEG/WebP/GIF，且未越过项目边界。
 - `project_comment_attachment` 只保存评论、项目和资产关系，不保存签名 URL；GET 评论时服务层重新签发短期下载地址。删除评论会隐藏附件，原始 OSS 对象仍按不可变证据策略保留。
+- 评论幂等指纹包含附件 ID；网络重试只能重放相同正文、锚点和附件集合，换附件会返回冲突而不会静默追加。
 
 评论服务复用现有公开项目授权读取边界，删除角色直接从 `PlatformRepository` 查询，不在评论表复制权限。平台管理员不会因为全局角色自动获得项目内容删除权。
 
