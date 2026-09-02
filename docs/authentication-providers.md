@@ -11,7 +11,7 @@
   -> 服务端校验票据
   -> 账户/手机号权限校验
   -> 生成验证码并写入挑战表
-  -> 阿里云短信或企业邮箱 Provider
+  -> 阿里云短信或受控邮件 Provider（QQ/企业邮箱）
   -> Auth.js Credentials 消费一次性挑战
 ```
 
@@ -22,8 +22,8 @@
 真实值只放香港 ECS 的 `/srv/research-workbench/.env`，不写入仓库、镜像、日志或聊天：
 
 ```dotenv
-EMAIL_PROVIDER=aliyun_enterprise_mail
-SMTP_HOST=<阿里云企业邮箱 SMTP 主机>
+EMAIL_PROVIDER=qq_mail # 或 aliyun_enterprise_mail
+SMTP_HOST=smtp.qq.com # QQ；阿里云企业邮箱使用 smtp.qiye.aliyun.com
 SMTP_PORT=465
 SMTP_SECURE=true
 SMTP_CONNECTION_TIMEOUT_MS=10000

@@ -11,6 +11,9 @@ export interface EmailProvider {
   send(message: EmailMessage): Promise<{ providerMessageId: string | null }>;
 }
 
+/** 当前允许的邮件通道；都复用同一 SMTP 适配器，业务层不感知供应商。 */
+export type EmailProviderKind = "aliyun_enterprise_mail" | "qq_mail";
+
 /** Provider 未配置时的明确错误；路由会把它映射为可理解的服务不可用状态。 */
 export class EmailProviderNotConfiguredError extends Error {
   public constructor() {
@@ -57,6 +60,6 @@ export class SmtpEmailProvider implements EmailProvider {
 export function getEmailProvider(environment: Record<string, string | undefined> = process.env): EmailProvider | null {
   const provider = environment.EMAIL_PROVIDER?.trim().toLowerCase();
   if (!provider || provider === "disabled") return null;
-  if (provider === "aliyun_enterprise_mail") return SmtpEmailProvider.fromEnvironment(environment);
+  if (provider === "aliyun_enterprise_mail" || provider === "qq_mail") return SmtpEmailProvider.fromEnvironment(environment);
   throw new Error(`不支持的邮件 Provider: ${provider}`);
 }

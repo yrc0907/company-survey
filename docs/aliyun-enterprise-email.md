@@ -1,6 +1,6 @@
 # 阿里云企业邮箱认证联调
 
-认证邮件只允许 `EMAIL_PROVIDER=aliyun_enterprise_mail`，不接受普通 SMTP Provider。请在阿里云企业邮箱控制台创建专用发件账号，不要使用管理员账号。
+阿里云企业邮箱认证邮件使用 `EMAIL_PROVIDER=aliyun_enterprise_mail`。QQ 邮箱使用同一 SMTP 适配器但配置为 `EMAIL_PROVIDER=qq_mail`；不接受未列入白名单的普通 SMTP Provider。授权码只保存在服务器环境中。
 
 服务器 `.env` 需要填写：
 

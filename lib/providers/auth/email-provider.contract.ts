@@ -5,6 +5,7 @@ import { getEmailProvider, SmtpEmailProvider } from "@/lib/providers/auth/email-
 
 async function run(): Promise<void> {
   assert.throws(() => getEmailProvider({ EMAIL_PROVIDER: "smtp", SMTP_HOST: "smtp.example.com", SMTP_USER: "noreply@example.com", SMTP_PASSWORD: "test" }), /不支持的邮件 Provider/, "普通 SMTP Provider 必须被拒绝");
+  assert.ok(getEmailProvider({ EMAIL_PROVIDER: "qq_mail", SMTP_HOST: "smtp.qq.com", SMTP_USER: "member@qq.com", SMTP_PASSWORD: "test" }), "QQ 邮箱应复用受控 SMTP 适配器");
   assert.throws(() => SmtpEmailProvider.fromEnvironment({ SMTP_HOST: "smtp.example.com", SMTP_USER: "noreply@example.com", SMTP_PASSWORD: "test", EMAIL_FROM: "other@elsewhere.example" }), /同一发信域/);
 
   let sent = false;
