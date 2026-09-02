@@ -124,7 +124,7 @@
 - [x] 接入 `qwen3-rerank`：`429`、超时或 `5xx` 时依次尝试 `Pro/BAAI/bge-reranker-v2-m3`、`BAAI/bge-reranker-v2-m3`；均失败时确定性跳过重排
 - [x] 检测本机 GPU、CUDA、显存和 BGE-M3 权重，创建 `device=auto`、CUDA fp16、CPU 离线回退、仅 loopback 的 Embedding Worker；当前缓存仅有 refs 指针，未加载权重
 - [ ] BGE-M3 只在本机 GPU 作为可选离线 Worker 运行；线上 4C8G 服务器绝不加载模型权重，只保存向量、查询 PostgreSQL/pgvector 并调用外部 API
-- [ ] Golden Set：精确、中文政策、语义、多语言、关系、冲突、过期和无证据拒答案例
+- [x] Golden Set：精确、中文政策、语义、多语言、关系、冲突、过期和无证据拒答案例（确定性评测器与契约已覆盖八类）
 - [ ] 记录 Recall@K、MRR/nDCG、Citation Coverage、Citation Correctness、Abstention、Embedding/Rerank/模型延迟和成本
 - [ ] 根据评测决定是否启用 BGE-M3 Sparse/Multi-Vector、Late Chunking、RAPTOR 或 ColBERT
 
@@ -144,4 +144,4 @@
 - [x] `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm build` 已在提交 `20229c7` 前全部通过
 - [~] 已在服务器 PostgreSQL 模式完成浏览器资料导入、混合检索、带引用 AI 回答，以及 API 保存/版本冲突验收；新建报告 UI、Diff 和导出待对应功能完成后纳入
 - [~] Docker Compose 启动、`postgres/app/caddy` 健康检查、数据库 seed、低内存构建和源站持久化已通过；ESA/ICP 入口导致 HTTPS 与 Basic Auth 公网验收待切换后复跑
-- [ ] RAG Golden Set、无证据拒答、Reranker 降级和向量重建评测
+- [~] RAG Golden Set 与无证据拒答评测已通过确定性契约；Reranker 降级和向量重建仍待接入真实评测任务
