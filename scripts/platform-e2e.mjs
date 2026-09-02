@@ -64,6 +64,11 @@ try {
     // 上一个场景打开了修改申请 Tab；讨论属于内容 Tab，先恢复到明确的 UI 状态。
     await page.getByRole("button", { name: /内容/ }).click();
     await page.getByRole("heading", { name: "讨论" }).waitFor();
+    const anchorButton = page.getByRole("button", { name: "评论此段", exact: true }).first();
+    if (await anchorButton.count()) {
+      await anchorButton.click();
+      await page.getByText("评论此段", { exact: true }).last().waitFor();
+    }
     const composer = page.getByRole("textbox", { name: "评论内容" });
     await composer.fill("匿名评论应先要求登录");
     await page.getByRole("button", { name: "发布评论" }).click();
