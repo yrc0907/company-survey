@@ -1,114 +1,48 @@
-export interface SmsMessage {
-  phoneE164: string;
-  code: string;
-  codeExpireMinutes: number;
-  /** 挑战 UUID；供应商若支持幂等键可避免超时重试造成重复短信。 */
-  idempotencyKey?: string;
-}
+import { createHmac, randomUUID } from "node:crypto";
 
-export interface SmsProvider {
-  send(message: SmsMessage): Promise<{ providerMessageId: string | null }>;
-}
+export interface SmsMessage { phoneE164: string; code: string; codeExpireMinutes: number; idempotencyKey?: string; }
+export interface SmsProvider { send(message: SmsMessage): Promise<{ providerMessageId: string | null }>; }
+export class SmsProviderNotConfiguredError extends Error { public constructor() { super("短信 Provider 尚未配置"); this.name = "SmsProviderNotConfiguredError"; } }
 
-/** 短信 Provider 未配置时的明确错误；验证码挑战不会被标记为已发送。 */
-export class SmsProviderNotConfiguredError extends Error {
-  public constructor() {
-    super("短信 Provider 尚未配置");
-    this.name = "SmsProviderNotConfiguredError";
-  }
+const DEFAULT_ENDPOINT = "https://dypnsapi.aliyuncs.com/";
+const DEFAULT_TIMEOUT_MS = 8_000;
+function encode(value: string): string { return encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`); }
+function sign(parameters: Record<string, string>, secret: string): string {
+  const canonical = Object.keys(parameters).sort().map((key) => `${encode(key)}=${encode(parameters[key]!)}`).join("&");
+  return createHmac("sha1", `${secret}&`).update(`POST&%2F&${encode(canonical)}`).digest("base64");
 }
+function timeout(value: string | undefined): number { const parsed = Number(value); return Number.isInteger(parsed) && parsed >= 1_000 && parsed <= 120_000 ? parsed : DEFAULT_TIMEOUT_MS; }
 
-/**
- * 阿里云短信认证 HTTP 适配器。
- * 不绑定某个 SDK 版本，按控制台方案提供 JSON 端点；appId/appKey 仅从环境读取。
- * 端点、请求头和返回字段可通过环境覆盖，便于在号码认证服务与短信推送 API 间替换。
- */
+/** 阿里云号码认证服务 RPC 适配器（Dypnsapi/2017-05-25）。 */
 export class AliyunSmsProvider implements SmsProvider {
-  public constructor(
-    private readonly endpoint: string,
-    private readonly appId: string,
-    private readonly appKey: string,
-    private readonly schemeCode: string,
-    private readonly signName: string,
-    private readonly templateCode: string,
-    private readonly timeoutMs = 8000,
-  ) {}
-
+  public constructor(private readonly endpoint: string, private readonly accessKeyId: string, private readonly accessKeySecret: string, private readonly schemeCode: string, private readonly signName: string, private readonly templateCode: string, private readonly timeoutMs = DEFAULT_TIMEOUT_MS, private readonly fetchImplementation: typeof fetch = fetch) {}
   public static fromEnvironment(environment: Record<string, string | undefined> = process.env): AliyunSmsProvider | null {
-    const endpoint = environment.ALIYUN_SMS_API_URL?.trim();
-    const appId = environment.ALIYUN_SMS_APP_ID?.trim();
-    const appKey = environment.ALIYUN_SMS_APP_KEY?.trim();
-    if (!endpoint || !appId || !appKey) return null;
-    const schemeCode = environment.ALIYUN_SMS_SCHEME_CODE?.trim() || "";
-    const signName = environment.ALIYUN_SMS_SIGN_NAME?.trim() || "";
-    const templateCode = environment.ALIYUN_SMS_TEMPLATE_CODE?.trim() || "100001";
-    const timeoutMs = Number(environment.ALIYUN_SMS_TIMEOUT_MS ?? 8000);
-    return new AliyunSmsProvider(endpoint, appId, appKey, schemeCode, signName, templateCode, Number.isFinite(timeoutMs) ? timeoutMs : 8000);
+    const accessKeyId = environment.ALIYUN_SMS_ACCESS_KEY_ID?.trim() || environment.ALIYUN_SMS_APP_ID?.trim();
+    const accessKeySecret = environment.ALIYUN_SMS_ACCESS_KEY_SECRET?.trim() || environment.ALIYUN_SMS_APP_KEY?.trim();
+    const schemeCode = environment.ALIYUN_SMS_SCHEME_CODE?.trim();
+    if (!accessKeyId || !accessKeySecret || !schemeCode) return null;
+    const endpoint = environment.ALIYUN_SMS_API_URL?.trim() || DEFAULT_ENDPOINT;
+    try { if (new URL(endpoint).protocol !== "https:") return null; } catch { return null; }
+    return new AliyunSmsProvider(endpoint, accessKeyId, accessKeySecret, schemeCode, environment.ALIYUN_SMS_SIGN_NAME?.trim() || "", environment.ALIYUN_SMS_TEMPLATE_CODE?.trim() || "100001", timeout(environment.ALIYUN_SMS_TIMEOUT_MS));
   }
-
   public async send(message: SmsMessage): Promise<{ providerMessageId: string | null }> {
-    const body = JSON.stringify({
-      phoneNumber: message.phoneE164,
-      code: message.code,
-      codeExpire: message.codeExpireMinutes,
-      schemeCode: this.schemeCode || undefined,
-      signName: this.signName || undefined,
-      templateCode: this.templateCode,
-      idempotencyKey: message.idempotencyKey,
-    });
+    const base: Record<string, string> = { AccessKeyId: this.accessKeyId, Action: "SendSmsVerifyCode", Format: "JSON", FormatVersion: "1.0", PhoneNumber: message.phoneE164, SchemeCode: this.schemeCode, SignName: this.signName, SignatureMethod: "HMAC-SHA1", SignatureNonce: message.idempotencyKey || randomUUID(), SignatureVersion: "1.0", TemplateCode: this.templateCode, TemplateParam: JSON.stringify({ code: message.code, min: String(message.codeExpireMinutes) }), Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), Version: "2017-05-25", ...(message.idempotencyKey ? { OutId: message.idempotencyKey } : {}) };
+    const body = new URLSearchParams({ ...base, Signature: sign(base, this.accessKeySecret) }).toString();
     let lastError: Error | null = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+      const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), this.timeoutMs);
       try {
-        const response = await fetch(this.endpoint, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-app-id": this.appId,
-            "x-app-key": this.appKey,
-            ...(message.idempotencyKey ? { "x-idempotency-key": message.idempotencyKey } : {}),
-            authorization: `Basic ${Buffer.from(`${this.appId}:${this.appKey}`).toString("base64")}`,
-          },
-          body,
-          signal: controller.signal,
-        });
-        const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
-        const statusCode = payload.code ?? payload.Code;
-        const success = payload.success === true || payload.Success === true || statusCode === undefined || ["OK", "200", "0", 200, 0].includes(statusCode as string | number);
-        if (!response.ok || payload.success === false || payload.Success === false || !success) {
-          lastError = new Error(`短信 Provider 返回失败 (${response.status})`);
-          (lastError as Error & { retryable?: boolean }).retryable = response.status === 429 || response.status >= 500;
-          if (attempt === 0 && (response.status === 429 || response.status >= 500)) {
-            const retryAfter = Number(response.headers.get("retry-after") ?? 0);
-            await new Promise((resolve) => setTimeout(resolve, Number.isFinite(retryAfter) ? Math.min(1000, Math.max(100, retryAfter * 1000)) : 250));
-            continue;
-          }
-          throw lastError;
-        }
-        const data = payload.data && typeof payload.data === "object" ? payload.data as Record<string, unknown> : {};
-        const providerMessageId = payload.messageId ?? payload.requestId ?? payload.MessageId ?? payload.RequestId ?? data.messageId ?? data.requestId;
-        return { providerMessageId: providerMessageId ? String(providerMessageId) : null };
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error("短信 Provider 请求失败");
-        const retryable = (lastError as Error & { retryable?: boolean }).retryable ?? true;
-        if (attempt === 0 && retryable) {
-          await new Promise((resolve) => setTimeout(resolve, 250));
-          continue;
-        }
-        throw lastError;
-      } finally {
-        clearTimeout(timeout);
-      }
+        const response = await this.fetchImplementation(this.endpoint, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body, signal: controller.signal });
+        const payload = await response.json().catch(() => ({})) as Record<string, unknown>; const code = payload.Code ?? payload.code;
+        if (!response.ok || code !== "OK") { lastError = new Error(`短信 Provider 返回失败 (${response.status})`); if (attempt === 0 && (response.status === 429 || response.status >= 500)) { await new Promise((resolve) => setTimeout(resolve, 250)); continue; } throw lastError; }
+        const messageId = payload.MessageId ?? payload.messageId ?? payload.RequestId ?? payload.requestId; return { providerMessageId: messageId ? String(messageId) : null };
+      } catch (error) { lastError = error instanceof Error ? error : new Error("短信 Provider 请求失败"); if (attempt === 0) { await new Promise((resolve) => setTimeout(resolve, 250)); continue; } throw lastError; } finally { clearTimeout(timer); }
     }
     throw lastError ?? new Error("短信 Provider 请求失败");
   }
 }
-
-/** 读取短信 Provider；未配置时返回 null，避免把未发送伪装为成功。 */
 export function getSmsProvider(environment: Record<string, string | undefined> = process.env): SmsProvider | null {
-  const provider = environment.SMS_PROVIDER?.trim().toLowerCase();
-  if (!provider || provider === "disabled") return null;
+  const provider = environment.SMS_PROVIDER?.trim().toLowerCase(); if (!provider || provider === "disabled") return null;
   if (provider === "aliyun" || provider === "aliyun_sms" || provider === "aliyun_dypns") return AliyunSmsProvider.fromEnvironment(environment);
   throw new Error(`不支持的短信 Provider: ${provider}`);
 }
