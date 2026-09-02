@@ -122,6 +122,7 @@ async function enrichCompany(tx, [projectId, company, url, focus]) {
   const sourceId = `${projectId}-official-dossier-v2`;
   const sourceNodeId = `${projectId}-node-official-dossier-v2`;
   const sourceTitle = `${company}官网公开资料快照（v2）`;
+  let sourceRef = sourceId;
 
   await tx`INSERT INTO knowledge_commit (id, project_id, branch_id, parent_commit_id, author_user_id, message, ai_assisted, idempotency_key, idempotency_fingerprint, change_summary, created_at)
     VALUES (${commitId}, ${projectId}, ${project.branch_id}, ${project.head_commit_id ? String(project.head_commit_id) : null}, ${String(project.owner_user_id)}, ${`导入${company}官方资料快照并补齐研究章节`}, FALSE, ${`official-dossier:${projectId}:v2`}, ${contentHash}, ${JSON.stringify({ source: url, evidenceState: "needs_verification" })}::jsonb, ${now})`;
@@ -130,11 +131,14 @@ async function enrichCompany(tx, [projectId, company, url, focus]) {
   await tx`INSERT INTO knowledge_node_state (project_id, branch_id, node_id, parent_node_id, name, position, deleted_at, updated_at)
     VALUES (${projectId}, ${String(project.branch_id)}, ${sourceNodeId}, NULL, ${sourceTitle}, 30, NULL, ${now}) ON CONFLICT (branch_id, node_id) DO NOTHING`;
   if (reportId) {
-    await tx`INSERT INTO source (id, report_id, title, kind, url, language, state, captured_at, content_hash, snapshot, evidence_state, metadata)
-      VALUES (${sourceId}, ${reportId}, ${sourceTitle}, 'web', ${url}, 'zh', 'active', ${now}, ${contentHash}, ${snapshot}, 'needs_verification', ${JSON.stringify({ sourceType: "official_website", publisher: company, capturedAt: now, retrievalMode: "official_landing_snapshot" })}::jsonb)
-      ON CONFLICT (id) DO NOTHING`;
-    await tx`INSERT INTO source_chunk (id, source_id, parent_section_id, heading_path, position, page, start_offset, end_offset, text, contextual_prefix, content_hash)
-      VALUES (${`${sourceId}-chunk-1`}, ${sourceId}, NULL, ${["官网公开资料", "页面摘要"]}, 1, NULL, 0, ${snapshot.length}, ${snapshot}, ${`企业官网公开快照；${company}；证据状态：needs_verification`}, ${contentHash}) ON CONFLICT (id) DO NOTHING`;
+    const existingSource = await tx`SELECT id FROM source WHERE report_id = ${reportId} AND content_hash = ${contentHash} LIMIT 1`;
+    if (existingSource[0]?.id) sourceRef = String(existingSource[0].id);
+    else {
+      await tx`INSERT INTO source (id, report_id, title, kind, url, language, state, captured_at, content_hash, snapshot, evidence_state, metadata)
+        VALUES (${sourceId}, ${reportId}, ${sourceTitle}, 'web', ${url}, 'zh', 'active', ${now}, ${contentHash}, ${snapshot}, 'needs_verification', ${JSON.stringify({ sourceType: "official_website", publisher: company, capturedAt: now, retrievalMode: "official_landing_snapshot" })}::jsonb)`;
+      await tx`INSERT INTO source_chunk (id, source_id, parent_section_id, heading_path, position, page, start_offset, end_offset, text, contextual_prefix, content_hash)
+        VALUES (${`${sourceId}-chunk-1`}, ${sourceId}, NULL, ${["官网公开资料", "页面摘要"]}, 1, NULL, 0, ${snapshot.length}, ${snapshot}, ${`企业官网公开快照；${company}；证据状态：needs_verification`}, ${contentHash}) ON CONFLICT (id) DO NOTHING`;
+    }
   }
   const docs = await tx`SELECT ns.node_id, ns.name FROM knowledge_node_state ns JOIN knowledge_node n ON n.id = ns.node_id
     WHERE ns.project_id = ${projectId} AND ns.branch_id = ${String(project.branch_id)} AND ns.deleted_at IS NULL AND n.kind IN ('document', 'markdown') ORDER BY ns.position, ns.name`;
@@ -150,7 +154,7 @@ async function enrichCompany(tx, [projectId, company, url, focus]) {
     await tx`INSERT INTO document_revision (id, project_id, node_id, branch_id, commit_id, previous_revision_id, content, content_text, content_hash, created_by_user_id, created_at)
       VALUES (${revisionId}, ${projectId}, ${String(row.node_id)}, ${String(project.branch_id)}, ${commitId}, ${previousId}, ${JSON.stringify(documentContent(text))}::jsonb, ${text}, ${sha256(text)}, ${String(project.owner_user_id)}, ${now}) ON CONFLICT (id) DO NOTHING`;
     await tx`INSERT INTO commit_change (id, commit_id, node_id, operation, before_revision_id, after_revision_id, metadata, position)
-      VALUES (${`${commitId}:${String(row.node_id)}`}, ${commitId}, ${String(row.node_id)}, 'update_content', ${previousId}, ${revisionId}, ${JSON.stringify({ evidenceState: "needs_verification", sourceId })}::jsonb, ${position}) ON CONFLICT (id) DO NOTHING`;
+      VALUES (${`${commitId}:${String(row.node_id)}`}, ${commitId}, ${String(row.node_id)}, 'update_content', ${previousId}, ${revisionId}, ${JSON.stringify({ evidenceState: "needs_verification", sourceId: sourceRef })}::jsonb, ${position}) ON CONFLICT (id) DO NOTHING`;
     position += 1;
   }
   const analysisNodeId = `${projectId}-node-analysis-v2`;
@@ -163,11 +167,11 @@ async function enrichCompany(tx, [projectId, company, url, focus]) {
   await tx`INSERT INTO document_revision (id, project_id, node_id, branch_id, commit_id, previous_revision_id, content, content_text, content_hash, created_by_user_id, created_at)
     VALUES (${analysisRevisionId}, ${projectId}, ${analysisNodeId}, ${String(project.branch_id)}, ${commitId}, NULL, ${JSON.stringify(documentContent(analysisText))}::jsonb, ${analysisText}, ${sha256(analysisText)}, ${String(project.owner_user_id)}, ${now}) ON CONFLICT (id) DO NOTHING`;
   await tx`INSERT INTO commit_change (id, commit_id, node_id, operation, before_revision_id, after_revision_id, metadata, position)
-    VALUES (${`${commitId}:${analysisNodeId}`}, ${commitId}, ${analysisNodeId}, 'create_node', NULL, ${analysisRevisionId}, ${JSON.stringify({ evidenceState: "inference", sourceId })}::jsonb, ${position}) ON CONFLICT (id) DO NOTHING`;
+    VALUES (${`${commitId}:${analysisNodeId}`}, ${commitId}, ${analysisNodeId}, 'create_node', NULL, ${analysisRevisionId}, ${JSON.stringify({ evidenceState: "inference", sourceId: sourceRef })}::jsonb, ${position}) ON CONFLICT (id) DO NOTHING`;
   position += 1;
   await tx`UPDATE knowledge_branch SET head_commit_id = ${commitId}, version = GREATEST(version, ${Number(project.version ?? 1) + 1}), updated_at = ${now} WHERE id = ${String(project.branch_id)}`;
   await tx`UPDATE knowledge_project SET updated_at = ${now}, verification_note = ${`已追加${company}官网公开快照；商业数据和效果结论仍需独立来源核验。`} WHERE id = ${projectId}`;
-  return { status: "imported", projectId, sections: position, source: sourceId };
+  return { status: "imported", projectId, sections: position, source: sourceRef };
 }
 
 async function main() {
