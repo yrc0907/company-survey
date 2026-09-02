@@ -116,6 +116,7 @@ pnpm test:e2e:platform
 | AUTH-PROVIDER-SMS-001 | 阿里云号码认证服务 `Dypnsapi/2017-05-25 SendSmsVerifyCode` | 用户指定手机号 | Provider 接受，返回消息 ID（仅保留存在性） | 短信认证通道可用；验证码内容不写日志 |
 | AUTH-PROVIDER-EMAIL-001 | 阿里云企业邮箱 SMTP TLS 465 | 用户指定 QQ 邮箱 | 失败：SMTP `526 Authentication failure` | 网络/TLS 可达；需在企业邮箱控制台启用 SMTP 客户端服务或创建应用密码并改用专用发件账号后重试 |
 | AUTH-PROVIDER-EMAIL-QQ-001 | QQ SMTP TLS 465（`qq_mail`） | 用户指定 QQ 邮箱 | 投递成功，返回消息 ID（仅保留存在性） | 授权码只写入香港 ECS `.env`；邮件 Provider 已接入认证主链路 |
+| AUTH-CAPTCHA-UI-001 | 阿里云 H5 `ct4.js` | 公网 `/login` 验证码登录 | 组件可见，显示“图形验证/点击此处完成图形验证” | AppId 已通过构建参数注入；实际点击与票据二次校验需用户完成验证码交互 |
 
 每次失败都要记录：
 

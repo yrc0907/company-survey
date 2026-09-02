@@ -24,12 +24,12 @@
  - [x] 接入认证邮件真实发信主链路：SMTP 适配器、QQ `smtp.qq.com:465` 授权码投递、验证邮件/密码找回/登录验证码模板和超时边界已实现；阿里云企业邮箱配置保留为可选 Provider，生产凭据仅在服务器 `.env`
 - [~] 已加入 `pnpm auth:readiness` 只读检查 MX/SPF/DKIM/DMARC 与认证环境变量；仍需在 ESA DNS 配置实际记录并记录真实投递成功率/退信原因
  - [~] 接入阿里云短信真实 Provider：签名“恒创联众”、模板 `100001`、验证码哈希/过期/消费、429/5xx 重试和挑战幂等键已实现；香港 ECS 已配置 Dypns RPC，2026-09-02 对目标手机号做一次真实 `SendSmsVerifyCode` 调用并收到 Provider 消息 ID；`AccessKey`/`appKey` 不进入代码、文档、镜像或日志
- - [~] 接入阿里云图形验证真实服务端校验：前端票据桥接、服务端场景校验和 fail-closed 边界已实现；仍需配置真实校验端点并联调票据过期/重复/超时
+ - [~] 接入阿里云图形验证真实服务端校验：截图中的 AppId/AppKey 已写入香港 ECS，前端构建参数和服务端 `captcha.alicaptcha.com/validate` 已启用，登录页组件已出现；实际成功/过期/重复票据仍需用户完成一次交互后联调
 - [x] 邮箱/手机号字段、唯一约束、验证时间、绑定/换绑状态机、跨账户冲突拒绝和追加式审计查询已由 `021_identity_verification.sql`、`026_identity_binding_audit.sql` 与服务契约覆盖；跨账户合并仍明确禁止
  - [x] 建立统一 `verification_challenge` 数据模型和 API：邮箱/短信共用状态机，记录用途、哈希、过期时间、尝试次数、消费时间、请求 IP/设备哈希和供应商消息 ID，不保存验证码明文
  - [~] 增加验证码与登录风控：目标/IP/设备 HMAC 桶、60 秒重发、5 次错误上限和同响应防账号枚举已实现，PostgreSQL 迁移 `023_verification_rate_limits.sql` 提供原子兜底；异常封禁与公开规模 Redis 适配仍待接入
 - [~] 真实 Provider 适配器、状态机、限流、重试和契约已完成；注册/登录/找回/换绑的真实供应商投递回归仍待控制台配置与最小额度联调
- - [~] 服务器 `.env` 只读 readiness 检查和发布流程已完成；邮箱/短信运行时配置已写入香港 ECS 并重建 app，图形验证仍未配置真实 AppId/AppKey；认证能力状态路由已强制运行时读取，避免构建期静态化
+ - [x] 服务器 `.env` 只读 readiness 检查和发布流程已完成；邮箱/短信/图形验证运行时配置已写入香港 ECS 并重建 app，认证能力状态路由已强制运行时读取，避免构建期静态化
 - [~] Caddy 已只保护旧版 `/api/research/*`，公开读与平台写接口由应用会话/权限处理；完整公网身份治理仍待补齐
 - [x] 建立用户、项目、成员、文件树、Branch、Commit、Revision、MR、Review、Attribution schema 与迁移（002/025 已在香港数据库执行并复核）
 - [~] 建立 `uploaded_asset`、`ingestion_job`、`project_view_daily`、`project_stats` schema 与聚合任务；公开阅读统计已通过 `project_reader` + `project_view_daily` + `project_stats` 同步幂等聚合，项目评论数已由 `project_comment` 实时聚合，点赞/关注统计仍待实现
