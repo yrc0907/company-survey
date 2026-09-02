@@ -74,6 +74,7 @@ async function refreshOne(tx, [projectId, company, code, secid]) {
   const financeUrl = `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_LICO_FN_CPD&columns=SECUCODE%2CSECURITY_CODE%2CSECURITY_NAME_ABBR%2CREPORTDATE%2CTOTAL_OPERATE_INCOME%2CPARENT_NETPROFIT%2CWEIGHTAVG_ROE%2CYSTZ%2CSJLTZ&filter=(SECUCODE%3D%22${encodeURIComponent(code)}%22)&pageNumber=1&pageSize=5&sortColumns=REPORTDATE&sortTypes=-1`;
   const [quote, kline, finance] = await Promise.all([fetchJson(quoteUrl), fetchJson(klineUrl), code.endsWith(".HK") ? Promise.resolve({ result: { data: [] } }) : fetchJson(financeUrl)]);
   const trend = calculateTrend(kline?.data?.klines ?? []);
+  const dailyRows = (kline?.data?.klines ?? []).map(parseKline).filter((row) => /^\d{4}-\d{2}-\d{2}$/.test(row.date) && [row.open, row.close, row.high, row.low].every(Number.isFinite));
   const financial = finance?.result?.data ?? [];
   const snapshot = JSON.stringify({ capturedAt, code, quote, trend, financial, source: { quoteUrl, klineUrl, financeUrl } });
   const hash = sha256(snapshot);
@@ -98,6 +99,11 @@ async function refreshOne(tx, [projectId, company, code, secid]) {
     await tx`INSERT INTO source (id,report_id,title,kind,url,language,state,captured_at,content_hash,snapshot,evidence_state,metadata) VALUES (${sourceId},${reportId},${`${company}公开财报与行情快照`},'web',${quoteUrl},'zh','active',${capturedAt},${hash},${snapshot},'needs_verification',${JSON.stringify({ provider: "eastmoney_public_api", code, capturedAt, klineUrl, financeUrl })}::jsonb) ON CONFLICT (id) DO NOTHING`;
     await tx`INSERT INTO source_chunk (id,source_id,parent_section_id,heading_path,position,page,start_offset,end_offset,text,contextual_prefix,content_hash) VALUES (${`${sourceId}-chunk-1`},${sourceId},NULL,${["公开行情与财报",company]},1,NULL,0,${snapshot.length},${snapshot},${`公开接口快照；${company}；需与交易所/公司公告交叉核验`},${hash}) ON CONFLICT (id) DO NOTHING`;
   }
+  for (const row of dailyRows) {
+    await tx`INSERT INTO market_price_daily (project_id, trade_date, open, close, high, low, volume, amount, source_id, captured_at)
+      VALUES (${projectId}, ${row.date}::date, ${row.open}, ${row.close}, ${row.high}, ${row.low}, ${Number.isFinite(row.volume) ? row.volume : null}, ${Number.isFinite(row.amount) ? row.amount : null}, ${sourceId}, ${capturedAt})
+      ON CONFLICT (project_id, trade_date) DO UPDATE SET open=EXCLUDED.open, close=EXCLUDED.close, high=EXCLUDED.high, low=EXCLUDED.low, volume=EXCLUDED.volume, amount=EXCLUDED.amount, source_id=EXCLUDED.source_id, captured_at=EXCLUDED.captured_at`;
+  }
   const text = reportText(company, code, quote, financial, trend);
   const previousRevisionRows = await tx`SELECT id FROM document_revision WHERE project_id=${projectId} AND node_id=${nodeId} AND branch_id=${String(project.branch_id)} ORDER BY created_at DESC LIMIT 1`;
   const previousRevisionId = previousRevisionRows[0]?.id ? String(previousRevisionRows[0].id) : null;
@@ -110,7 +116,7 @@ async function refreshOne(tx, [projectId, company, code, secid]) {
     await tx`INSERT INTO citation (id,report_id,section_id,source_id,chunk_id,quote,evidence_state,created_at) VALUES (${`${projectId}-market-citation-${MARKET_VERSION}`},${reportId},${`${projectId}-market-section-${MARKET_VERSION}`},${sourceId},${`${sourceId}-chunk-1`},${`公开行情/财报快照（${capturedAt}）`},'needs_verification',${capturedAt}) ON CONFLICT (id) DO NOTHING`;
   }
   await tx`UPDATE knowledge_branch SET head_commit_id=${commitId},version=GREATEST(version,${Number(project.version ?? 1)+1}),updated_at=${capturedAt} WHERE id=${String(project.branch_id)}`;
-  return { projectId, status: "imported", trend, financialRows: financial.length };
+  return { projectId, status: "imported", trend, financialRows: financial.length, dailyRows: dailyRows.length };
 }
 
 async function main() {
