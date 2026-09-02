@@ -132,7 +132,7 @@
 
 - [x] Dockerfile、Compose、Caddy、PostgreSQL、命名卷、健康检查和部署预检脚本
 - [x] Compose 中为 4C8G 设置 Caddy/App/PostgreSQL 内存与 CPU 上限；服务器实测已启用 4 GiB swap
-- [~] 香港源站已解析并放行 `80/443`，Caddy 容器健康；ESA 代理当前返回 ICP 合规拦截，源站证书尚未完成，公网 `/healthz`、首页和 Basic Auth 入口需在 ESA 切换后复跑
+- [x] 香港源站已解析并放行 `80/443`，Caddy 容器健康；`https://research.webyrc.com` 公网 `/healthz`、首页和 12 项 E2E 已通过
 - [x] 服务器 `.env` 权限 `600`、轮换密码/Key 的运行时配置、模型/Embedding/Rerank 连通性、PostgreSQL seed 与 named-volume 持久化已验收
 - [~] 已加入 `scripts/backup.sh`（PostgreSQL + uploads 成对备份、SHA-256 清单）、`scripts/health-check.sh`（容器/私有端口/公网 HTTPS）和 `scripts/release.sh`（备份→迁移→发布→验收）；首次异机复制、恢复演练与告警仍需在香港 ECS 人工执行
 - [~] `scripts/aliyun-security-group.ps1` 默认只读计划，可显式确认后新增 80/443/指定 22；删除 3389、收紧 SSH 来源和默认安全组仍需人工变更
@@ -143,5 +143,5 @@
 - [x] 服务契约测试覆盖保存、版本冲突、手动文本导入/重复拒绝/报告不存在、memory_demo 持久化拒绝、active 来源过滤、图边过滤、选区隔离、SSRF 基础拒绝和客户端快照裁剪
 - [x] `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm build` 已在提交 `20229c7` 前全部通过
 - [~] 已在服务器 PostgreSQL 模式完成浏览器资料导入、混合检索、带引用 AI 回答，以及 API 保存/版本冲突验收；新建报告 UI、Diff 和导出待对应功能完成后纳入
-- [~] Docker Compose 启动、`postgres/app/caddy` 健康检查、数据库 seed、低内存构建和源站持久化已通过；ESA/ICP 入口导致 HTTPS 与 Basic Auth 公网验收待切换后复跑
+- [x] Docker Compose 启动、`postgres/app/caddy` 健康检查、数据库 seed、4C8G 构建、源站持久化和 ESA 公网 HTTPS 均已验收
 - [~] RAG Golden Set 与无证据拒答评测已通过确定性契约；Reranker 降级和向量重建仍待接入真实评测任务

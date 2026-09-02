@@ -4,7 +4,7 @@
 
 ## 当前实现状态
 
-工作台已部署到香港 ECS 的 `/srv/research-workbench`，应用、PostgreSQL 和 Caddy 源站容器均健康；`research.webyrc.com` 当前仍经过 ESA 代理，因 ICP 拦截和源站证书切换尚未完成，不能把公网 HTTPS 入口写成已验收。旧版个人 Research API 继续由 Basic Auth 保护，PostgreSQL 使用命名卷持久化。没有 `DATABASE_URL` 的本地运行仍只加载不可持久化的演示数据。
+工作台已部署到香港 ECS 的 `/srv/research-workbench`，应用、PostgreSQL 和 Caddy 容器均健康；`https://research.webyrc.com` 的首页和 `/healthz` 已返回 200，公网 E2E 12/12 通过。旧版个人 Research API 继续由 Basic Auth 保护，PostgreSQL 使用命名卷持久化。没有 `DATABASE_URL` 的本地运行仍只加载不可持久化的演示数据。
 
 已实现：
 
@@ -24,7 +24,7 @@
 - pgvector 持久化已提供可选迁移、能力探测、版本/哈希校验、权限过滤和确定性降级；大规模 ANN 索引重建、后台 Worker 与 Golden Set 检索评测仍未完成；
 - 企业 CRUD、图谱写入/API/UI、版本 Diff/回滚、Markdown/PDF 导出；
 - 应用内会话认证已实现；旧版 Research API 仍依赖 Caddy Basic Auth，公开平台写操作依赖 Auth.js/RBAC；
-- 备份/发布/健康检查脚本和安全组只读计划已加入；异机恢复、磁盘/流量告警、SSH/RDP 安全组收紧，以及 ESA/ICP 公网 HTTPS 验收仍待人工变更和复跑。
+- 备份/发布/健康检查脚本和安全组只读计划已加入；公网 HTTPS 已验收。异机恢复、磁盘/流量告警以及 SSH/RDP 安全组收紧仍待人工变更和演练。
 
 ## 数据与 AI 边界
 

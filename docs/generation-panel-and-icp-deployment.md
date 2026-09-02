@@ -123,6 +123,8 @@ ai_artifact_source
 
 ## 3. ICP 备案与香港服务器
 
+> 运行状态更新（2026-09-02）：香港 ECS 上的 `https://research.webyrc.com` 首页和 `/healthz` 已返回 200，公网 E2E 12/12 通过。下文保留此前 ESA/证书故障的排障历史，不代表当前入口仍不可用。
+
 ### 3.1 当前现象
 
 香港源站 HTTP 可达，但当前 `research.webyrc.com` 经 ESA 代理时返回 `Non-compliance ICP Filing`；ESA 回源 HTTPS 在源站证书签发前返回 `525`。这不是应用代码错误，也不是只允许某一台电脑的 IP。
