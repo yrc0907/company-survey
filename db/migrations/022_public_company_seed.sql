@@ -181,11 +181,11 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO knowledge_node_state
   (project_id, branch_id, node_id, parent_node_id, name, position, deleted_at, updated_at)
-SELECT project_id, branch_id, folder_id, NULL, '公开资料', 1, NULL, captured_at FROM _public_company_seed
+SELECT project_id, branch_id, folder_id, NULL::TEXT, '公开资料', 1, NULL::TIMESTAMPTZ, captured_at FROM _public_company_seed
 UNION ALL
-SELECT project_id, branch_id, doc_id, folder_id, '产品范围与证据边界', 1, NULL, captured_at FROM _public_company_seed
+SELECT project_id, branch_id, doc_id, folder_id, '产品范围与证据边界', 1, NULL::TIMESTAMPTZ, captured_at FROM _public_company_seed
 UNION ALL
-SELECT project_id, branch_id, source_node_id, NULL, source_title, 2, NULL, captured_at FROM _public_company_seed
+SELECT project_id, branch_id, source_node_id, NULL::TEXT, source_title, 2, NULL::TIMESTAMPTZ, captured_at FROM _public_company_seed
 ON CONFLICT (branch_id, node_id) DO NOTHING;
 
 INSERT INTO document_revision
@@ -259,7 +259,7 @@ ON CONFLICT (report_id, kind, normalized_name) DO NOTHING;
 
 INSERT INTO entity
   (id, report_id, kind, name, normalized_name, source_id, evidence_state, attributes, created_at)
-SELECT topic_entity_id, report_id, 'industry', project_summary, lower(slug), source_id, 'needs_verification',
+SELECT topic_entity_id, report_id, 'industry', tags[1], lower(tags[1]), source_id, 'needs_verification',
   jsonb_build_object('officialUrl', source_url), captured_at
 FROM _public_company_seed
 ON CONFLICT (report_id, kind, normalized_name) DO NOTHING;
