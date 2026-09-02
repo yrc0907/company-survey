@@ -15,18 +15,19 @@ function timeout(value: string | undefined): number { const parsed = Number(valu
 
 /** 阿里云号码认证服务 RPC 适配器（Dypnsapi/2017-05-25）。 */
 export class AliyunSmsProvider implements SmsProvider {
-  public constructor(private readonly endpoint: string, private readonly accessKeyId: string, private readonly accessKeySecret: string, private readonly schemeCode: string, private readonly signName: string, private readonly templateCode: string, private readonly timeoutMs = DEFAULT_TIMEOUT_MS, private readonly fetchImplementation: typeof fetch = fetch) {}
+  public constructor(private readonly endpoint: string, private readonly accessKeyId: string, private readonly accessKeySecret: string, private readonly schemeName: string, private readonly signName: string, private readonly templateCode: string, private readonly timeoutMs = DEFAULT_TIMEOUT_MS, private readonly fetchImplementation: typeof fetch = fetch) {}
   public static fromEnvironment(environment: Record<string, string | undefined> = process.env): AliyunSmsProvider | null {
     const accessKeyId = environment.ALIYUN_SMS_ACCESS_KEY_ID?.trim();
     const accessKeySecret = environment.ALIYUN_SMS_ACCESS_KEY_SECRET?.trim();
-    const schemeCode = environment.ALIYUN_SMS_SCHEME_CODE?.trim();
-    if (!accessKeyId || !accessKeySecret || !schemeCode) return null;
+    const schemeName = environment.ALIYUN_SMS_SCHEME_NAME?.trim();
+    if (!accessKeyId || !accessKeySecret || !schemeName) return null;
     const endpoint = environment.ALIYUN_SMS_API_URL?.trim() || DEFAULT_ENDPOINT;
     try { if (new URL(endpoint).protocol !== "https:") return null; } catch { return null; }
-    return new AliyunSmsProvider(endpoint, accessKeyId, accessKeySecret, schemeCode, environment.ALIYUN_SMS_SIGN_NAME?.trim() || "", environment.ALIYUN_SMS_TEMPLATE_CODE?.trim() || "100001", timeout(environment.ALIYUN_SMS_TIMEOUT_MS));
+    return new AliyunSmsProvider(endpoint, accessKeyId, accessKeySecret, schemeName, environment.ALIYUN_SMS_SIGN_NAME?.trim() || "", environment.ALIYUN_SMS_TEMPLATE_CODE?.trim() || "100001", timeout(environment.ALIYUN_SMS_TIMEOUT_MS));
   }
   public async send(message: SmsMessage): Promise<{ providerMessageId: string | null }> {
-    const base: Record<string, string> = { AccessKeyId: this.accessKeyId, Action: "SendSmsVerifyCode", Format: "JSON", FormatVersion: "1.0", PhoneNumber: message.phoneE164, SchemeCode: this.schemeCode, SignName: this.signName, SignatureMethod: "HMAC-SHA1", SignatureNonce: message.idempotencyKey || randomUUID(), SignatureVersion: "1.0", TemplateCode: this.templateCode, TemplateParam: JSON.stringify({ code: message.code, min: String(message.codeExpireMinutes) }), Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), Version: "2017-05-25", ...(message.idempotencyKey ? { OutId: message.idempotencyKey } : {}) };
+    const normalizedPhone = message.phoneE164.replace(/^\+86/, "").replace(/^86(?=1\d{10}$)/, "");
+    const base: Record<string, string> = { AccessKeyId: this.accessKeyId, Action: "SendSmsVerifyCode", Format: "JSON", FormatVersion: "1.0", CountryCode: "86", PhoneNumber: normalizedPhone, SchemeName: this.schemeName, SignName: this.signName, SignatureMethod: "HMAC-SHA1", SignatureNonce: randomUUID(), SignatureVersion: "1.0", TemplateCode: this.templateCode, TemplateParam: JSON.stringify({ code: message.code, min: String(message.codeExpireMinutes) }), Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), Version: "2017-05-25", ...(message.idempotencyKey ? { OutId: message.idempotencyKey } : {}) };
     const body = new URLSearchParams({ ...base, Signature: sign(base, this.accessKeySecret) }).toString();
     let lastError: Error | null = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {

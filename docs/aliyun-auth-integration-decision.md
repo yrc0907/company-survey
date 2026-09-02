@@ -8,7 +8,7 @@
 2. **阿里云企业邮箱**：用于注册邮箱验证、邮箱验证码登录、密码找回和邮箱换绑；发信使用专用邮箱账号的 SMTP。
 3. **阿里云图形验证**：用于注册、发送邮箱/短信验证码前的人机校验；浏览器只提交一次性票据，服务端再次校验。
 
-“短信认证服务”和“普通短信服务”是两套产品。普通短信文档里的 `dysmsapi.aliyuncs.com / SendSms / SMS_...` 参数不能套用到短信认证服务的默认模板。短信认证服务的 endpoint、方案编码和请求字段以该产品当前控制台/SDK 文档为准；适配器必须通过统一 Provider 接口隔离，不能在业务层猜测协议。
+“短信认证服务”和“普通短信服务”是两套产品。普通短信文档里的 `dysmsapi.aliyuncs.com / SendSms / SMS_...` 参数不能套用到短信认证服务的默认模板。短信认证服务使用 `dypnsapi.aliyuncs.com / SendSmsVerifyCode`，`SchemeName` 是控制台的方案名称（本项目为 `research`）；endpoint 和请求字段以该产品当前 SDK 文档为准，适配器通过统一 Provider 接口隔离。
 
 ## 配置字段（只允许出现在香港 ECS `.env`）
 
@@ -19,7 +19,7 @@ SMS_PROVIDER=aliyun_dypns
 ALIYUN_SMS_API_URL=<短信认证服务官方 endpoint>
 ALIYUN_SMS_ACCESS_KEY_ID=<RAM AccessKey ID>
 ALIYUN_SMS_ACCESS_KEY_SECRET=<RAM AccessKey Secret>
-ALIYUN_SMS_SCHEME_CODE=<短信认证方案编码（若该产品要求）>
+ALIYUN_SMS_SCHEME_NAME=research
 ALIYUN_SMS_TIMEOUT_MS=8000
 ```
 

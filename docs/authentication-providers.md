@@ -37,7 +37,7 @@ SMS_PROVIDER=aliyun_dypns
 ALIYUN_SMS_API_URL=https://dypnsapi.aliyuncs.com/
 ALIYUN_SMS_ACCESS_KEY_ID=<RAM AccessKeyId>
 ALIYUN_SMS_ACCESS_KEY_SECRET=<RAM AccessKeySecret>
-ALIYUN_SMS_SCHEME_CODE=<方案编码>
+ALIYUN_SMS_SCHEME_NAME=research
 ALIYUN_SMS_SIGN_NAME=恒创联众
 ALIYUN_SMS_TEMPLATE_CODE=100001
 
@@ -56,7 +56,7 @@ AUTH_RATE_LIMIT_IP_MAX=40
 AUTH_RATE_LIMIT_DEVICE_MAX=20
 ```
 
-阿里云号码认证服务使用 `Dypnsapi/2017-05-25` 的 `SendSmsVerifyCode` RPC，不是普通短信 `Dysmsapi/SendSms`。适配器用 RAM `AccessKeyId/AccessKeySecret` 做 HMAC-SHA1 签名，挑战 UUID 作为 `OutId`，并对 429/5xx 或网络超时最多重试一次；方案编码、签名名称和模板编码必须与控制台方案一致。若 Provider 未配置，页面显示明确的“服务未配置”错误，不伪造发送成功。生产配置前应轮换曾在截图或聊天中出现过的密钥。
+阿里云号码认证服务使用 `Dypnsapi/2017-05-25` 的 `SendSmsVerifyCode` RPC，不是普通短信 `Dysmsapi/SendSms`。适配器用 RAM `AccessKeyId/AccessKeySecret` 做 HMAC-SHA1 签名，控制台方案名称通过 `SchemeName` 传入，挑战 UUID 作为 `OutId`，并对 429/5xx 或网络超时最多重试一次；签名名称和模板编码必须与控制台方案一致。若 Provider 未配置，页面显示明确的“服务未配置”错误，不伪造发送成功。生产配置前应轮换曾在截图或聊天中出现过的密钥。
 
 迁移 `db/migrations/023_verification_rate_limits.sql` 建立 PostgreSQL 限流桶。服务端先完成图形验证，再用目标、IP、设备三维 HMAC key 原子消费一组桶；任一维度拒绝时整组不增加计数。清理任务可以按 `updated_at` 删除超过窗口的桶，不影响挑战历史。
 
