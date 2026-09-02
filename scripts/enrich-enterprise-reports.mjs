@@ -154,6 +154,9 @@ async function enrichCompany(tx, [projectId, company, url, focus]) {
   let position = 0;
   for (const row of docs) {
     const rawName = String(row.name);
+    // 分析文档在下方单独写入完整 Yu 判断；跳过这里的通用章节循环，
+    // 避免同一 commit/node 产生两条 document_revision。
+    if (rawName.includes("研究者分析与战略判断")) continue;
     const section = sectionNames.find((name) => rawName.includes(name)) ?? sectionNames[position % sectionNames.length];
     const text = sectionContent(company, focus, section, snapshot, url);
     const revisionId = `${String(row.node_id)}-official-dossier-${DOSSIER_VERSION}`;
