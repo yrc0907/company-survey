@@ -80,13 +80,36 @@ try {
     await activeFile.filter({ hasText: "官方资料.pdf" }).waitFor();
     assert.equal(await page.locator(".document-heading h1").innerText(), "官方资料.pdf");
     // 文件夹可展开/收起，所有公开文件点击后都要更新选中节点和正文投影。
-    const reportFolder = page.locator(".file-sidebar .tree-node__main").filter({ hasText: "报告" }).first();
+    // 本地 Seed 与 PostgreSQL 迁移可能使用不同的公开章节命名；从根目录报告文件夹中
+    // 找到包含市场章节的节点，再验证同一节点的收起/展开，而不是写死某个旧名称。
+    // ContextMenuTrigger 在 DOM 中会包一层 span[data-state]，因此使用稳定的
+    // tree-list > span > tree-node 结构，而不是把包装节点误判成文件夹。
+    const reportFolders = page.locator(".file-sidebar .tree-list > span > .tree-node").filter({ hasText: "报告" });
+    const reportFolderCount = await reportFolders.count();
+    let reportFolder = null;
+    const marketButton = page.getByRole("button", { name: /市场与竞|市场与竞品/, exact: true }).first();
+    for (let index = 0; index < reportFolderCount; index += 1) {
+      const candidate = reportFolders.nth(index).locator(".tree-node__main");
+      const candidateText = (await candidate.innerText()).trim();
+      if (!candidateText.includes("报告")) continue;
+      if (await marketButton.isVisible()) {
+        reportFolder = candidate;
+        break;
+      }
+      await candidate.click();
+      if (await marketButton.isVisible()) {
+        reportFolder = candidate;
+        break;
+      }
+    }
+    assert.ok(reportFolder && await marketButton.count() > 0, "文件树中应存在包含市场章节的报告文件夹");
     await reportFolder.click();
-    await page.getByRole("button", { name: "市场与竞争", exact: true }).waitFor({ state: "hidden" });
+    await marketButton.waitFor({ state: "hidden" });
     await reportFolder.click();
-    await page.getByRole("button", { name: "市场与竞争", exact: true }).waitFor({ state: "visible" });
+    await marketButton.waitFor({ state: "visible" });
+    const folderNames = new Set((await reportFolders.allTextContents()).map((name) => name.trim()));
     const fileNames = await page.locator(".file-sidebar .tree-node__main").allTextContents();
-    for (const fileName of fileNames.filter((name) => !["报告", "来源", "数据", "待核验问题"].includes(name.trim()))) {
+    for (const fileName of fileNames.filter((name) => !folderNames.has(name.trim()) && !["来源", "数据", "待核验问题"].includes(name.trim()))) {
       const fileButton = page.locator(".file-sidebar .tree-node__main").filter({ hasText: fileName.trim() }).first();
       await fileButton.click();
       await page.locator(".file-sidebar .tree-node.is-active .tree-node__main").filter({ hasText: fileName.trim() }).waitFor();
