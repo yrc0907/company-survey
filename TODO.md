@@ -123,7 +123,7 @@
 - [x] 当前内存快照可执行关键词 + Dense RRF；PostgreSQL FTS 与可选 pgvector Dense 并行召回，向量 SQL 在报告/source/active/hash 范围内过滤，缺能力时确定性降级
 - [x] 接入 `qwen3-rerank`：`429`、超时或 `5xx` 时依次尝试 `Pro/BAAI/bge-reranker-v2-m3`、`BAAI/bge-reranker-v2-m3`；均失败时确定性跳过重排
 - [x] 检测本机 GPU、CUDA、显存和 BGE-M3 权重，创建 `device=auto`、CUDA fp16、CPU 离线回退、仅 loopback 的 Embedding Worker；当前缓存仅有 refs 指针，未加载权重
-- [ ] BGE-M3 只在本机 GPU 作为可选离线 Worker 运行；线上 4C8G 服务器绝不加载模型权重，只保存向量、查询 PostgreSQL/pgvector 并调用外部 API
+- [~] BGE-M3 本机 GPU 离线 Worker、loopback 限制与 Provider 契约已实现；当前本机仅有权重指针，完整模型加载和批量生成仍待用户提供权重后验收，线上 4C8G 绝不加载模型
 - [x] Golden Set：精确、中文政策、语义、多语言、关系、冲突、过期和无证据拒答案例（确定性评测器与契约已覆盖八类）
 - [~] Recall@K、MRR、Citation Coverage、Abstention、延迟和成本计算器已加入确定性评测；真实线上运行指标采集仍待接入
 - [ ] 根据评测决定是否启用 BGE-M3 Sparse/Multi-Vector、Late Chunking、RAPTOR 或 ColBERT
