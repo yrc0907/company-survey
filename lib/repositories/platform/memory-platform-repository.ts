@@ -28,6 +28,9 @@ export class MemoryPlatformRepository implements PlatformRepository {
     if (Array.from(this.accounts.values()).some((item) => item.username.toLowerCase() === username)) {
       throw new AccountConflictError("username", "该用户名已被使用");
     }
+    if (record.account.phoneE164 && Array.from(this.accounts.values()).some((item) => item.phoneE164 === record.account.phoneE164)) {
+      throw new AccountConflictError("phone", "该手机号已绑定其他账户");
+    }
     this.accounts.set(record.account.id, { ...structuredClone(record.account), passwordHash: record.passwordHash, lockedUntil: null });
     return structuredClone(record.account);
   }

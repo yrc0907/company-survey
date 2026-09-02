@@ -20,7 +20,7 @@
 
 - [x] 完成开放知识平台产品、权限、版本、合并、署名和技术架构文档
 - [x] 完成 shadcn/ui 页面、组件、响应式、状态和动效规范文档
-- [~] Auth.js 邮箱/密码注册、登录和 Session/RBAC 校验已实现；GitHub OAuth 可配置状态已公开，邮箱验证与找回密码仍待接入真实邮件 Provider
+- [~] Auth.js 邮箱/密码注册、验证码登录和 Session/RBAC 校验已实现；QQ 邮箱、阿里云短信与图形验证 Provider 已接入，自动注册仍需真实公网 OTP 闭环验收
  - [x] 接入认证邮件真实发信主链路：SMTP 适配器、QQ `smtp.qq.com:465` 授权码投递、验证邮件/密码找回/登录验证码模板和超时边界已实现；阿里云企业邮箱配置保留为可选 Provider，生产凭据仅在服务器 `.env`
 - [~] 已加入 `pnpm auth:readiness` 只读检查 MX/SPF/DKIM/DMARC 与认证环境变量；仍需在 ESA DNS 配置实际记录并记录真实投递成功率/退信原因
  - [~] 接入阿里云短信真实 Provider：签名“恒创联众”、模板 `100001`、验证码哈希/过期/消费、429/5xx 重试和挑战幂等键已实现；香港 ECS 已配置 Dypns RPC，2026-09-02 对目标手机号做一次真实 `SendSmsVerifyCode` 调用并收到 Provider 消息 ID；`AccessKey`/`appKey` 不进入代码、文档、镜像或日志

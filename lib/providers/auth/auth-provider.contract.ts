@@ -22,11 +22,12 @@ async function run(): Promise<void> {
     assert.equal(requests[1]!.headers.get("x-idempotency-key"), "challenge-1");
     assert.match(await requests[1]!.text(), /challenge-1/);
 
-    globalThis.fetch = async () => new Response(JSON.stringify({ success: true }), { status: 200 });
+    const ticket = JSON.stringify({ lot_number: "lot", captcha_output: "out", pass_token: "pass", gen_time: "now" });
+    globalThis.fetch = async () => new Response(JSON.stringify({ result: "success" }), { status: 200 });
     const captcha = new AliyunCaptchaProvider("https://captcha.invalid", "captcha-id", "captcha-key", "research");
-    assert.equal(await captcha.verify({ ticket: "ticket", scene: "email_login", clientIp: null, userId: null }), true);
-    globalThis.fetch = async () => new Response(JSON.stringify({ success: false }), { status: 200 });
-    assert.equal(await captcha.verify({ ticket: "ticket", scene: "email_login", clientIp: null, userId: null }), false);
+    assert.equal(await captcha.verify({ ticket, scene: "email_login", clientIp: null, userId: null }), true);
+    globalThis.fetch = async () => new Response(JSON.stringify({ result: "fail" }), { status: 200 });
+    assert.equal(await captcha.verify({ ticket, scene: "email_login", clientIp: null, userId: null }), false);
     console.log("auth provider contract: passed");
   } finally {
     globalThis.fetch = originalFetch;

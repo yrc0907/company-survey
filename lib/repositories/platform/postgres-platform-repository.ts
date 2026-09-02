@@ -92,8 +92,8 @@ export class PostgresPlatformRepository implements PlatformRepository {
     try {
       await this.sql.begin(async (tx) => {
         const account = record.account;
-        await tx`INSERT INTO platform_user (id, email, global_role, status, email_verified_at, created_at, updated_at)
-          VALUES (${account.id}, ${account.email}, ${account.role}, ${account.status}, ${account.emailVerifiedAt}, ${account.createdAt}, ${account.updatedAt})`;
+        await tx`INSERT INTO platform_user (id, email, global_role, status, email_verified_at, phone_e164, phone_verified_at, created_at, updated_at)
+          VALUES (${account.id}, ${account.email}, ${account.role}, ${account.status}, ${account.emailVerifiedAt}, ${account.phoneE164 ?? null}, ${account.phoneVerifiedAt ?? null}, ${account.createdAt}, ${account.updatedAt})`;
         await tx`INSERT INTO platform_profile (user_id, username, display_name, avatar_asset_id, created_at, updated_at)
           VALUES (${account.id}, ${account.username}, ${account.displayName}, ${account.avatarAssetId}, ${account.createdAt}, ${account.updatedAt})`;
         await tx`INSERT INTO platform_password_credential (user_id, password_hash, password_changed_at)
@@ -104,6 +104,7 @@ export class PostgresPlatformRepository implements PlatformRepository {
       if (isUniqueViolation(error)) {
         const constraint = error.constraint_name ?? "";
         if (constraint.includes("username")) throw new AccountConflictError("username", "该用户名已被使用");
+        if (constraint.includes("phone")) throw new AccountConflictError("phone", "该手机号已绑定其他账户");
         throw new AccountConflictError("email", "该邮箱已注册");
       }
       throw error;

@@ -63,6 +63,19 @@ async function run(): Promise<void> {
   const logged = await service.verifyChallenge({ challengeId: loginReceipt.challengeId, destination: "+8613800138000", code: sms.lastCode });
   assert.equal(logged.account.id, account.id, "手机号验证码登录不能创建重复账户");
 
+  // 未注册身份只有在正确 OTP 后才自动开户；邮箱和手机号都应得到可重复登录的同一账户。
+  const autoEmailReceipt = await service.requestCode({ channel: "email", purpose: "email_login", destination: "first-login@example.com", actor: null, captchaTicket: "ticket", clientIp: "127.0.0.4", deviceId: "device-5" });
+  assert.ok(autoEmailReceipt.challengeId, "未知邮箱验证码登录必须创建待验证挑战");
+  const autoEmail = await service.verifyChallenge({ challengeId: autoEmailReceipt.challengeId, destination: "first-login@example.com", code: email.lastCode });
+  assert.equal((await accounts.findAccountByEmail("first-login@example.com"))?.id, autoEmail.account.id, "邮箱 OTP 后应自动创建账户");
+  assert.equal(autoEmail.account.emailVerifiedAt !== null, true, "自动创建的邮箱账户必须标记已验证");
+
+  const autoPhoneReceipt = await service.requestCode({ channel: "sms", purpose: "phone_login", destination: "13900139000", actor: null, captchaTicket: "ticket", clientIp: "127.0.0.5", deviceId: "device-6" });
+  assert.ok(autoPhoneReceipt.challengeId, "未知手机号验证码登录必须创建待验证挑战");
+  const autoPhone = await service.verifyChallenge({ challengeId: autoPhoneReceipt.challengeId, destination: "13900139000", code: sms.lastCode });
+  assert.equal((await accounts.findAccountByPhone("+8613900139000"))?.id, autoPhone.account.id, "手机号 OTP 后应自动创建账户");
+  assert.equal(autoPhone.account.phoneVerifiedAt !== null, true, "自动创建的手机号账户必须标记已验证");
+
   // 第五次输入仍允许正确验证码，只有第六次才应被错误次数上限拒绝。
   const fifthAttempt = await service.requestCode({ channel: "email", purpose: "email_login", destination: "member-new@example.com", actor: null, captchaTicket: "ticket", clientIp: "127.0.0.2", deviceId: "device-3" });
   for (let attempt = 0; attempt < 4; attempt += 1) {

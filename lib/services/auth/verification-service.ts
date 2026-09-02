@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 
+import { argon2idPasswordHasher } from "@/lib/auth/password";
 import type { AuthenticatedActor, PlatformAccount, VerificationChannel, VerificationPurpose, VerificationChallengeReceipt } from "@/lib/domain/platform";
 import { AccountConflictError, InvalidVerificationCodeError, VerificationProviderError, VerificationRateLimitError } from "@/lib/domain/platform";
 import { ValidationError } from "@/lib/domain/errors";
@@ -8,6 +9,7 @@ import type { EmailProvider } from "@/lib/providers/auth/email-provider";
 import type { SmsProvider } from "@/lib/providers/auth/sms-provider";
 import type { PlatformRepository } from "@/lib/repositories/platform/platform-repository";
 import type { VerificationRepository } from "@/lib/repositories/auth/verification-repository";
+import { AccountService } from "@/lib/services/platform/account-service";
 
 export interface RequestVerificationInput {
   channel: VerificationChannel;
@@ -155,8 +157,8 @@ export class VerificationService {
     const rateLimit = await this.dependencies.challenges.consumeRateLimits(rateLimitInputs(input, destinationHash, this.environment));
     if (!rateLimit.allowed) throw new VerificationRateLimitError(`操作过于频繁，请在 ${rateLimit.retryAfterSeconds} 秒后再试`);
 
-    if ((input.purpose === "email_login" || input.purpose === "password_reset" || input.purpose === "phone_login") && !account) {
-      // 登录/找回对未知目标保持统一响应，防止枚举账户；仍经过图形验证和限流，但不发送、不创建挑战。
+    if (input.purpose === "password_reset" && !account) {
+      // 找回密码对未知邮箱保持统一响应，防止枚举账户；自动注册只允许验证码登录用途。
       return genericAcceptedReceipt(input, destination, this.environment);
     }
 
@@ -199,22 +201,25 @@ export class VerificationService {
     if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) throw new InvalidVerificationCodeError();
     if (!await this.dependencies.challenges.consumeChallenge(challenge.id)) throw new InvalidVerificationCodeError();
 
-    if (!challenge.userId) throw new InvalidVerificationCodeError();
     let account: PlatformAccount | null = null;
-    const before = await this.dependencies.accounts.findAccountById(challenge.userId);
+    const before = challenge.userId ? await this.dependencies.accounts.findAccountById(challenge.userId) : null;
     try {
-      if (challenge.purpose === "email_verification") account = await this.dependencies.accounts.markEmailVerified(challenge.userId);
+      if (!challenge.userId) {
+        if (challenge.purpose !== "email_login" && challenge.purpose !== "phone_login") throw new InvalidVerificationCodeError();
+        // 仅在 OTP 已校验且挑战已消费后自动开户，避免输入地址即可创建账号或重放同一验证码。
+        account = await new AccountService(this.dependencies.accounts, argon2idPasswordHasher).provisionVerifiedIdentity({ channel: challenge.channel, destination });
+      } else if (challenge.purpose === "email_verification") account = await this.dependencies.accounts.markEmailVerified(challenge.userId);
       else if (challenge.purpose === "email_change") account = await this.dependencies.accounts.changeVerifiedEmail(challenge.userId, destination);
       else if (challenge.purpose === "phone_bind" || challenge.purpose === "phone_change") account = await this.dependencies.accounts.bindVerifiedPhone(challenge.userId, destination);
       else account = before;
     } catch (error) {
-      if (error instanceof AccountConflictError) {
+      if (error instanceof AccountConflictError && challenge.userId) {
         await this.writeIdentityAudit({ challenge, userId: challenge.userId, actorUserId: input.actorUserId ?? null, destination, outcome: "conflict", before, reasonCode: `ACCOUNT_CONFLICT_${error.field.toUpperCase()}` });
       }
       throw error;
     }
     if (!account || account.status !== "active") throw new InvalidVerificationCodeError();
-    if (challenge.purpose === "email_verification" || challenge.purpose === "email_change" || challenge.purpose === "phone_bind" || challenge.purpose === "phone_change") {
+    if (challenge.userId && (challenge.purpose === "email_verification" || challenge.purpose === "email_change" || challenge.purpose === "phone_bind" || challenge.purpose === "phone_change")) {
       await this.writeIdentityAudit({ challenge, userId: challenge.userId, actorUserId: input.actorUserId ?? null, destination, outcome: "success", before });
     }
     return { purpose: challenge.purpose, account };
