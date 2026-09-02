@@ -33,11 +33,11 @@
 - [~] Caddy 已只保护旧版 `/api/research/*`，公开读与平台写接口由应用会话/权限处理；完整公网身份治理仍待补齐
 - [x] 建立用户、项目、成员、文件树、Branch、Commit、Revision、MR、Review、Attribution schema 与迁移（002/025 已在香港数据库执行并复核）
 - [~] 建立 `uploaded_asset`、`ingestion_job`、`project_view_daily`、`project_stats` schema 与聚合任务；公开阅读统计已通过 `project_reader` + `project_view_daily` + `project_stats` 同步幂等聚合，项目评论数已由 `project_comment` 实时聚合，点赞/关注统计仍待实现
-- [ ] 接入 TipTap，正文 Block 使用稳定 ID，支持 Markdown 导入导出
+- [x] 接入 TipTap，正文 Block 使用稳定 ID，支持 Markdown 导入导出（`components/report-editor.tsx` 与 `tiptap-document` 契约已通过）
 - [~] 登录后创建空白项目、创建私有草稿分支和 OSS 隔离上传入口已实现；真实账号上传正向 E2E 与解析后自动进入工作台仍待联调
 - [~] Markdown/TXT/PDF/DOCX/PNG/JPEG 白名单、MIME magic、大小、哈希、重复检测、解析状态和幂等重试；解析 Worker 已支持文本/原生 PDF/DOCX，图片与扫描 PDF 进入 `needs_review`；ready 文本可通过受权限约束的索引接口写入 source/source_chunk
 - [x] 原始上传文件不可变，可编辑派生正文与原始证据分离；`uploaded_asset.original_asset_id`、`ingestion_artifact` 和 source 索引契约已验证，向他人项目写入仍受个人分支/MR 权限约束
-- [ ] 游客 IndexedDB 草稿、自动保存、登录迁移和过期 base revision 恢复
+- [~] 游客 IndexedDB 草稿与防抖自动保存已实现并有契约；登录迁移回调、过期 base revision 变基 UI 仍待补齐
 - [~] Diff、三方合并、冲突处理、审核和单事务合并；项目级楼中楼、段落锚点和图片/GIF 附件已完成，实时协同仍待实现
 - [ ] 段落级贡献追踪、用户贡献历史和 AI 辅助标记
 - [~] 公开首页、全站搜索（项目/作者/公开文档 API）、项目详情、编辑、审核、用户主页、收件箱和管理员页面；全站搜索 UI 结果面板与收件箱/管理员页面仍待补齐
@@ -45,7 +45,7 @@
 - [x] 建立公开首发数据包清单：慧策、泛微网络、深信服、信锐科技、有赞、纷享销客、金蝶、奇安信、安恒信息、启明星辰、钉钉、Lark，均记录项目 ID、来源 URL、摘要、SHA-256、来源类型、抓取时间和待核验边界
 - [~] 十二个首发项目已具备公开 URL/摘要、来源元数据和 `needs_verification` 状态；年报/公告、公开访谈、价格、竞品与独立行业证据仍待后续资料包补充
 - [~] 已通过迁移 `025_public_research_file_tree.sql` 为十二个首发项目建立研究文件夹和八类章节模板；章节正文仍需由真实来源导入并经审核，引用必须能回跳到来源和段落
-- [ ] 将企业、产品、行业、竞品、政策和关系边写入统一实体模型；同名公司、品牌、产品和集团关系需要人工确认后再合并
+- [~] 企业、产品、行业、竞品、政策与关系边已写入统一 entity/relation_edge 模型并由 GraphRAG-lite 查询；跨报告同名合并仍要求人工确认
 - [~] 公开首发 manifest 校验脚本已加入（重复 ID/slug、HTTPS、来源类型、哈希格式、待核验边界和社区统计污染检查）；网络可达性、许可证人工确认与生产导入审批仍待补齐
 - [x] 首页展示真实数据库项目和真实聚合统计；公网 E2E 已验证公开项目、来源和真实统计投影，空统计保持明确空状态
 - [ ] 建立来源刷新与变更检测，企业官网/政策更新后生成待复核任务，不自动覆盖已发布正文
@@ -55,7 +55,7 @@
 - [ ] 阿里云 OSS 文件/头像存储、许可证、举报、下架和审计
 - [~] 私有 Bucket `reaserch` 已创建，ECS 已绑定 `research-oss` 且 IMDSv2 临时凭据状态为 `Success`；OSS SDK、预签名读写、隔离对象删除、所有者边界和 ECS 临时对象 Put/Head/Delete 已验证，目标 Bucket CORS、浏览器直传权限 E2E 仍待接入；解析 Worker 已实现租约、重试、明确待校对降级和 ready 文本的 source/source_chunk 索引接口
 - [~] 默认头像已使用用户名首字符和稳定背景色；用户头像的 MIME/大小校验、EXIF 清理、WebP 派生和私有 OSS 受控访问仍待实现
-- [ ] PostgreSQL FTS + pgvector + RRF + Reranker 持久化检索和后台索引 Worker
+- [~] PostgreSQL FTS、可选 pgvector、RRF、Reranker 降级和哈希驱动向量重建 Worker 已实现；大规模调度、ANN 线上重建和真实 Golden Set 仍待完成
 - [~] 权限拒绝、版本冲突、署名一致性、移动端、Reduced Motion 和公网 E2E 已有契约/12 项公网 E2E；游客草稿迁移和完整署名回放仍待补齐
 - [x] 审查 Codex、Claude Code、DeepSeek Harness、Headroom 与 Billion Context 本地快照，并形成记忆/压缩/会话架构文档
 - [~] 建立 conversation/message/part/tool/checkpoint/summary/context_snapshot/ai_patch schema 和迁移；`message_part` 与完整 Resume 仍待补齐
@@ -125,7 +125,7 @@
 - [x] 检测本机 GPU、CUDA、显存和 BGE-M3 权重，创建 `device=auto`、CUDA fp16、CPU 离线回退、仅 loopback 的 Embedding Worker；当前缓存仅有 refs 指针，未加载权重
 - [ ] BGE-M3 只在本机 GPU 作为可选离线 Worker 运行；线上 4C8G 服务器绝不加载模型权重，只保存向量、查询 PostgreSQL/pgvector 并调用外部 API
 - [x] Golden Set：精确、中文政策、语义、多语言、关系、冲突、过期和无证据拒答案例（确定性评测器与契约已覆盖八类）
-- [ ] 记录 Recall@K、MRR/nDCG、Citation Coverage、Citation Correctness、Abstention、Embedding/Rerank/模型延迟和成本
+- [~] Recall@K、MRR、Citation Coverage、Abstention、延迟和成本计算器已加入确定性评测；真实线上运行指标采集仍待接入
 - [ ] 根据评测决定是否启用 BGE-M3 Sparse/Multi-Vector、Late Chunking、RAPTOR 或 ColBERT
 
 ## 5. 部署与运维
