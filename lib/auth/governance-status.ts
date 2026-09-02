@@ -15,7 +15,7 @@ export function getAuthGovernanceStatus(environment: Record<string, string | und
   const emailConfigured = environment.EMAIL_PROVIDER?.trim().toLowerCase() === "aliyun_enterprise_mail"
     && Boolean(environment.SMTP_HOST?.trim() && environment.SMTP_USER?.trim() && environment.SMTP_PASSWORD?.trim());
   const smsConfigured = Boolean(environment.SMS_PROVIDER?.trim().toLowerCase() === "aliyun_dypns" && environment.ALIYUN_SMS_API_URL?.trim() && environment.ALIYUN_SMS_ACCESS_KEY_ID?.trim() && environment.ALIYUN_SMS_ACCESS_KEY_SECRET?.trim() && environment.ALIYUN_SMS_SCHEME_NAME?.trim());
-  const captchaConfigured = Boolean(environment.CAPTCHA_PROVIDER?.trim().toLowerCase() === "aliyun" && environment.ALIYUN_CAPTCHA_API_URL?.trim() && environment.ALIYUN_CAPTCHA_APP_ID?.trim() && environment.ALIYUN_CAPTCHA_APP_KEY?.trim() && environment.ALIYUN_CAPTCHA_SCENE_ID?.trim());
+  const captchaConfigured = Boolean(environment.CAPTCHA_PROVIDER?.trim().toLowerCase() === "aliyun" && environment.ALIYUN_CAPTCHA_APP_ID?.trim() && environment.ALIYUN_CAPTCHA_APP_KEY?.trim() && (environment.ALIYUN_CAPTCHA_API_URL?.trim() || "https://captcha.alicaptcha.com/validate"));
   return {
     oauth: { github: githubConfigured ? "configured" : "not_configured" },
     email: { verification: emailConfigured ? "configured" : "not_configured", passwordReset: emailConfigured ? "configured" : "not_configured", loginCode: emailConfigured ? "configured" : "not_configured", change: emailConfigured ? "configured" : "not_configured" },

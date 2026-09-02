@@ -1,7 +1,6 @@
-# 阿里云图形验证配置
+# 阿里云验证码 4.0（H5）
 
-控制台方案 `research` 的 `SceneId` 必须复制到 `ALIYUN_CAPTCHA_SCENE_ID` 与 `NEXT_PUBLIC_ALIYUN_CAPTCHA_SCENE_ID`。服务端还需要同一方案的 `AppId`、`AppKey`；这两个字段只能写入 ECS 私有 `.env`，不能进入浏览器 bundle、仓库或日志。
+前端只读取 `NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID`，加载 `https://static.alicaptcha.com/v4/ct4.js` 并调用 `initAlicom4({ captchaId: appId, product: "bind" })`。成功后调用 `getValidate()`，将 `lot_number`、`captcha_output`、`pass_token`、`gen_time` JSON 作为一次性票据提交服务端。
 
-Provider 默认调用 `https://captcha.aliyuncs.com/VerifyIntelligentCaptcha`，也可通过 `ALIYUN_CAPTCHA_API_URL` 指定 HTTPS 端点。请求体使用阿里云字段 `CaptchaVerifyParam`、`SceneId`、`AppId`、`AppKey` 和可选 `RemoteIp`。前端仅提交一次性 `captchaVerifyParam` 票据，服务端固定使用配置的 SceneId，不信任前端场景标签。
+服务端从私有环境读取 `ALIYUN_CAPTCHA_APP_ID` 与 `ALIYUN_CAPTCHA_APP_KEY`，向 `https://captcha.alicaptcha.com/validate?captcha_id=appId` 发送 form：四个票据字段及 `sign_token=HMAC-SHA256(appKey, lot_number)`。超时、非 2xx、JSON 非 success 或字段缺失均 fail-closed。不要把 AppKey 写入浏览器、仓库或日志。
 
-仍需用户从控制台复制：真实 `SceneId`、方案 `AppId`、方案 `AppKey`，以及若控制台要求自定义网关时的 HTTPS 校验端点。不要复制或提交截图中出现的任何密钥。

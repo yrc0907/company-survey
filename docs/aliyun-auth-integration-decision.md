@@ -47,10 +47,10 @@ CAPTCHA_PROVIDER=aliyun
 ALIYUN_CAPTCHA_API_URL=<图形验证服务端校验 endpoint>
 ALIYUN_CAPTCHA_APP_ID=<验证码方案 AppId>
 ALIYUN_CAPTCHA_APP_KEY=<验证码方案 AppKey>
-NEXT_PUBLIC_ALIYUN_CAPTCHA_SCENE_ID=<前端集成 SceneId>
+NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID=<前端公开 AppId>
 ```
 
-图形验证控制台显示的“方案编码”不自动等同于前端 `SceneId`；必须按阿里云集成页面确认两者映射。AppKey 只放服务端，`SceneId` 才能作为前端公开配置。
+图形验证 H5 使用 ct4.js 与 `initAlicom4`，AppKey 只放服务端；前端仅公开 AppId。服务端按官方 validate endpoint 生成 HMAC sign_token。
 
 ## 业务链路
 

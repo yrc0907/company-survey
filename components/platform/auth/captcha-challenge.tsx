@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 declare global {
   interface Window {
-    initAliyunCaptcha?: (options: Record<string, unknown>) => void;
+    initAlicom4?: (options: Record<string, unknown>) => { getValidate?: () => unknown };
   }
 }
 
@@ -21,39 +21,38 @@ export function CaptchaChallenge({ scene, value, onChange, disabled = false }: C
   const elementRef = useRef<HTMLDivElement>(null);
   const [configured, setConfigured] = useState(false);
   const [loading, setLoading] = useState(false);
-  const sceneId = process.env.NEXT_PUBLIC_ALIYUN_CAPTCHA_SCENE_ID?.trim();
+  const appId = process.env.NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID?.trim();
   const sceneLabel = scene.trim();
 
   useEffect(() => {
-    if (!sceneId || !elementRef.current) return;
+    if (!appId || !elementRef.current) return;
     let cancelled = false;
     setLoading(true);
     const initialize = () => {
-      if (cancelled || !window.initAliyunCaptcha || !elementRef.current) return;
-      window.initAliyunCaptcha({
-        SceneId: sceneId,
-        mode: "popup",
+      if (cancelled || !window.initAlicom4 || !elementRef.current) return;
+      const captcha = window.initAlicom4({
+        captchaId: appId,
+        product: "bind",
         element: elementRef.current,
-        button: elementRef.current,
-        success: (result: { captchaVerifyParam?: string }) => onChange(result.captchaVerifyParam ?? ""),
+        success: async () => { const result = await captcha.getValidate?.(); if (result && typeof result === "object") onChange(JSON.stringify(result)); },
         fail: () => onChange(""),
       });
       setConfigured(true);
       setLoading(false);
     };
-    if (window.initAliyunCaptcha) initialize();
+    if (window.initAlicom4) initialize();
     else {
       const script = document.createElement("script");
-      script.src = "https://o.alicdn.com/captcha-frontend/aliyunCaptcha/AliyunCaptcha.js";
+      script.src = "https://static.alicaptcha.com/v4/ct4.js";
       script.async = true;
       script.onload = initialize;
       script.onerror = () => { if (!cancelled) setLoading(false); };
       document.head.appendChild(script);
     }
     return () => { cancelled = true; };
-  }, [onChange, sceneId]);
+  }, [appId, onChange]);
 
-  if (!sceneId) {
+  if (!appId) {
     return <label className="block text-sm"><span className="mb-1.5 block font-medium">图形验证票据</span><input value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} className="h-10 w-full rounded-md border bg-background px-3 outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder="配置验证码方案后由组件自动填入" autoComplete="one-time-code" /></label>;
   }
 

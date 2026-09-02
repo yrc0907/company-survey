@@ -43,11 +43,10 @@ ALIYUN_SMS_TEMPLATE_CODE=100001
 
 CAPTCHA_REQUIRED=true
 CAPTCHA_PROVIDER=aliyun
-ALIYUN_CAPTCHA_API_URL=https://captcha.aliyuncs.com/VerifyIntelligentCaptcha
+ALIYUN_CAPTCHA_API_URL=https://captcha.alicaptcha.com/validate
 ALIYUN_CAPTCHA_APP_ID=<验证码方案 AppId>
 ALIYUN_CAPTCHA_APP_KEY=<验证码方案 AppKey>
-ALIYUN_CAPTCHA_SCENE_ID=<控制台方案 SceneId，例如 research>
-NEXT_PUBLIC_ALIYUN_CAPTCHA_SCENE_ID=<与服务端一致的 SceneId>
+NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID=<与服务端一致的 AppId>
 
 # PostgreSQL 兜底限流（生产高并发时可替换同一接口为 Redis）
 AUTH_RATE_LIMIT_WINDOW_SECONDS=3600
