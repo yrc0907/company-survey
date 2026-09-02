@@ -59,6 +59,8 @@ docker compose --env-file .env run --rm app node scripts/seed-community.mjs --cl
 
 历史版本若曾存在 `community-user-*` synthetic 账号，不能通过当前 seed 重新激活或参与互动。完成 PostgreSQL/OSS 备份并人工确认后，可随旧批次清理时显式传入 `--retire-legacy-users`：该选项只将固定前缀且 `.invalid` 保留域名的账号标为 `deleted`，不物理删除外键历史；需要恢复时从备份回滚，不手改 append-only 审计表。
 
+2026-09-03 香港 ECS 已完成备份并清理旧批次 `community-2026-09-v1`：49 个 synthetic 账号已标记 `deleted`，旧评论、Star、关注和阅读等可变互动已按批次退役；Commit、Revision、Review、归因和活动审计仍保留。当前真实 active 账号不足三个，因此新的五家社区 seed 会 fail-closed，不会为了填充页面而创建或伪造用户。
+
 ## 验收口径
 
 1. `community-seed:contract` 报告五家冻结项目且 `syntheticUsersCreated=false`；
