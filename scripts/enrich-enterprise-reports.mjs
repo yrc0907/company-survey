@@ -165,17 +165,27 @@ async function enrichCompany(tx, [projectId, company, url, focus]) {
       VALUES (${`${commitId}:${String(row.node_id)}`}, ${commitId}, ${String(row.node_id)}, 'update_content', ${previousId}, ${revisionId}, ${JSON.stringify({ evidenceState: "needs_verification", sourceId: sourceRef })}::jsonb, ${position}) ON CONFLICT (id) DO NOTHING`;
     position += 1;
   }
-  const analysisNodeId = `${projectId}-node-analysis-${DOSSIER_VERSION}`;
+  // 同一分支的节点名称具有唯一约束；v3/v4 更新必须复用已有“研究者分析与战略判断”节点，
+  // 只追加不可变 Revision，而不是创建同名节点导致迁移失败。
+  const existingAnalysisNodes = await tx`SELECT ns.node_id FROM knowledge_node_state ns
+    WHERE ns.project_id = ${projectId} AND ns.branch_id = ${String(project.branch_id)}
+      AND ns.deleted_at IS NULL AND ns.name = '研究者分析与战略判断' LIMIT 1`;
+  const analysisNodeId = existingAnalysisNodes[0]?.node_id ? String(existingAnalysisNodes[0].node_id) : `${projectId}-node-analysis-${DOSSIER_VERSION}`;
   const analysisText = analystContent(company, focus, snapshot);
   const analysisRevisionId = `${analysisNodeId}-revision-${DOSSIER_VERSION}`;
-  await tx`INSERT INTO knowledge_node (id, project_id, kind, created_by_user_id, created_at)
-    VALUES (${analysisNodeId}, ${projectId}, 'document', ${String(project.owner_user_id)}, ${now}) ON CONFLICT (id) DO NOTHING`;
-  await tx`INSERT INTO knowledge_node_state (project_id, branch_id, node_id, parent_node_id, name, position, deleted_at, updated_at)
-    VALUES (${projectId}, ${String(project.branch_id)}, ${analysisNodeId}, NULL, '研究者分析与战略判断', 40, NULL, ${now}) ON CONFLICT (branch_id, node_id) DO NOTHING`;
+  if (!existingAnalysisNodes.length) {
+    await tx`INSERT INTO knowledge_node (id, project_id, kind, created_by_user_id, created_at)
+      VALUES (${analysisNodeId}, ${projectId}, 'document', ${String(project.owner_user_id)}, ${now}) ON CONFLICT (id) DO NOTHING`;
+    await tx`INSERT INTO knowledge_node_state (project_id, branch_id, node_id, parent_node_id, name, position, deleted_at, updated_at)
+      VALUES (${projectId}, ${String(project.branch_id)}, ${analysisNodeId}, NULL, '研究者分析与战略判断', 40, NULL, ${now}) ON CONFLICT (branch_id, node_id) DO NOTHING`;
+  }
+  const previousAnalysisRows = await tx`SELECT id FROM document_revision WHERE project_id = ${projectId}
+    AND node_id = ${analysisNodeId} AND branch_id = ${String(project.branch_id)} ORDER BY created_at DESC LIMIT 1`;
+  const previousAnalysisId = previousAnalysisRows[0]?.id ? String(previousAnalysisRows[0].id) : null;
   await tx`INSERT INTO document_revision (id, project_id, node_id, branch_id, commit_id, previous_revision_id, content, content_text, content_hash, created_by_user_id, created_at)
-    VALUES (${analysisRevisionId}, ${projectId}, ${analysisNodeId}, ${String(project.branch_id)}, ${commitId}, NULL, ${JSON.stringify(documentContent(analysisText))}::jsonb, ${analysisText}, ${sha256(analysisText)}, ${String(project.owner_user_id)}, ${now}) ON CONFLICT (id) DO NOTHING`;
+    VALUES (${analysisRevisionId}, ${projectId}, ${analysisNodeId}, ${String(project.branch_id)}, ${commitId}, ${previousAnalysisId}, ${JSON.stringify(documentContent(analysisText))}::jsonb, ${analysisText}, ${sha256(analysisText)}, ${String(project.owner_user_id)}, ${now}) ON CONFLICT (id) DO NOTHING`;
   await tx`INSERT INTO commit_change (id, commit_id, node_id, operation, before_revision_id, after_revision_id, metadata, position)
-    VALUES (${`${commitId}:${analysisNodeId}`}, ${commitId}, ${analysisNodeId}, 'create_node', NULL, ${analysisRevisionId}, ${JSON.stringify({ evidenceState: "inference", sourceId: sourceRef })}::jsonb, ${position}) ON CONFLICT (id) DO NOTHING`;
+    VALUES (${`${commitId}:${analysisNodeId}`}, ${commitId}, ${analysisNodeId}, 'update_content', ${previousAnalysisId}, ${analysisRevisionId}, ${JSON.stringify({ evidenceState: "inference", sourceId: sourceRef })}::jsonb, ${position}) ON CONFLICT (id) DO NOTHING`;
   position += 1;
   await tx`UPDATE knowledge_branch SET head_commit_id = ${commitId}, version = GREATEST(version, ${Number(project.version ?? 1) + 1}), updated_at = ${now} WHERE id = ${String(project.branch_id)}`;
   await tx`UPDATE knowledge_project SET updated_at = ${now}, verification_note = ${`已追加${company}官网公开快照；商业数据和效果结论仍需独立来源核验。`} WHERE id = ${projectId}`;
