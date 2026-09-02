@@ -60,6 +60,12 @@ try {
     await feedback.waitFor();
   });
 
+  await check("E2E-PROJECT-004", async () => {
+    await page.getByRole("button", { name: "历史", exact: true }).click();
+    await page.getByRole("heading", { name: "活动时间线" }).waitFor();
+    await page.getByRole("button", { name: "内容", exact: true }).click();
+  });
+
   await check("E2E-PROJECT-003", async () => {
     // 上一个场景打开了修改申请 Tab；讨论属于内容 Tab，先恢复到明确的 UI 状态。
     await page.getByRole("button", { name: /内容/ }).click();

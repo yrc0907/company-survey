@@ -2,7 +2,7 @@
 
 ## 范围
 
-`GET /api/platform/projects/:id/activity` 提供公开项目最近活动。只返回 `visibility=public` 且 `status=published` 的项目；匿名可读，未登录不会获得任何额外权限。响应中的 `source=postgres` 表示事件来自数据库追加账本。
+`GET /api/platform/projects/:id/activity` 提供公开项目最近活动。只返回 `visibility=public` 且 `status=published` 的项目；匿名可读，未登录不会获得任何额外权限。响应中的 `source=postgres` 表示事件来自数据库追加账本。项目详情“历史”Tab 使用同一接口展示加载、空、错误/重试和事件列表状态；点击事件只反馈定位信息，不直接修改事实。
 
 ## 真实事件来源
 

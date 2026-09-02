@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { CollaborationPanel } from "@/components/platform/collaboration-panel";
 import { ProjectComments, type CommentAnchor } from "@/components/platform/project-comments";
+import { ProjectActivity } from "@/components/platform/project-activity";
 import { AssistantPanel } from "@/components/platform/assistant-panel";
 import { ProjectFileTree } from "@/components/platform/file-tree";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,17 @@ const evidenceCopy: Record<SeedSection["state"], string> = {
   inference: "推断",
   needs_verification: "待核验",
   conflict: "存在冲突",
+};
+
+const activityEventCopy: Record<string, string> = {
+  project_created: "创建了项目",
+  commit_created: "提交了修改",
+  merge_request_opened: "发起了修改申请",
+  merge_request_merged: "合并了修改申请",
+  review_submitted: "提交了审核意见",
+  comment_created: "发表评论",
+  project_starred: "收藏了项目",
+  project_unstarred: "取消收藏项目",
 };
 
 function findNode(nodes: SeedFileNode[], nodeId: string): SeedFileNode | undefined {
@@ -84,7 +96,7 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
   const [activeNodeId, setActiveNodeId] = useState("doc-overview");
   const [treeCollapsed, setTreeCollapsed] = useState(false);
   const [activity, setActivity] = useState("");
-  const [activeTab, setActiveTab] = useState<"content" | "changes">("content");
+  const [activeTab, setActiveTab] = useState<"content" | "changes" | "activity">("content");
   const [authenticated, setAuthenticated] = useState(false);
   const [canReview, setCanReview] = useState(false);
   const [branches, setBranches] = useState<BranchSummary[]>([]);
@@ -307,7 +319,7 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
         </div>
       </header>
 
-      <nav className="project-tabs" aria-label="项目导航"><button className={activeTab === "content" ? "is-active" : undefined} type="button" onClick={() => setActiveTab("content")}><BookOpen size={15} />内容</button><button className={activeTab === "changes" ? "is-active" : undefined} type="button" onClick={() => setActiveTab("changes")}><GitPullRequest size={15} />修改申请 <span>{project.openMergeRequests}</span></button><button type="button" onClick={() => setActivity("问题面板将在有可追踪争议后显示。") }><CircleAlert size={15} />问题</button><button type="button" onClick={() => setActivity("历史版本请通过修改申请详情查看。") }><History size={15} />历史</button><button type="button" onClick={() => setActivity("贡献者列表将在首个真实合并后显示。") }><Users size={15} />贡献者</button></nav>
+      <nav className="project-tabs" aria-label="项目导航"><button className={activeTab === "content" ? "is-active" : undefined} type="button" onClick={() => setActiveTab("content")}><BookOpen size={15} />内容</button><button className={activeTab === "changes" ? "is-active" : undefined} type="button" onClick={() => setActiveTab("changes")}><GitPullRequest size={15} />修改申请 <span>{project.openMergeRequests}</span></button><button type="button" onClick={() => setActivity("问题面板将在有可追踪争议后显示。") }><CircleAlert size={15} />问题</button><button className={activeTab === "activity" ? "is-active" : undefined} type="button" onClick={() => setActiveTab("activity")}><History size={15} />历史</button><button type="button" onClick={() => setActivity("贡献者列表将在首个真实合并后显示。") }><Users size={15} />贡献者</button></nav>
 
       <aside className="file-sidebar">
         <div className="file-sidebar__tools"><label><Search size={14} /><input value={treeQuery} onChange={(event) => setTreeQuery(event.target.value)} placeholder="搜索当前项目" aria-label="搜索当前项目文件" /></label><Button size="icon" variant="ghost" onClick={() => setTreeCollapsed(true)} aria-label="收起文件树"><PanelLeftClose size={16} /></Button></div>
@@ -317,7 +329,7 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
       </aside>
 
       {treeCollapsed ? <Button className="tree-reopen" size="icon" variant="outline" onClick={() => setTreeCollapsed(false)} aria-label="展开文件树"><ChevronRight size={17} /></Button> : null}
-      <main className="document-pane">{activeTab === "content" ? <><ProjectDocument project={project} viewCount={viewCount} starCount={starCount} commentCount={commentCount} onActivity={setActivity} onCommentSection={(anchor) => { setCommentAnchor(anchor); window.setTimeout(() => document.getElementById("project-comments-title")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0); }} /><ProjectComments projectId={project.id} authenticated={authenticated} onRequireLogin={() => onRequireLogin("login")} onCountChange={setCommentCount} initialAnchor={commentAnchor} /></> : <CollaborationPanel projectId={project.id} authenticated={authenticated} canReview={canReview} onRequireLogin={() => onRequireLogin("login")} refreshToken={collaborationRefresh} />}{viewState === "loading" || starState === "loading" ? <div className="workspace-activity" role="status" aria-live="polite" aria-busy="true"><span>{viewState === "loading" ? "正在记录阅读…" : "正在读取 Star 状态…"}</span></div> : null}{viewState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>阅读统计暂不可用，正文仍可继续浏览。</span></div> : null}{starState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>Star 服务暂不可用，正文仍可继续浏览。</span></div> : null}{viewState === "ready" ? <div className="workspace-activity" role="status" aria-live="polite"><span>阅读已记录 · 去重读者 {viewCount}</span><button type="button" onClick={() => setViewState("ignored")}>关闭</button></div> : null}{collaborationError ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{collaborationError}</span><button type="button" onClick={() => setCollaborationError("")}>关闭</button></div> : null}{dropNotice ? <div className="workspace-activity" role="status"><span>{dropNotice}</span><button type="button" onClick={() => setDropNotice("")}>关闭</button></div> : null}{activity ? <div className="workspace-activity" role="status"><span>{activity}</span><button type="button" onClick={() => setActivity("")}>关闭</button></div> : null}</main>
+      <main className="document-pane">{activeTab === "content" ? <><ProjectDocument project={project} viewCount={viewCount} starCount={starCount} commentCount={commentCount} onActivity={setActivity} onCommentSection={(anchor) => { setCommentAnchor(anchor); window.setTimeout(() => document.getElementById("project-comments-title")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0); }} /><ProjectComments projectId={project.id} authenticated={authenticated} onRequireLogin={() => onRequireLogin("login")} onCountChange={setCommentCount} initialAnchor={commentAnchor} /></> : activeTab === "activity" ? <ProjectActivity projectId={project.id} onSelect={(event) => setActivity(`${event.actor.displayName}：${activityEventCopy[event.eventType] ?? event.eventType}`)} /> : <CollaborationPanel projectId={project.id} authenticated={authenticated} canReview={canReview} onRequireLogin={() => onRequireLogin("login")} refreshToken={collaborationRefresh} />}{viewState === "loading" || starState === "loading" ? <div className="workspace-activity" role="status" aria-live="polite" aria-busy="true"><span>{viewState === "loading" ? "正在记录阅读…" : "正在读取 Star 状态…"}</span></div> : null}{viewState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>阅读统计暂不可用，正文仍可继续浏览。</span></div> : null}{starState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>Star 服务暂不可用，正文仍可继续浏览。</span></div> : null}{viewState === "ready" ? <div className="workspace-activity" role="status" aria-live="polite"><span>阅读已记录 · 去重读者 {viewCount}</span><button type="button" onClick={() => setViewState("ignored")}>关闭</button></div> : null}{collaborationError ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{collaborationError}</span><button type="button" onClick={() => setCollaborationError("")}>关闭</button></div> : null}{dropNotice ? <div className="workspace-activity" role="status"><span>{dropNotice}</span><button type="button" onClick={() => setDropNotice("")}>关闭</button></div> : null}{activity ? <div className="workspace-activity" role="status"><span>{activity}</span><button type="button" onClick={() => setActivity("")}>关闭</button></div> : null}</main>
       <AssistantPanel project={project} activeFileName={activeNode?.name ?? "研究结论"} activeFileId={activeNode?.id} />
     </div>
   );
