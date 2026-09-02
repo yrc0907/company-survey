@@ -42,6 +42,8 @@ RUN groupadd --system --gid 1001 nodejs \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/run-migrations.mjs ./scripts/run-migrations.mjs
+# 社区场景数据必须在迁移后由运维显式运行；将脚本放入 runner，避免生产容器找不到 seed 入口。
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/seed-community.mjs ./scripts/seed-community.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/db/migrations ./db/migrations
 
 USER nextjs

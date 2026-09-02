@@ -19,6 +19,15 @@ pnpm community-seed
 pnpm community-seed -- --check
 ```
 
+生产 Compose 发布后，runner 镜像会保留 seed 入口；在香港 ECS 上显式执行一次（不要把 seed 作为常驻服务）：
+
+```bash
+docker compose --env-file .env run --rm app node scripts/seed-community.mjs
+docker compose --env-file .env run --rm app node scripts/seed-community.mjs --check
+```
+
+`Dockerfile` 只复制 `seed-community.mjs`，不复制本地环境文件、契约夹具或任何凭据；发布脚本仍先执行备份和迁移。
+
 默认批次为 `community-2026-09-v1`，可用 `--batch <batch>` 或 `COMMUNITY_SEED_BATCH` 指定。实体 ID 稳定、关系有唯一约束，重复运行不会重复增加 Star、关注、阅读或评论计数。静态边界检查：
 
 ```bash
