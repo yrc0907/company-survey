@@ -4,6 +4,9 @@
 慧策、泛微网络、深信服、信锐科技、有赞、纷享销客、金蝶、奇安信、安恒信息、启明星辰、钉钉、Lark。资料包只包含企业官网公开入口和一段保守的人工摘要，
 不把模型生成内容、搜索结果或未公开商业信息当成事实。
 
+迁移 `025_public_research_file_tree.sql` 在上述项目中建立统一的研究目录和章节节点。它只创建可追溯的空白结构模板（每个项目 1 个“研究报告”文件夹和 8 个章节文档），
+章节正文明确标记 `needs_verification`，不会冒充企业事实，也不会写入阅读、点赞、评论、关注或贡献行为。后续真实用户必须通过来源导入、Commit 和审核合并填充章节。
+
 ## 数据清单
 
 | 项目 | 项目 ID / slug | 公开来源 | 来源类型 | 抓取时间（UTC） | 证据状态 | 摘要 SHA-256 |
@@ -40,6 +43,7 @@
 
 - `knowledge_project` 保存公开项目标题、摘要、分类、标签、许可证和 `needs_verification` 状态；十二个项目均为 `public/published`，方便首页读取。
 - `knowledge_branch`、`knowledge_commit`、`knowledge_node`、`document_revision` 和 `content_attribution` 保存可追溯的首发版本，正文仍可通过后续 Commit/MR 修订。
+- `025_public_research_file_tree.sql` 增加 12 个研究文件夹和 96 个章节文档节点（每项目 8 个），并为每个文档保存结构 Commit、稳定节点 ID、内容哈希和初始署名；模板不含企业指标。
 - 旧版 `company/report/source/source_chunk/citation/entity/relation_edge` 同步保存相同摘要，供受保护的个人 Research API 和 GraphRAG-lite 使用。
 - `source.metadata` 保存 `sourceType`、发布者、抓取时间、许可边界和抓取方式；`source.content_hash` 与 `source_chunk.content_hash` 使用摘要 UTF-8 字节的 SHA-256。
 - `evidence_state=needs_verification` 是刻意的安全边界。只有维护者核对网页快照、发布时间和引用许可后，才能在新的修订中升级状态；迁移不会自动升级。
@@ -48,13 +52,27 @@
 
 ## 验证与后续
 
-契约 `lib/services/platform/public-seed.contract.ts` 读取两份迁移和本文档，检查十二个项目、URL、
+契约 `lib/services/platform/public-seed.contract.ts` 读取两份资料迁移和本文档，检查十二个项目、URL、
 SHA-256 格式、待核验状态、幂等插入和“无静态阅读/社区计数”边界。部署时运行：
 
 ```bash
 pnpm exec tsx lib/services/platform/public-seed.contract.ts
 docker compose run --rm migrate
 ```
+
+部署 `025` 后可用以下只读查询复核结构数量（不会改写内容）：
+
+```sql
+SELECT COUNT(*) AS research_folders
+  FROM knowledge_node
+ WHERE id LIKE 'project-%-folder-research';
+
+SELECT COUNT(*) AS research_documents
+  FROM knowledge_node
+ WHERE id LIKE 'project-%-doc-%';
+```
+
+预期分别为 12 和 96；若某项目已存在同名结构 Commit，迁移会跳过该项目，避免覆盖人工修改。
 
 迁移完成后应查询四个 `knowledge_project` 的 `unique_readers=0`、`source.metadata` 非空，
 并用公网官网重新抓取快照后再提交下一份带新哈希的修订。官网发生跳转、反爬或内容变更时，

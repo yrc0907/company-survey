@@ -11,6 +11,7 @@ function runPublicSeedContract(): void {
   const migrationPaths = [
     resolve(process.cwd(), "db", "migrations", "022_public_company_seed.sql"),
     resolve(process.cwd(), "db", "migrations", "024_public_company_seed_additional.sql"),
+    resolve(process.cwd(), "db", "migrations", "025_public_research_file_tree.sql"),
   ];
   const documentationPath = resolve(process.cwd(), "docs", "public-company-seed.md");
   const migration = migrationPaths.map((path) => readFileSync(path, "utf8")).join("\n");
@@ -85,6 +86,10 @@ function runPublicSeedContract(): void {
   assert.match(migration, /sourceType.*official_website/);
   assert.match(migration, /'needs_verification'/);
   assert.match(migration, /project_stats[\s\S]*SELECT project_id, 0/);
+  assert.match(migration, /public-research-structure:/, "结构迁移必须使用幂等结构 Commit");
+  for (const anchor of ["research-conclusion", "company-product", "market-competitors", "business-model", "customers-scenarios", "policy-links", "risks-open-questions", "evidence-catalog"]) {
+    assert.match(migration, new RegExp(anchor), `${anchor} 章节模板缺失`);
+  }
   assert.doesNotMatch(migration, /INSERT\s+INTO\s+platform_user/i, "迁移不能创建虚构用户");
   assert.doesNotMatch(migration, /INSERT\s+INTO\s+(project_reader|project_view_daily|project_star|project_comment|merge_request)\b/i, "迁移不能伪造社区统计");
 
