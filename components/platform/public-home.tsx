@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpenText, ChevronDown, FileText, Filter, Loader2, LogIn, Plus, Search, Sparkles, Upload, UserRound } from "lucide-react";
+import { Activity, BookOpenText, ChevronDown, FileText, Filter, FolderGit2, Loader2, LogIn, Plus, Search, Sparkles, Upload, UserRound, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ProjectCard } from "@/components/platform/project-card";
@@ -129,6 +129,12 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
     }
   }
 
+  function openFullSearch(): void {
+    const normalized = query.trim();
+    if (!normalized) return;
+    window.location.assign(`/search?q=${encodeURIComponent(normalized)}`);
+  }
+
   function resultIcon(kind: SearchResult["kind"]): JSX.Element {
     if (kind === "author") return <UserRound size={15} aria-hidden="true" />;
     if (kind === "document") return <FileText size={15} aria-hidden="true" />;
@@ -144,7 +150,7 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
         </button>
         <label className="global-search" htmlFor="global-search-input">
           <Search size={17} aria-hidden="true" />
-          <input ref={searchInputRef} id="global-search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目、报告、公司、结论或来源" />
+          <input ref={searchInputRef} id="global-search-input" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") openFullSearch(); }} placeholder="搜索项目、报告、公司、结论或来源" />
           <kbd>Ctrl K</kbd>
         </label>
         {query.trim().length >= 2 ? <div className="global-search-results" role="region" aria-label="全站搜索结果" aria-live="polite">
@@ -159,6 +165,7 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
         </div> : null}
         <nav className="public-nav" aria-label="全站导航">
           <Button variant="ghost" onClick={resetExplore}>探索</Button>
+          <Button variant="ghost" onClick={() => window.location.assign("/search")}>搜索</Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button variant="outline"><Plus size={15} />提交研究<ChevronDown size={14} /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -185,6 +192,22 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
         </aside>
 
         <section className="project-feed" aria-label="公开研究项目">
+          <div className="mb-6 overflow-hidden rounded-xl border bg-background shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-5 border-b px-5 py-5 sm:px-6">
+              <div className="min-w-0">
+                <p className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground"><FolderGit2 size={14} aria-hidden="true" />公开研究空间</p>
+                <h1 className="m-0 text-2xl font-semibold tracking-tight sm:text-3xl">探索可追溯的企业与行业研究</h1>
+                <p className="mb-0 mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">像浏览 GitHub 项目一样浏览研究报告：查看来源、版本、贡献和讨论，并沿引用回到原文。</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => window.location.assign("/search")}><Search size={15} />全站搜索</Button>
+            </div>
+            <div className="grid grid-cols-2 divide-x sm:grid-cols-4">
+              <div className="px-5 py-4 sm:px-6"><span className="block text-[11px] uppercase tracking-wide text-muted-foreground">公开项目</span><strong className="mt-1 block font-mono text-xl tabular-nums">{projects.length}</strong></div>
+              <div className="px-5 py-4 sm:px-6"><span className="block text-[11px] uppercase tracking-wide text-muted-foreground">研究主题</span><strong className="mt-1 block font-mono text-xl tabular-nums">{topics.length}</strong></div>
+              <div className="px-5 py-4 sm:px-6"><span className="block text-[11px] uppercase tracking-wide text-muted-foreground">来源记录</span><strong className="mt-1 block font-mono text-xl tabular-nums">{projects.reduce((sum, item) => sum + item.sourceCount, 0)}</strong></div>
+              <div className="px-5 py-4 sm:px-6"><span className="block text-[11px] uppercase tracking-wide text-muted-foreground">贡献者</span><strong className="mt-1 block font-mono text-xl tabular-nums">{new Set(projects.flatMap((item) => item.contributors.map((user) => user.id))).size}</strong></div>
+            </div>
+          </div>
           <div className="feed-tabs">
             <div role="tablist" aria-label="项目排序">
               <button type="button" role="tab" aria-selected={sort === "recommended"} onClick={() => setSort("recommended")}>推荐</button>
@@ -195,13 +218,23 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
           </div>
           {error ? <div className="public-data-notice" role="status"><span>线上项目列表暂时不可用，当前显示首发内容。</span>{onRetry ? <button type="button" onClick={onRetry}>重试</button> : null}</div> : null}
           {loading ? <div className="project-list-loading" aria-live="polite" aria-busy="true"><Skeleton className="h-3 w-full" /><Skeleton className="h-3 w-2/3" /><Skeleton className="h-3 w-full" /><p>正在读取公开项目…</p></div> : null}
-          <div className="project-list" aria-busy={loading}>
+          <div className="project-list space-y-3" aria-busy={loading}>
             {!loading && visibleProjects.map((project) => <ProjectCard key={project.id} project={project} onOpen={onOpenProject} onSearch={searchProject} />)}
             {!loading && visibleProjects.length === 0 ? <div className="search-empty"><Search size={22} /><h2>没有匹配的公开项目</h2><p>调整关键词或分类后再试。</p></div> : null}
           </div>
         </section>
 
         <aside className="discovery-rail" aria-label="社区动态">
+          <section className="!border-0 !pb-0">
+            <div className="rounded-xl border bg-background p-4 shadow-sm">
+              <div className="mb-4 flex items-center gap-2 text-sm font-semibold"><Activity size={15} aria-hidden="true" />社区概览</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-muted/60 p-3"><FolderGit2 size={15} className="text-muted-foreground" /><strong className="mt-2 block font-mono text-lg tabular-nums">{projects.length}</strong><span className="text-[11px] text-muted-foreground">公开项目</span></div>
+                <div className="rounded-lg bg-muted/60 p-3"><Users size={15} className="text-muted-foreground" /><strong className="mt-2 block font-mono text-lg tabular-nums">{new Set(projects.flatMap((item) => item.contributors.map((user) => user.id))).size}</strong><span className="text-[11px] text-muted-foreground">公开贡献者</span></div>
+              </div>
+              <p className="mb-0 mt-3 text-[11px] leading-5 text-muted-foreground">统计由公开项目响应实时聚合；没有事件的项目不会显示虚构互动。</p>
+            </div>
+          </section>
           <section>
             <div className="rail-heading"><span>项目主题</span><button type="button" onClick={resetExplore}>查看全部</button></div>
             <div className="topic-list">

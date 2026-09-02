@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, BookOpen, Clock3, GitPullRequest, Library, MessageCircle, Search, Star, Users, X } from "lucide-react";
+import { ArrowUpRight, BookOpen, Clock3, FileText, GitPullRequest, Library, MessageCircle, Search, Star, Users, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { UserAvatar } from "@/components/ui/avatar";
@@ -33,7 +33,7 @@ export function ProjectCard({ project, onOpen, onSearch, onOpenOwner }: ProjectC
     if (typeof window !== "undefined") window.location.assign(`/u/${encodeURIComponent(project.owner.username)}`);
   }
   return (
-    <article className="project-list-item">
+    <article className="project-list-item group rounded-xl border bg-background px-5 py-5 shadow-sm transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-foreground/20 hover:shadow-md sm:px-6">
       <div className="project-owner-line">
           <button type="button" className="project-owner-link" onClick={openOwner} aria-label={`查看${project.owner.displayName}的作者主页`}>
           <UserAvatar name={project.owner.displayName} size="sm" />
@@ -85,6 +85,11 @@ export function ProjectCard({ project, onOpen, onSearch, onOpenOwner }: ProjectC
             </div>
           </DialogContent>
         </Dialog>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3 text-[11px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5"><FileText size={13} aria-hidden="true" />v{project.version} 当前公开版本</span>
+        <span>{project.verification === "verified" ? "来源已核验" : "部分来源待核验"}</span>
+        <button type="button" className="ml-auto inline-flex items-center gap-1 border-0 bg-transparent font-medium text-foreground/70 hover:text-foreground" onClick={() => onOpen(project.id)}>查看项目 <ArrowUpRight size={13} aria-hidden="true" /></button>
       </div>
       <p className="project-verification-note">{project.verificationNote}</p>
     </article>

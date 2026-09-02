@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, BookOpen, CalendarDays, FolderGit2, Loader2, Users, UserPlus, UserRoundCheck } from "lucide-react";
+import { ArrowLeft, BookOpen, CalendarDays, FolderGit2, GitCommitHorizontal, Loader2, Users, UserPlus, UserRoundCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { LoginGateDialog } from "@/components/platform/login-gate-dialog";
@@ -164,15 +164,21 @@ export function AuthorProfile({ username }: { username: string }) {
         </header>
         {state === "loading" ? <main className="author-page__loading" aria-live="polite" aria-busy="true"><Skeleton className="size-20 rounded-full" /><Skeleton className="h-5 w-44" /><Skeleton className="h-3 w-72" /><Skeleton className="h-32 w-full max-w-5xl" /><p>正在读取作者主页…</p></main> : null}
         {state === "error" ? <main className="route-state" role="alert"><h1>作者主页无法打开</h1><p>{error}</p><Button variant="outline" onClick={() => window.location.reload()}>重试</Button></main> : null}
-        {state === "ready" && author ? <main className="author-page__layout">
-          <section className="author-profile-card" aria-labelledby="author-profile-title">
+        {state === "ready" && author ? <main className="author-page__layout items-start lg:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="space-y-4 lg:sticky lg:top-[84px]">
+          <section className="author-profile-card rounded-xl border bg-background p-5 shadow-sm" aria-labelledby="author-profile-title">
             <div className="author-profile-card__top"><UserAvatar name={author.displayName} size="lg" /><div className="author-profile-card__identity"><h1 id="author-profile-title">{author.displayName}</h1><p>@{author.username}</p></div><Button variant={following ? "subtle" : "outline"} size="sm" onClick={() => void toggleFollow()} disabled={followState === "saving" || followState === "loading"} aria-pressed={following}>{followState === "saving" ? <Loader2 size={15} className="animate-spin" /> : following ? <UserRoundCheck size={15} /> : <UserPlus size={15} />}{following ? "已关注" : "关注"}</Button></div>
             {author.bio ? <p className="author-profile-card__bio">{author.bio}</p> : <p className="author-profile-card__bio text-muted-foreground">这个作者还没有填写简介。</p>}
             <div className="author-profile-card__meta"><span><CalendarDays size={14} />加入于 {dateLabel(author.createdAt)}</span><span><FolderGit2 size={14} />{projectCountLabel}</span><span><Users size={14} />{followerCount} 位关注者</span><span><BookOpen size={14} />关注 {author.followingCount} 位作者</span></div>
             {feedback ? <p className={followState === "error" ? "author-feedback author-feedback--error" : "author-feedback"} role={followState === "error" ? "alert" : "status"}>{feedback}{followState === "error" ? <button type="button" onClick={() => void toggleFollow()}>重试</button> : null}</p> : null}
           </section>
+          <nav aria-label="作者主页导航" className="rounded-xl border bg-background p-2 shadow-sm"><a href="#pinned-projects" className="flex h-9 items-center gap-2 rounded-md bg-muted px-2.5 text-sm font-medium"><FolderGit2 size={15} />概览</a><a href="#author-projects-title" className="flex h-9 items-center gap-2 rounded-md px-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"><BookOpen size={15} />公开项目</a><a href="#author-contributions-title" className="flex h-9 items-center gap-2 rounded-md px-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"><GitCommitHorizontal size={15} />贡献活动</a></nav>
+          </aside>
+          <div className="min-w-0 space-y-8">
+          <section id="pinned-projects" className="rounded-xl border bg-background p-5 shadow-sm sm:p-6"><div className="mb-4 flex items-center justify-between"><div><h2 className="m-0 text-base font-semibold">Pinned 项目</h2><p className="mb-0 mt-1 text-xs text-muted-foreground">作者希望优先展示的公开研究。</p></div><span className="font-mono text-xs text-muted-foreground">{Math.min(author.projects.length, 4)} / 4</span></div>{author.projects.length ? <div className="grid gap-3 sm:grid-cols-2">{author.projects.slice(0, 4).map((project) => <button key={project.id} type="button" onClick={() => openProject(project.id)} className="group rounded-lg border bg-background p-4 text-left transition-[border-color,box-shadow] hover:border-foreground/25 hover:shadow-sm"><span className="flex items-center gap-2"><FolderGit2 size={15} className="text-muted-foreground" /><strong className="truncate text-sm">{project.title}</strong></span><span className="mt-2 block line-clamp-2 text-xs leading-5 text-muted-foreground">{project.summary}</span><span className="mt-3 flex items-center gap-3 text-[11px] text-muted-foreground"><span>{project.category}</span><span>v{project.version}</span><span>{project.uniqueReaders} 阅读</span></span></button>)}</div> : <div className="grid place-items-center gap-2 py-8 text-sm text-muted-foreground"><FolderGit2 size={20} /><p className="m-0">还没有可置顶的公开项目。</p></div>}</section>
           <section className="author-projects" aria-labelledby="author-projects-title"><div className="author-projects__heading"><div><h2 id="author-projects-title">公开项目</h2><p>作者维护或发布的公开研究，可直接进入项目详情。</p></div><span>{author.projects.length}</span></div>{author.projects.length ? <div className="author-projects__list">{author.projects.map((project) => <ProjectCard key={project.id} project={project} onOpen={openProject} />)}</div> : <div className="author-projects__empty"><FolderGit2 size={22} /><p>还没有公开项目。</p></div>}</section>
           <section className="author-projects" aria-labelledby="author-contributions-title"><div className="author-projects__heading"><div><h2 id="author-contributions-title">段落贡献历史</h2><p>仅展示已合并到公开项目、仍处于 active 的真实归因。</p></div><span>{author.contributions.length}</span></div>{author.contributions.length ? <ol className="author-contribution-list">{author.contributions.map((item) => <li key={item.id}><strong>{item.project.title}</strong><span>Block {item.blockId}</span><time dateTime={item.createdAt}>{dateLabel(item.createdAt)}</time></li>)}</ol> : <div className="author-projects__empty"><BookOpen size={22} /><p>暂无公开段落贡献。</p></div>}</section>
+          </div>
         </main> : null}
       </div>
       <LoginGateDialog open={loginOpen} intent="login" onOpenChange={setLoginOpen} />
