@@ -126,7 +126,7 @@
 - [~] BGE-M3 本机 GPU 离线 Worker、loopback 限制与 Provider 契约已实现；当前本机仅有权重指针，完整模型加载和批量生成仍待用户提供权重后验收，线上 4C8G 绝不加载模型
 - [x] Golden Set：精确、中文政策、语义、多语言、关系、冲突、过期和无证据拒答案例（确定性评测器与契约已覆盖八类）
 - [~] Recall@K、MRR、Citation Coverage、Abstention、延迟和成本计算器已加入确定性评测；真实线上运行指标采集仍待接入
-- [ ] 根据评测决定是否启用 BGE-M3 Sparse/Multi-Vector、Late Chunking、RAPTOR 或 ColBERT
+- [x] 根据当前 Golden Set 与个人规模评测决定暂不启用 BGE-M3 Sparse/Multi-Vector、Late Chunking、RAPTOR 或 ColBERT；保留后续用真实标注集复评的入口
 
 ## 5. 部署与运维
 
