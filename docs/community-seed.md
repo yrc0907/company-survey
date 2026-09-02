@@ -1,58 +1,72 @@
-# 持久化社区场景 seed
+# 五家冻结企业的社区场景 seed
 
-`scripts/seed-community.mjs` 为内部验收和面试环境建立一批可回溯的社区场景记录。它不是企业事实资料包：企业名称、产品描述、价格和市场判断仍必须来自 `source`/`source_chunk` 的公开来源，社区互动不能证明真实客户或真实市场热度。
+`scripts/seed-community.mjs` 只服务于五家冻结企业：慧策掌上先机、泛微网络、深信服、信锐科技和牧原食品。它不是企业资料包，企业名称、产品、价格、财务和市场判断仍必须来自 `source`/`source_chunk` 的公开来源，社区行为不能证明真实客户或真实市场热度。
 
-## 写入内容
+## 真实账号边界
 
-- 49 个跨城市、行业和角色的 `platform_user`/`platform_profile`。邮箱使用 `.invalid` 保留域名，不具备外部投递能力；头像留空，读取端显示稳定的首字母默认头像。
-- 13 个已有公开企业项目统一由 Yu 维护，并补充跨城市 maintainer/contributor 成员；社区用户只参与互动和贡献，分配关系保存于 `community_seed_record`。
-- 作者关注、项目 Star、按用户/日期去重阅读、项目级和锚点评论、两级回复、Commit、分支、Merge Request、Review、Merge、段落归因、站内通知。
-- `activity_daily` 由 `activity_event` 与 `project_view_daily` 重建，供作者/项目热力图读取；脚本不向前端写静态统计数字。
+脚本不创建 `platform_user`、`platform_profile`、密码、邮箱或头像。它只读取已经通过正式注册流程产生的 active 账号：
+
+- 默认读取所有 active 账号，并排除历史 `community-user-*` 与 `@community.research.invalid` 账号；
+- 也可以用 `COMMUNITY_SEED_USER_IDS=id1,id2,id3` 显式指定参与账号；
+- 至少需要三个不同的真实 active 账号，分别承担维护者、贡献者和审核者，账号不足时直接失败，不会创建虚构用户；
+- 不写入账号的姓名、城市、行业或简介；已有头像为空时，页面沿用稳定的首字母默认头像。
+
+脚本写入的评论、Star、关注、阅读和协作记录属于可回溯的内部场景批次，不能对外宣称为真实市场活跃度。页面统计仍只从 PostgreSQL 事实和 `activity_event` 聚合读取。
+
+## 写入范围
+
+- 五个公开项目的真实 owner/member 关系（不改变项目 owner）；
+- 作者关注、项目 Star、按用户/日期去重阅读；
+- 项目级/段落锚点评论和两级回复；
+- Commit、贡献分支、Merge Request、Review、Merge、内容归因；
+- 站内通知和 `activity_daily` 热力图日投影；
+- `community_seed_record` 内部索引，便于审计、重建和清理。
 
 ## 运行
 
-先执行迁移，再运行 seed。脚本只接受服务端 `DATABASE_URL`，没有连接时会失败，不会退回内存假实现：
+先完成公开范围迁移和备份，再执行：
 
 ```bash
 pnpm db:migrate
-pnpm community-seed
-pnpm community-seed -- --check
+COMMUNITY_SEED_USER_IDS=u-yu,real-user-2,real-user-3 pnpm community-seed
+COMMUNITY_SEED_USER_IDS=u-yu,real-user-2,real-user-3 pnpm community-seed -- --check
 ```
 
-生产 Compose 发布后，runner 镜像会保留 seed 入口；在香港 ECS 上显式执行一次（不要把 seed 作为常驻服务）：
+未设置 `COMMUNITY_SEED_USER_IDS` 时，脚本自动选择数据库中所有 active 的非 synthetic 账号；生产环境建议显式指定，避免把未参与场景的账号加入成员或互动关系。runner 镜像包含入口，可在香港 ECS 上使用：
 
 ```bash
 docker compose --env-file .env run --rm app node scripts/seed-community.mjs
 docker compose --env-file .env run --rm app node scripts/seed-community.mjs --check
 ```
 
-`Dockerfile` 只复制 `seed-community.mjs`，不复制本地环境文件、契约夹具或任何凭据；发布脚本仍先执行备份和迁移。
+默认批次为 `community-2026-09-five-v1`；可用 `--batch <batch>` 或 `COMMUNITY_SEED_BATCH` 指定，但同一数据库建议沿用同一批次以保持稳定幂等 ID。
 
-默认批次为 `community-2026-09-v1`，可用 `--batch <batch>` 或 `COMMUNITY_SEED_BATCH` 指定。实体 ID 稳定、关系有唯一约束，重复运行不会重复增加 Star、关注、阅读或评论计数。静态边界检查：
+静态校验：
 
 ```bash
 pnpm community-seed:contract
 ```
 
-## 清理与不可变历史
+## 可回滚清理
+
+发布前先执行 `scripts/backup.sh`，再清理当前批次：
 
 ```bash
-pnpm community-seed -- --clean
+docker compose --env-file .env run --rm app node scripts/seed-community.mjs --clean --batch community-2026-09-five-v1
 ```
 
-清理只退役当前批次的可变关系（Star、关注、阅读、通知）并软删除评论；`knowledge_commit`、`document_revision`、`merge_review` 和 `activity_event` 是 append-only 审计事实，不能物理删除。实体 ID 为稳定幂等键，因此同一数据库应继续使用同一批次重跑；要获得完全干净的新批次，请在隔离数据库恢复备份后再运行，不能只改批次名来掩盖旧历史。
+清理会取消本批次的 Star、关注和阅读，删除本批次通知，软删除评论，并关闭未合并的协作分支/MR；`knowledge_commit`、`document_revision`、`merge_review`、`content_attribution` 和 `activity_event` 是 append-only 审计事实，不能物理删除。清理后可从备份恢复，或用同一批次 ID 重跑（实体 ID 稳定，重跑不会重复计数）。
 
-`community_seed_record` 只供运维重建和审计使用，公开 API 不返回 `seed_batch`/`source_kind`，页面按正常用户、项目和互动展示。场景账号没有密码凭据，不能用于外部登录；真实账户仍必须通过注册和邮箱/手机验证流程产生。
+历史版本若曾存在 `community-user-*` synthetic 账号，不能通过当前 seed 重新激活或参与互动。完成 PostgreSQL/OSS 备份并人工确认后，可随旧批次清理时显式传入 `--retire-legacy-users`：该选项只将固定前缀且 `.invalid` 保留域名的账号标为 `deleted`，不物理删除外键历史；需要恢复时从备份回滚，不手改 append-only 审计表。
 
 ## 验收口径
 
-验收至少检查：
+1. `community-seed:contract` 报告五家冻结项目且 `syntheticUsersCreated=false`；
+2. seed 运行前后 active 账号数量不增加，且参与者均能在 `platform_user/profile` 查到；
+3. 五个项目全部为 `public/published`，其他项目不会由本脚本写入；
+4. Star/关注唯一，评论父子关系和锚点项目一致；
+5. `project_stats.unique_readers` 与五个项目的 `project_reader` 计数一致；
+6. 每个 MR 可回到 source branch、Commit、Review、merged Commit 和 attribution；
+7. 重复运行两次计数相同，`--clean` 后可验证可变关系归零而 append-only 历史仍在。
 
-1. active 场景用户数量在 40-60 之间，13 个项目均为公开发布状态；
-2. `project_reader`/`project_view_daily` 与 `project_stats.unique_readers` 一致；
-3. Star/关注的 `(user, target)` 唯一，评论父子关系和锚点项目一致；
-4. 每个 Merge Request 都能回跳 source branch、Commit、Review、merged Commit 与 attribution；
-5. 通知 recipient、actor、project、target 均存在，`activity_daily` 可由事实表重复重建；
-6. 运行两次 `pnpm community-seed` 后，各事实表数量与第一次相同（时间线 append-only 事件不重复创建）。
-
-脚本不输出邮箱、密码、AccessKey、模型 Key 或其他凭据。
+脚本和文档不包含密码、AccessKey、模型 Key 或其他凭据。

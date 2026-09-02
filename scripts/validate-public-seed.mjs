@@ -32,7 +32,9 @@ for (const row of rows) {
   if (!row.capturedAt.includes("T")) errors.push(`抓取时间缺少 ISO 标记：${row.projectId}`);
   if (row.evidenceState !== "needs_verification") errors.push(`证据状态必须先是 needs_verification：${row.projectId}`);
 }
-if (rows.length !== 12) errors.push(`预期 12 个首发项目，实际解析到 ${rows.length} 个`);
+const frozenProjectIds = new Set(["project-huice", "project-weaver", "project-sangfor", "project-sundray", "project-muyuan"]);
+if (rows.length !== frozenProjectIds.size) errors.push(`预期 ${frozenProjectIds.size} 个冻结项目，实际解析到 ${rows.length} 个`);
+for (const projectId of frozenProjectIds) if (!ids.has(projectId)) errors.push(`缺少冻结项目：${projectId}`);
 if (!text.includes("evidence_state=needs_verification")) errors.push("缺少待核验边界声明");
 if (rows.some((row) => /project_(reader|view_daily|star|comment)|merge_request/i.test(`${row.name} ${row.projectId} ${row.slug} ${row.url}`))) errors.push("manifest 项目表不得写入社区行为或 MR 统计");
 

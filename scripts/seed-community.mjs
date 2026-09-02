@@ -5,18 +5,18 @@ import postgres from "postgres";
 /**
  * 可重复运行的社区场景 seed。
  *
- * 该脚本只创建平台内的结构化场景身份和互动事实，不冒充企业客户、市场
- * 指标或外部用户。邮箱使用 RFC 2606 保留的 `.invalid` 域名，因此不会触发
- * 外部投递；头像留空，由现有 UI 的首字母头像策略负责展示。所有写入都在
- * 一个事务中完成，实体 ID 和事件目标稳定，重跑不会重复计数。
+ * 该脚本只读取数据库中已经存在、由真实注册流程产生的 active 账号，再为
+ * 五家冻结企业建立可回溯的协作场景。脚本绝不创建 platform_user/profile、
+ * 密码或邮箱，也不冒充企业客户、市场指标或外部用户。所有写入都在一个
+ * 事务中完成，实体 ID 和事件目标稳定，重跑不会重复计数。
  */
 
-const DEFAULT_BATCH = "community-2026-09-v1";
+const DEFAULT_BATCH = "community-2026-09-five-v1";
 const batch = process.argv.includes("--batch")
   ? process.argv[process.argv.indexOf("--batch") + 1]
   : process.env.COMMUNITY_SEED_BATCH || DEFAULT_BATCH;
 const mode = process.argv.includes("--clean") ? "clean" : process.argv.includes("--check") ? "check" : "upsert";
-
+const retireLegacyUsers = process.argv.includes("--retire-legacy-users");
 if (!batch || !/^[a-z0-9][a-z0-9._-]{2,80}$/i.test(batch)) {
   throw new Error("COMMUNITY_SEED_BATCH 只允许 3-81 位字母、数字、点、下划线或短横线。");
 }
@@ -24,87 +24,31 @@ if (!batch || !/^[a-z0-9][a-z0-9._-]{2,80}$/i.test(batch)) {
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("DATABASE_URL 未配置，社区 seed 拒绝使用内存或假持久化。");
 
-const now = "2026-09-02T12:00:00.000Z";
+const now = "2026-09-03T12:00:00.000Z";
 
-const users = [
-  ["林知行", "lin-zhixing", "上海", "零售 SaaS", "研究员"],
-  ["陈雪宁", "chen-xuening", "北京", "企业协同", "产品经理"],
-  ["周予安", "zhou-yuan", "深圳", "网络安全", "安全分析师"],
-  ["许嘉禾", "xu-jiahe", "广州", "跨境电商", "运营负责人"],
-  ["赵思远", "zhao-siyuan", "杭州", "数据基础设施", "数据工程师"],
-  ["何沐阳", "he-muyang", "成都", "企业服务", "行业顾问"],
-  ["唐婉清", "tang-wanqing", "武汉", "数字政府", "政策研究员"],
-  ["魏子谦", "wei-ziqian", "西安", "云计算", "解决方案架构师"],
-  ["沈念慈", "shen-nianci", "南京", "知识管理", "内容编辑"],
-  ["韩立峰", "han-lifeng", "苏州", "制造业数字化", "交付经理"],
-  ["蒋若琳", "jiang-ruolin", "青岛", "供应链", "产业分析师"],
-  ["吴承泽", "wu-chengze", "厦门", "开发者工具", "软件工程师"],
-  ["罗思齐", "luo-siqi", "宁波", "金融科技", "风险研究员"],
-  ["郑书瑶", "zheng-shuyao", "天津", "人力资源", "组织顾问"],
-  ["高文博", "gao-wenbo", "重庆", "零售 SaaS", "实施顾问"],
-  ["孟欣然", "meng-xinran", "长沙", "营销技术", "增长分析师"],
-  ["梁晨曦", "liang-chenxi", "合肥", "工业互联网", "产品研究员"],
-  ["杜若溪", "du-ruoxi", "福州", "网络安全", "威胁研究员"],
-  ["邱明远", "qiu-mingyuan", "济南", "企业协同", "技术写作者"],
-  ["宋雨桐", "song-yutong", "郑州", "教育信息化", "项目经理"],
-  ["顾言川", "gu-yanchuan", "大连", "云计算", "云架构师"],
-  ["何星河", "he-xinghe", "昆明", "数据治理", "数据产品经理"],
-  ["谢安琪", "xie-anqi", "南昌", "数字政府", "政策分析师"],
-  ["汪泽宇", "wang-zeyu", "杭州", "开发者工具", "开源维护者"],
-  ["苏婉仪", "su-wanyi", "上海", "跨境电商", "商业研究员"],
-  ["叶嘉诚", "ye-jiacheng", "北京", "金融科技", "投研分析师"],
-  ["潘诗涵", "pan-shihan", "深圳", "客户成功", "客户成功经理"],
-  ["蒋昊然", "jiang-haoran", "广州", "供应链", "供应链顾问"],
-  ["侯静怡", "hou-jingyi", "成都", "知识管理", "知识架构师"],
-  ["温景行", "wen-jingxing", "武汉", "制造业数字化", "企业架构师"],
-  ["白芷若", "bai-zhiruo", "西安", "网络安全", "合规研究员"],
-  ["严子墨", "yan-zimo", "南京", "零售 SaaS", "解决方案顾问"],
-  ["程思齐", "cheng-siqi", "苏州", "企业服务", "售前顾问"],
-  ["梁书宁", "liang-shuning", "青岛", "物流科技", "物流分析师"],
-  ["韩东旭", "han-dongxu", "厦门", "云计算", "平台工程师"],
-  ["朱清越", "zhu-qingyue", "宁波", "数据基础设施", "研究助理"],
-  ["许墨涵", "xu-mohan", "天津", "人力资源", "HR 产品经理"],
-  ["方知远", "fang-zhiyuan", "重庆", "数字政府", "公共事务研究员"],
-  ["柳依依", "liu-yiyi", "长沙", "营销技术", "内容策略师"],
-  ["陆景明", "lu-jingming", "合肥", "工业互联网", "行业解决方案架构师"],
-  ["马嘉诚", "ma-jiacheng", "福州", "供应链", "采购研究员"],
-  ["夏语冰", "xia-yubing", "济南", "知识管理", "知识运营"],
-  ["罗景铄", "luo-jingshuo", "郑州", "开发者工具", "开发者关系"],
-  ["顾清和", "gu-qinghe", "大连", "金融科技", "数据分析师"],
-  ["唐子衿", "tang-zijin", "昆明", "教育信息化", "用户研究员"],
-  ["贺明哲", "he-mingzhe", "南昌", "企业协同", "系统管理员"],
-  ["钟灵秀", "zhong-lingxiu", "宁波", "跨境电商", "市场研究员"],
-  ["邵文杰", "shao-wenjie", "上海", "网络安全", "安全产品经理"],
-  ["余清扬", "yu-qingyang", "北京", "云计算", "技术研究员"],
-];
-
+/** 首发范围唯一清单；其他企业项目由范围冻结脚本另行归档。 */
 const projects = [
   ["project-huice", "huice"],
   ["project-weaver", "weaver"],
   ["project-sangfor", "sangfor"],
   ["project-sundray", "sundray"],
-  ["project-youzan", "youzan"],
-  ["project-fxiaoke", "fxiaoke"],
-  ["project-kingdee", "kingdee"],
-  ["project-qianxin", "qianxin"],
-  ["project-dbapp", "dbapp"],
-  ["project-venustech", "venustech"],
-  ["project-dingtalk", "dingtalk"],
-  ["project-lark", "lark"],
   ["project-muyuan", "muyuan"],
 ];
 
-const projectOwnerIndexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+let participants = [];
 const viewDays = ["2026-08-31", "2026-08-24", "2026-08-17", "2026-08-03", "2026-07-04", "2026-05-10", "2026-02-14", "2025-12-20"];
 
 const sha256 = (value) => createHash("sha256").update(String(value), "utf8").digest("hex");
-const userId = (index) => `community-user-${String(index + 1).padStart(2, "0")}`;
-const userAt = (index) => users[index % users.length];
-const userEmail = (username) => `${username}@community.research.invalid`;
+const userId = (index) => participants[index % participants.length]?.id;
 const isoFor = (projectIndex, offset = 0) => `2026-08-${String(31 - ((projectIndex * 3 + offset) % 20)).padStart(2, "0")}T${String(8 + ((projectIndex + offset) % 10)).padStart(2, "0")}:00:00.000Z`;
 
 /** 写内部追踪索引；冲突时只复活同一实体的 seed 记录，不触碰业务正文。 */
 async function markSeed(tx, entityType, entityId, sourceKind = "community_scenario", payload = {}) {
+  const existing = await tx`SELECT seed_batch, retired_at FROM community_seed_record
+    WHERE entity_type = ${entityType} AND entity_id = ${entityId} LIMIT 1`;
+  if (existing[0] && existing[0].retired_at == null && String(existing[0].seed_batch) !== batch) {
+    throw new Error(`实体 ${entityType}/${entityId} 已属于活动批次 ${existing[0].seed_batch}；请先执行 --clean --batch ${existing[0].seed_batch}，避免跨批次覆盖。`);
+  }
   await tx`INSERT INTO community_seed_record (entity_type, entity_id, seed_batch, source_kind, payload, created_at, retired_at)
     VALUES (${entityType}, ${entityId}, ${batch}, ${sourceKind}, ${JSON.stringify(payload)}::jsonb, ${now}, NULL)
     ON CONFLICT (entity_type, entity_id) DO UPDATE SET seed_batch = EXCLUDED.seed_batch,
@@ -137,22 +81,39 @@ function appendDocumentContent(baseContent, text) {
   return documentContent(text);
 }
 
-/** 建立跨城市/行业/角色的场景身份；不创建密码凭据，也不触发外部邮件。 */
-async function seedUsers(tx) {
-  const createdAt = "2026-08-01T08:00:00.000Z";
-  for (let index = 0; index < users.length; index += 1) {
-    const [displayName, username, city, industry, role] = users[index];
-    const id = userId(index);
-    await tx`INSERT INTO platform_user (id, email, global_role, status, email_verified_at, created_at, updated_at)
-      VALUES (${id}, ${userEmail(username)}, 'user', 'active', NULL, ${createdAt}, ${now})
-      ON CONFLICT (id) DO NOTHING`;
-    await tx`INSERT INTO platform_profile (user_id, username, display_name, bio, avatar_asset_id, created_at, updated_at)
-      VALUES (${id}, ${username}, ${displayName}, ${`${city} · ${industry} · ${role}`}, NULL, ${createdAt}, ${now})
-      ON CONFLICT (user_id) DO UPDATE SET username = EXCLUDED.username, display_name = EXCLUDED.display_name,
-        bio = EXCLUDED.bio, updated_at = EXCLUDED.updated_at`;
-    await markSeed(tx, "platform_user", id, "community_user", { city, industry, role });
-    await markSeed(tx, "platform_profile", id, "community_profile", { username, city, industry, role });
+/**
+ * 读取真实账号作为参与者；显式 ID 可用 COMMUNITY_SEED_USER_IDS 指定，
+ * 未指定时选择所有 active 账号（排除历史 synthetic community-user-*）。
+ * 不足三个账号时 fail-closed，避免用一个账号伪造多人协作。
+ */
+async function loadRealUsers(tx) {
+  const requested = (process.env.COMMUNITY_SEED_USER_IDS ?? "")
+    .split(",").map((value) => value.trim()).filter(Boolean);
+  const rows = requested.length
+    ? await tx`SELECT u.id, u.email, u.status, p.username, p.display_name, p.avatar_asset_id
+        FROM platform_user u JOIN platform_profile p ON p.user_id = u.id
+        WHERE u.status = 'active' AND u.id = ANY(${tx.array(requested)}::text[])
+        ORDER BY u.created_at, u.id`
+    : await tx`SELECT u.id, u.email, u.status, p.username, p.display_name, p.avatar_asset_id
+        FROM platform_user u JOIN platform_profile p ON p.user_id = u.id
+        WHERE u.status = 'active'
+          AND u.id NOT LIKE 'community-user-%'
+          AND u.email NOT LIKE '%@community.research.invalid'
+        ORDER BY u.created_at, u.id`;
+  const found = new Set(rows.map((row) => String(row.id)));
+  const missing = requested.filter((id) => !found.has(id));
+  if (missing.length) throw new Error(`COMMUNITY_SEED_USER_IDS 包含不存在或非 active 账号：${missing.join(",")}`);
+  participants = rows.map((row) => ({
+    id: String(row.id), username: String(row.username), displayName: String(row.display_name),
+    avatarAssetId: row.avatar_asset_id ? String(row.avatar_asset_id) : null,
+  }));
+  if (participants.length < 3) {
+    throw new Error(`社区 seed 需要至少 3 个真实 active 账号，当前仅 ${participants.length} 个；不会创建虚构用户。`);
   }
+  for (const participant of participants) {
+    await markSeed(tx, "community_participant", participant.id, "real_account", { username: participant.username });
+  }
+  return participants;
 }
 
 /** 为公开项目分配场景 owner/maintainer/contributor；仅接管首发 u-yu，避免覆盖真实转移。 */
@@ -160,33 +121,30 @@ async function seedProjectMembersAndOwners(tx) {
   const assignments = [];
   for (let projectIndex = 0; projectIndex < projects.length; projectIndex += 1) {
     const [projectId] = projects[projectIndex];
-    // 所有研究项目由 Yu 维护；跨城市用户只作为真实社区成员参与讨论、关注、阅读与贡献。
-    const owner = "u-yu";
-    const rows = await tx`SELECT owner_user_id FROM knowledge_project WHERE id = ${projectId} LIMIT 1`;
+    const rows = await tx`SELECT owner_user_id FROM knowledge_project p
+      JOIN platform_user u ON u.id = p.owner_user_id AND u.status = 'active'
+      WHERE p.id = ${projectId} AND p.visibility = 'public' AND p.status = 'published' LIMIT 1`;
     if (!rows[0]) continue;
+    // 保留项目当前真实 owner，不把研究对象归属转移给 seed 账号。
+    const owner = String(rows[0].owner_user_id);
+    if (owner.startsWith("community-user-")) throw new Error(`项目 ${projectId} 的 owner 是历史 synthetic 账号，请先清理后再 seed。`);
     const previousOwner = String(rows[0].owner_user_id);
     const priorAssignment = await tx`SELECT payload FROM community_seed_record
       WHERE entity_type = 'project_owner_assignment' AND entity_id = ${projectId} LIMIT 1`;
     const originalOwner = priorAssignment[0]?.payload && typeof priorAssignment[0].payload === "object"
       ? String(priorAssignment[0].payload.previousOwner ?? previousOwner)
       : previousOwner;
-    // 仅接管首发迁移的 u-yu（或本批次此前分配的 owner），不覆盖真实用户后来做的转移。
-    if (previousOwner === "u-yu" || previousOwner.startsWith("community-user-")) {
-      if (previousOwner !== owner) {
-        await tx`UPDATE knowledge_project SET owner_user_id = ${owner}, updated_at = ${now}
-          WHERE id = ${projectId} AND owner_user_id = ${previousOwner}`;
-        await tx`UPDATE project_member SET role = 'maintainer'
-          WHERE project_id = ${projectId} AND user_id = ${previousOwner} AND role = 'owner'`;
-      }
-    }
     await tx`INSERT INTO project_member (project_id, user_id, role, created_at)
       VALUES (${projectId}, ${owner}, 'owner', ${isoFor(projectIndex, 0)})
       ON CONFLICT (project_id, user_id) DO UPDATE SET role = 'owner'`;
     await markSeed(tx, "project_owner_assignment", projectId, "community_project_owner", { previousOwner: originalOwner, assignedOwner: owner });
     await markSeed(tx, "project_member", `${projectId}:${owner}`, "community_project_member", { projectId, userId: owner, role: "owner" });
 
-    const maintainer = userId((projectIndex + 12) % users.length);
-    const contributor = userId((projectIndex + 24) % users.length);
+    const maintainer = userId((projectIndex + 1) % participants.length);
+    const contributor = userId((projectIndex + 2) % participants.length);
+    if (!maintainer || !contributor || maintainer === owner || contributor === owner || maintainer === contributor) {
+      throw new Error(`项目 ${projectId} 需要三个不同的真实账号承担 owner/maintainer/contributor。`);
+    }
     for (const [member, role] of [[maintainer, "maintainer"], [contributor, "contributor"]]) {
       if (member === owner) continue;
       await tx`INSERT INTO project_member (project_id, user_id, role, created_at)
@@ -201,10 +159,10 @@ async function seedProjectMembersAndOwners(tx) {
 
 /** 为每个场景身份建立三条作者关注关系；主键保证重跑不重复。 */
 async function seedFollows(tx) {
-  for (let index = 0; index < users.length; index += 1) {
+  for (let index = 0; index < participants.length; index += 1) {
     const follower = userId(index);
     for (const delta of [1, 7, 13]) {
-      const followedIndex = (index + delta) % users.length;
+      const followedIndex = (index + delta) % participants.length;
       const followed = userId(followedIndex);
       const createdAt = isoFor(index % projects.length, delta);
       await tx`INSERT INTO author_follow (follower_user_id, followed_user_id, active, created_at, updated_at)
@@ -222,7 +180,7 @@ async function seedStars(tx, assignments) {
     let added = 0;
     let cursor = projectIndex * 4;
     while (added < 6) {
-      const candidate = userId(cursor % users.length);
+      const candidate = userId(cursor % participants.length);
       cursor += 1;
       if (candidate === owner) continue;
       const createdAt = isoFor(projectIndex, added + 3);
@@ -242,7 +200,7 @@ async function seedViews(tx, assignments) {
     await tx`INSERT INTO project_stats (project_id, unique_readers, updated_at)
       VALUES (${projectId}, 0, ${now}) ON CONFLICT (project_id) DO NOTHING`;
     for (let readerOffset = 0; readerOffset < 8; readerOffset += 1) {
-      const viewer = userId((projectIndex * 3 + readerOffset) % users.length);
+      const viewer = userId((projectIndex * 3 + readerOffset) % participants.length);
       const viewerKeyHash = sha256(`${batch}:viewer:${projectId}:${viewer}`);
       const readerRows = await tx`INSERT INTO project_reader (project_id, viewer_key_hash, viewer_user_id, first_seen_at, last_seen_at)
         VALUES (${projectId}, ${viewerKeyHash}, ${viewer}, ${isoFor(projectIndex, readerOffset + 3)}, ${now})
@@ -270,8 +228,8 @@ async function seedComments(tx, assignments) {
   for (const { projectId, projectIndex, owner } of assignments) {
     const nodeRows = await tx`SELECT id FROM knowledge_node WHERE project_id = ${projectId} AND kind IN ('document', 'markdown') ORDER BY id LIMIT 1`;
     const nodeId = nodeRows[0] ? String(nodeRows[0].id) : null;
-    const rootAuthor = userId((projectIndex * 5 + 14) % users.length);
-    const secondAuthor = userId((projectIndex * 5 + 19) % users.length);
+    const rootAuthor = userId((projectIndex * 5 + 14) % participants.length);
+    const secondAuthor = userId((projectIndex * 5 + 19) % participants.length);
     const rootIds = [`community-comment-${projectId}-root-1`, `community-comment-${projectId}-root-2`];
     const rootBodies = [
       "建议把本章节的公开来源、抓取时间和证据状态并列展示，后续复核会更顺畅。",
@@ -291,7 +249,7 @@ async function seedComments(tx, assignments) {
 
       for (let replyIndex = 0; replyIndex < 2; replyIndex += 1) {
         const replyId = `${rootId}-reply-${replyIndex + 1}`;
-        const replyAuthor = userId((projectIndex * 7 + 27 + replyIndex) % users.length);
+        const replyAuthor = userId((projectIndex * 7 + 27 + replyIndex) % participants.length);
         const replyAt = isoFor(projectIndex, 32 + rootIndex * 2 + replyIndex);
         await tx`INSERT INTO project_comment (id, project_id, parent_id, node_id, block_id, quote, author_user_id, body, idempotency_key, idempotency_fingerprint, created_at, updated_at)
           VALUES (${replyId}, ${projectId}, ${rootId}, ${nodeId}, ${nodeId ? `${nodeId}:block:${rootIndex + 1}` : null}, ${nodeId ? "研究章节锚点" : null}, ${replyAuthor}, ${replyIndex === 0 ? "同意，引用入口应当和正文版本一起固定。" : "我补充一个待核验问题，先不把它当作事实结论。"}, ${`${batch}:${replyId}`}, ${sha256(`${batch}:${replyId}`)}, ${replyAt}, ${replyAt})
@@ -427,6 +385,8 @@ async function rebuildActivityDaily(tx) {
         0::int AS view_count
       FROM activity_event ae
       JOIN platform_user u ON u.id = ae.actor_user_id AND u.status = 'active'
+      WHERE ae.actor_user_id IN (SELECT entity_id FROM community_seed_record
+        WHERE seed_batch = ${batch} AND entity_type = 'community_participant' AND retired_at IS NULL)
       GROUP BY actor_user_id, project_id, occurred_at::date
     ), view_daily AS (
       SELECT viewer_user_id AS actor_user_id, project_id, view_date AS day,
@@ -456,8 +416,28 @@ async function rebuildActivityDaily(tx) {
       follow_count = EXCLUDED.follow_count, view_count = EXCLUDED.view_count, total_count = EXCLUDED.total_count,
       public_event_version = EXCLUDED.public_event_version, updated_at = CURRENT_TIMESTAMP
   `);
-  const rows = await tx`SELECT id, actor_user_id, project_id, day, total_count FROM activity_daily WHERE actor_user_id LIKE 'community-user-%'`;
+  const rows = await tx`SELECT id, actor_user_id, project_id, day, total_count FROM activity_daily
+    WHERE actor_user_id IN (SELECT entity_id FROM community_seed_record
+      WHERE seed_batch = ${batch} AND entity_type = 'community_participant' AND retired_at IS NULL)`;
   for (const row of rows) await markSeed(tx, "activity_daily", String(row.id), "community_activity_daily", { actorUserId: row.actor_user_id, projectId: row.project_id, day: row.day, totalCount: row.total_count });
+}
+
+/**
+ * 可选退役上一版生成的 synthetic 账号。只匹配本脚本历史的固定前缀与
+ * 保留域名，状态改为 deleted 而不物理删除，以保留外键和 append-only 审计。
+ * 该操作必须与 --clean 一起显式传入，发布前先完成 PostgreSQL/OSS 备份。
+ */
+async function retireLegacySyntheticUsers(tx) {
+  const rows = await tx`SELECT u.id FROM platform_user u
+    WHERE u.id LIKE 'community-user-%' AND u.email LIKE '%@community.research.invalid'
+      AND u.status <> 'deleted' FOR UPDATE`;
+  if (!rows.length) return 0;
+  const ids = rows.map((row) => String(row.id));
+  await tx`UPDATE platform_user SET status = 'deleted', updated_at = CURRENT_TIMESTAMP
+    WHERE id = ANY(${tx.array(ids)}::text[])`;
+  await tx`UPDATE platform_profile SET display_name = '已停用账号', bio = '', updated_at = CURRENT_TIMESTAMP
+    WHERE user_id = ANY(${tx.array(ids)}::text[])`;
+  return ids.length;
 }
 
 /** 退役可变场景关系；Commit/Review/activity_event 按 append-only 规则保留。 */
@@ -481,7 +461,9 @@ async function cleanBatch(tx) {
   await tx`UPDATE merge_request SET status = CASE WHEN status = 'merged' THEN status ELSE 'closed' END, updated_at = CURRENT_TIMESTAMP WHERE id IN (SELECT entity_id FROM community_seed_record WHERE seed_batch = ${batch} AND entity_type = 'merge_request')`;
   await tx`UPDATE knowledge_branch SET status = CASE WHEN status = 'merged' THEN status ELSE 'closed' END, updated_at = CURRENT_TIMESTAMP WHERE id IN (SELECT entity_id FROM community_seed_record WHERE seed_batch = ${batch} AND entity_type = 'knowledge_branch')`;
   await tx`UPDATE community_seed_record SET retired_at = CURRENT_TIMESTAMP WHERE seed_batch = ${batch} AND retired_at IS NULL`;
+  const retiredLegacyUsers = retireLegacyUsers ? await retireLegacySyntheticUsers(tx) : 0;
   await rebuildActivityDaily(tx);
+  return { retiredLegacyUsers };
 }
 
 /** 检查用户规模、项目数、关系唯一性和最低互动覆盖，失败即回滚事务。 */
@@ -489,33 +471,38 @@ async function verifyBatch(tx) {
   const result = {};
   const rows = await tx`SELECT entity_type, COUNT(*)::int AS count FROM community_seed_record WHERE seed_batch = ${batch} AND retired_at IS NULL GROUP BY entity_type ORDER BY entity_type`;
   for (const row of rows) result[String(row.entity_type)] = Number(row.count);
-  const [userCount] = await tx`SELECT COUNT(*)::int AS count FROM platform_user WHERE id LIKE 'community-user-%' AND status = 'active'`;
+  const [userCount] = await tx`SELECT COUNT(*)::int AS count FROM community_seed_record
+    WHERE seed_batch = ${batch} AND entity_type = 'community_participant' AND retired_at IS NULL`;
+  const [syntheticActive] = await tx`SELECT COUNT(*)::int AS count FROM platform_user
+    WHERE id LIKE 'community-user-%' AND status = 'active'`;
   const [projectCount] = await tx`SELECT COUNT(*)::int AS count FROM knowledge_project
-    WHERE id LIKE 'project-%' AND visibility = 'public' AND status = 'published'`;
+    WHERE id = ANY(${tx.array(projects.map(([id]) => id))}::text[])
+      AND visibility = 'public' AND status = 'published'`;
   const [duplicateStars] = await tx`SELECT COUNT(*)::int AS count FROM (SELECT project_id, user_id, COUNT(*) FROM project_star WHERE active = TRUE GROUP BY project_id, user_id HAVING COUNT(*) > 1) d`;
   const [duplicateFollows] = await tx`SELECT COUNT(*)::int AS count FROM (SELECT follower_user_id, followed_user_id, COUNT(*) FROM author_follow WHERE active = TRUE GROUP BY follower_user_id, followed_user_id HAVING COUNT(*) > 1) d`;
   const [statsMismatch] = await tx`SELECT COUNT(*)::int AS count FROM (
     SELECT ps.project_id FROM project_stats ps
     LEFT JOIN project_reader pr ON pr.project_id = ps.project_id
-    WHERE ps.project_id LIKE 'project-%'
+    WHERE ps.project_id = ANY(${tx.array(projects.map(([id]) => id))}::text[])
     GROUP BY ps.project_id, ps.unique_readers
     HAVING ps.unique_readers <> COUNT(pr.viewer_key_hash)
   ) mismatch`;
   const [mergedCount] = await tx`SELECT COUNT(*)::int AS count FROM merge_request
     WHERE id IN (SELECT entity_id FROM community_seed_record WHERE seed_batch = ${batch} AND entity_type = 'merge_request')
       AND status = 'merged'`;
-  result.activeUsers = Number(userCount.count); result.publicProjects = Number(projectCount.count);
+  result.activeUsers = Number(userCount.count); result.syntheticActiveUsers = Number(syntheticActive.count); result.publicProjects = Number(projectCount.count);
   result.duplicateStars = Number(duplicateStars.count); result.duplicateFollows = Number(duplicateFollows.count);
   result.statsMismatch = Number(statsMismatch.count); result.mergedMergeRequests = Number(mergedCount.count);
-  if (result.activeUsers < 40 || result.activeUsers > 60) throw new Error(`社区用户数不在 40-60 范围：${result.activeUsers}`);
-  if (result.publicProjects < 12) throw new Error(`首发公开项目不足 12 个：${result.publicProjects}`);
+  if (result.syntheticActiveUsers !== 0) throw new Error(`发现 ${result.syntheticActiveUsers} 个历史 synthetic active 账号；请先执行 --clean --batch community-2026-09-v1 --retire-legacy-users。`);
+  if (result.activeUsers < 3) throw new Error(`社区 seed 需要至少 3 个真实参与者：${result.activeUsers}`);
+  if (result.publicProjects !== projects.length) throw new Error(`五家冻结项目公开数应为 ${projects.length}：${result.publicProjects}`);
   if (result.duplicateStars !== 0 || result.duplicateFollows !== 0) throw new Error("关系唯一性校验失败");
   if (result.statsMismatch !== 0) throw new Error(`project_stats 与 project_reader 不一致：${result.statsMismatch}`);
-  if ((result.project_comment ?? 0) < 48) throw new Error(`项目评论/回复不足：${result.project_comment ?? 0}`);
-  if ((result.project_star ?? 0) < 72) throw new Error(`项目 Star 不足：${result.project_star ?? 0}`);
-  if ((result.author_follow ?? 0) < 100) throw new Error(`作者关注关系不足：${result.author_follow ?? 0}`);
-  if ((result.merge_request ?? 0) < 12 || (result.merge_review ?? 0) < 12) throw new Error("协作审核记录不足 12 项");
-  if (result.mergedMergeRequests < 12) throw new Error(`已合并 MR 不足 12 项：${result.mergedMergeRequests}`);
+  if ((result.project_comment ?? 0) < projects.length * 6) throw new Error(`项目评论/回复不足：${result.project_comment ?? 0}`);
+  if ((result.project_star ?? 0) < projects.length * 2) throw new Error(`项目 Star 不足：${result.project_star ?? 0}`);
+  if ((result.author_follow ?? 0) < 3) throw new Error(`作者关注关系不足：${result.author_follow ?? 0}`);
+  if ((result.merge_request ?? 0) < projects.length || (result.merge_review ?? 0) < projects.length) throw new Error(`协作审核记录不足 ${projects.length} 项`);
+  if (result.mergedMergeRequests < projects.length) throw new Error(`已合并 MR 不足 ${projects.length} 项：${result.mergedMergeRequests}`);
   return result;
 }
 
@@ -524,8 +511,8 @@ async function main() {
   try {
     const output = await sql.begin(async (tx) => {
       if (mode === "check") return verifyBatch(tx);
-      if (mode === "clean") { await cleanBatch(tx); return { mode, batch }; }
-      await seedUsers(tx);
+      if (mode === "clean") return { mode, batch, ...(await cleanBatch(tx)) };
+      await loadRealUsers(tx);
       const assignments = await seedProjectMembersAndOwners(tx);
       await seedFollows(tx);
       await seedStars(tx, assignments);
