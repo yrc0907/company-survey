@@ -134,9 +134,19 @@
 .project-list-footer { @apply mt-4 flex items-center justify-between gap-4; }
 .project-metrics { @apply flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground; }
 .project-metrics span { @apply inline-flex items-center gap-1.5; }
-.contributor-stack { @apply flex items-center pl-2; }
+.contributor-stack { @apply flex items-center rounded-full border-0 bg-transparent pl-2 transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2; }
 .contributor-stack .user-avatar { @apply -ml-2 ring-2 ring-background; }
 .contributor-more { @apply -ml-1.5 grid h-6 min-w-6 place-items-center rounded-full bg-muted px-1 text-[9px] font-semibold text-muted-foreground ring-2 ring-background; }
+.contributor-dialog { @apply max-h-[min(680px,calc(100vh-32px))] overflow-y-auto; }
+.contributor-search { @apply mt-4 flex h-9 items-center gap-2 rounded-md border bg-muted/50 px-2.5 text-muted-foreground focus-within:border-ring focus-within:bg-background focus-within:ring-2 focus-within:ring-ring/15; }
+.contributor-search input { @apply min-w-0 flex-1 border-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground; }
+.contributor-dialog__list { @apply mt-3 grid gap-1; }
+.contributor-dialog__user { @apply flex w-full items-center gap-3 rounded-md border-0 bg-transparent px-2 py-2 text-left transition-colors hover:bg-muted; }
+.contributor-dialog__user > span { @apply grid min-w-0 flex-1 gap-0.5; }
+.contributor-dialog__user strong { @apply truncate text-sm font-medium; }
+.contributor-dialog__user small { @apply truncate text-xs text-muted-foreground; }
+.contributor-dialog__user > svg { @apply text-muted-foreground; }
+.contributor-dialog__empty { @apply px-2 py-8 text-center text-sm text-muted-foreground; }
 .project-verification-note { @apply mb-0 mt-3 border-l-2 border-border pl-3 text-xs leading-5 text-muted-foreground; }
 .search-empty { @apply grid place-items-center gap-1 py-24 text-center text-muted-foreground; }
 .search-empty h2 { @apply m-0 text-base font-semibold text-foreground; }
@@ -373,7 +383,6 @@
   .category-list button { @apply w-auto shrink-0 gap-2; }
   .project-title-row h2 { @apply text-base; }
   .project-list-footer { @apply items-start; }
-  .contributor-stack { display: none; }
   .workspace-layout, .workspace-layout.tree-is-collapsed { @apply h-auto min-h-screen overflow-visible; grid-template-columns: 1fr; grid-template-rows: auto auto auto; grid-template-areas: "header" "tabs" "document"; }
   .project-header { @apply h-auto min-h-14 flex-wrap py-2; }
   .project-header__actions > .h-8:nth-of-type(-n+2) { display: none; }

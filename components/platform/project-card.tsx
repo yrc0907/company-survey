@@ -1,6 +1,10 @@
-import { ArrowUpRight, BookOpen, Clock3, GitPullRequest, Library, MessageCircle, Star, Users } from "lucide-react";
+"use client";
+
+import { ArrowUpRight, BookOpen, Clock3, GitPullRequest, Library, MessageCircle, Search, Star, Users, X } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { UserAvatar } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { SeedProject } from "@/lib/ui/platform-seed";
 import { formatCompactCount } from "@/lib/ui/platform-format";
 
@@ -17,7 +21,13 @@ function dateLabel(value: string): string {
 
 /** 首页列表项只展示可解释统计，Seed 核验状态不冒充实时生产数据。 */
 export function ProjectCard({ project, onOpen, onSearch, onOpenOwner }: ProjectCardProps) {
+  const [contributorQuery, setContributorQuery] = useState("");
   const verificationLabel = project.verification === "verified" ? "Seed 已核验" : "Seed 待核验";
+  const visibleContributors = useMemo(() => {
+    const normalized = contributorQuery.trim().toLocaleLowerCase("zh-CN");
+    if (!normalized) return project.contributors;
+    return project.contributors.filter((user) => [user.displayName, user.username].some((value) => value.toLocaleLowerCase("zh-CN").includes(normalized)));
+  }, [contributorQuery, project.contributors]);
   function openOwner(): void {
     if (onOpenOwner) { onOpenOwner(project.owner.username); return; }
     if (typeof window !== "undefined") window.location.assign(`/u/${encodeURIComponent(project.owner.username)}`);
@@ -54,10 +64,27 @@ export function ProjectCard({ project, onOpen, onSearch, onOpenOwner }: ProjectC
           <span><GitPullRequest size={14} aria-hidden="true" />{project.openMergeRequests} 待审核</span>
           <span><Clock3 size={14} aria-hidden="true" />更新 {dateLabel(project.updatedAt)}</span>
         </div>
-        <div className="contributor-stack" aria-label={`${project.contributorCount ?? project.contributors.length} 位贡献者`}>
-          {project.contributors.slice(0, 4).map((user) => <UserAvatar key={user.id} name={user.displayName} size="sm" />)}
-          {project.contributorCount && project.contributorCount > 4 ? <span className="contributor-more">+{project.contributorCount - 4}</span> : project.contributors.length > 4 ? <span className="contributor-more">+{project.contributors.length - 4}</span> : null}
-        </div>
+        <Dialog onOpenChange={(open) => { if (!open) setContributorQuery(""); }}>
+          <DialogTrigger asChild>
+            <button type="button" className="contributor-stack" aria-label={`查看${project.contributorCount ?? project.contributors.length} 位贡献者`} title="查看贡献者">
+              {project.contributors.slice(0, 4).map((user) => <UserAvatar key={user.id} name={user.displayName} size="sm" />)}
+              {project.contributorCount && project.contributorCount > 4 ? <span className="contributor-more">+{project.contributorCount - 4}</span> : project.contributors.length > 4 ? <span className="contributor-more">+{project.contributors.length - 4}</span> : null}
+            </button>
+          </DialogTrigger>
+          <DialogContent className="contributor-dialog">
+            <DialogTitle>贡献者</DialogTitle>
+            <DialogDescription>{project.title} · {project.contributorCount ?? project.contributors.length} 位公开贡献者</DialogDescription>
+            <label className="contributor-search"><Search size={15} aria-hidden="true" /><input value={contributorQuery} onChange={(event) => setContributorQuery(event.target.value)} placeholder="搜索用户名或显示名称" aria-label="搜索贡献者" /><X size={14} className={contributorQuery ? "cursor-pointer" : "invisible"} aria-hidden="true" onClick={() => setContributorQuery("")} /></label>
+            <div className="contributor-dialog__list" role="list">
+              {visibleContributors.map((user) => <button type="button" key={user.id} className="contributor-dialog__user" onClick={() => { onOpenOwner?.(user.username); if (!onOpenOwner && typeof window !== "undefined") window.location.assign(`/u/${encodeURIComponent(user.username)}`); }}>
+                <UserAvatar name={user.displayName} size="md" />
+                <span><strong>{user.displayName}</strong><small>@{user.username}</small></span>
+                <ArrowUpRight size={15} aria-hidden="true" />
+              </button>)}
+              {visibleContributors.length === 0 ? <p className="contributor-dialog__empty">没有匹配的贡献者</p> : null}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
       <p className="project-verification-note">{project.verificationNote}</p>
     </article>
