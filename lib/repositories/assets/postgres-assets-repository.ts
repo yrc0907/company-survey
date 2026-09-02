@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import postgres, { type Sql, type TransactionSql } from "postgres";
 
 import { AssetConflictError, AssetNotFoundError, IngestionLeaseLostError } from "@/lib/domain/assets";
 import type { AssetRecord, IngestionArtifactRecord, IngestionJobRecord, IngestionStatus } from "@/lib/domain/assets";
-import type { AssetRepository, CompleteIngestionInput, CreateAssetRecord, FailIngestionInput, IngestionClaim, NeedsReviewIngestionInput } from "@/lib/repositories/assets/assets-repository";
+import type { ApproveIngestionReviewInput, AssetRepository, CompleteIngestionInput, CreateAssetRecord, FailIngestionInput, IngestionClaim, NeedsReviewIngestionInput } from "@/lib/repositories/assets/assets-repository";
 
 type Row = Record<string, unknown>;
 type Queryable = Sql | TransactionSql;
@@ -175,6 +176,23 @@ export class PostgresAssetsRepository implements AssetRepository {
       await tx`INSERT INTO ingestion_artifact (id, ingestion_job_id, asset_id, attempt, kind, mime_type, content, content_hash, metadata, created_at)
         VALUES (${input.artifact.id}, ${input.artifact.ingestionJobId}, ${input.artifact.assetId}, ${input.artifact.attempt}, 'needs_review', ${input.artifact.mimeType}, NULL, NULL, ${JSON.stringify(input.artifact.metadata)}::jsonb, ${input.artifact.createdAt})`;
       const updated = await tx<Row[]>`UPDATE ingestion_job SET status = 'needs_review', error_code = ${input.code}, error_message = ${input.message}, completed_at = CURRENT_TIMESTAMP, lease_owner = NULL, lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ${input.jobId} AND asset_id = ${input.assetId} AND status = 'processing' AND lease_owner = ${input.leaseOwner} RETURNING ${tx.unsafe(JOB_COLUMNS)}`;
+      return updated[0] ? mapJob(updated[0]) : null;
+    });
+  }
+
+  /** 在锁内把已生成的视觉草稿转为人工确认后的 text 产物；原 needs_review 记录保留审计。 */
+  public async approveIngestionReview(input: ApproveIngestionReviewInput): Promise<IngestionJobRecord | null> {
+    return this.sql.begin(async (tx) => {
+      const jobs = await tx<Row[]>`SELECT ${tx.unsafe(JOB_COLUMNS)} FROM ingestion_job j JOIN uploaded_asset a ON a.id = j.asset_id WHERE j.asset_id = ${input.assetId} AND a.owner_user_id = ${input.ownerUserId} FOR UPDATE`;
+      const job = jobs[0];
+      if (!job) throw new AssetNotFoundError();
+      if (job.status === "ready") return mapJob(job);
+      if (job.status !== "needs_review") throw new AssetConflictError("只有待校对解析任务可以确认");
+      const artifacts = await tx<Row[]>`SELECT id, metadata FROM ingestion_artifact WHERE id = ${input.expectedArtifactId} AND asset_id = ${input.assetId} AND kind = 'needs_review' ORDER BY created_at DESC LIMIT 1`;
+      if (!artifacts[0]) throw new AssetConflictError("待校对产物已更新，请重新加载后确认");
+      await tx`INSERT INTO ingestion_artifact (id, ingestion_job_id, asset_id, attempt, kind, mime_type, content, content_hash, metadata, created_at)
+        VALUES (${randomUUID()}, ${String(job.id)}, ${input.assetId}, ${Number(job.attempt) + 1}, 'text', 'text/plain', ${input.content}, ${input.contentHash}, ${JSON.stringify(input.metadata)}::jsonb, CURRENT_TIMESTAMP)`;
+      const updated = await tx<Row[]>`UPDATE ingestion_job SET status = 'ready', error_code = NULL, error_message = NULL, completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ${String(job.id)} AND asset_id = ${input.assetId} AND status = 'needs_review' RETURNING ${tx.unsafe(JOB_COLUMNS)}`;
       return updated[0] ? mapJob(updated[0]) : null;
     });
   }

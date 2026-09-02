@@ -21,7 +21,7 @@
 
 尚未实现或未验证：
 
-- URL/PDF/图片来源刷新和变化检测仍未实现；私有文件上传与解析 Worker 已支持 Markdown/TXT、原生文字 PDF、DOCX，扫描 PDF/图片会安全降级为 `needs_review`，视觉 OCR 尚未接入；
+- URL 来源刷新已接入 owner 鉴权路由和 one-shot Worker；私有文件上传与解析 Worker 已支持 Markdown/TXT、原生文字 PDF、DOCX，图片在显式开启视觉 Provider 后可生成 `needs_review` 待校对草稿，扫描 PDF 仍安全降级；
 - pgvector 持久化已提供可选迁移、能力探测、版本/哈希校验、权限过滤和确定性降级；大规模 ANN 索引重建、后台 Worker 与 Golden Set 检索评测仍未完成；
 - 企业 CRUD、图谱写入（公开关系图 API/UI 已实现）、版本 Diff/回滚、Markdown/PDF 导出；
 - 应用内会话认证已实现；旧版 Research API 仍依赖 Caddy Basic Auth，公开平台写操作依赖 Auth.js/RBAC；
@@ -83,6 +83,8 @@ Internet
 - [公开企业首发数据包与证据边界](docs/public-company-seed.md)
 - [公开项目 GraphRAG-lite 关系图](docs/public-project-graph.md)
 - [五家企业研究范围冻结](docs/enterprise-scope-freeze.md)
+- [公开版本历史与逐段 Diff](docs/public-version-history-diff.md)
+- [URL 来源刷新实现](docs/source-refresh-implementation.md)
 - [内测认证关闭模式](docs/public-auth-closed-mode.md)
 - [真实身份认证 Provider 与验收边界](docs/authentication-providers.md)
 - [阿里云认证接入决策](docs/aliyun-auth-integration-decision.md)

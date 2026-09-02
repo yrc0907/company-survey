@@ -29,6 +29,9 @@ interface ProjectWorkspaceProps {
   onRequireLogin: (intent: "login" | "upload" | "contribute") => void;
   /** 通知深链携带的评论 ID；公开内容加载后由评论面板定位。 */
   initialCommentId?: string | null;
+  /** 通知深链可直接打开修改申请页。 */
+  initialTab?: "changes" | null;
+  initialChangeId?: string | null;
 }
 
 const evidenceCopy: Record<SeedSection["state"], string> = {
@@ -133,7 +136,7 @@ function ProjectIssuesPanel() {
 }
 
 /** 项目详情以稳定三栏承载文件、正文和 AI；未接入能力只展示明确门槛。 */
-export function ProjectWorkspace({ project, onBack, onRequireLogin, initialCommentId = null }: ProjectWorkspaceProps) {
+export function ProjectWorkspace({ project, onBack, onRequireLogin, initialCommentId = null, initialTab = null, initialChangeId = null }: ProjectWorkspaceProps) {
   const [activeNodeId, setActiveNodeId] = useState("doc-overview");
   const [treeCollapsed, setTreeCollapsed] = useState(false);
   const [activity, setActivity] = useState("");
@@ -167,6 +170,10 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin, initialComme
     setCommentCount(project.commentCount);
     setCommentAnchor(null);
   }, [project.id, project.files, project.commentCount]);
+
+  useEffect(() => {
+    if (initialTab) setActiveTab(initialTab);
+  }, [initialTab, project.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -232,15 +239,16 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin, initialComme
     }
   }
 
-  /** 下载公开主版本的 Markdown；浏览器只接收服务端生成的公开投影，不接触 OSS 原件。 */
-  async function exportMarkdown(): Promise<void> {
+  /** 下载公开主版本；浏览器只接收服务端生成的公开投影，不接触 OSS 原件。 */
+  async function exportFile(format: "markdown" | "pdf"): Promise<void> {
     setExportState("loading");
     setExportError("");
     try {
-      const response = await fetch(`/api/platform/projects/${encodeURIComponent(project.id)}/export?format=markdown`, { headers: { accept: "text/markdown" }, cache: "no-store", credentials: "same-origin" });
+      const isPdf = format === "pdf";
+      const response = await fetch(`/api/platform/projects/${encodeURIComponent(project.id)}/export?format=${format}`, { headers: { accept: isPdf ? "application/pdf" : "text/markdown" }, cache: "no-store", credentials: "same-origin" });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(payload.error ?? "Markdown 导出失败");
+        throw new Error(payload.error ?? `${isPdf ? "PDF" : "Markdown"} 导出失败`);
       }
       const blob = await response.blob();
       const href = URL.createObjectURL(blob);
@@ -248,16 +256,16 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin, initialComme
       const disposition = response.headers.get("content-disposition") ?? "";
       const encodedFilename = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
       anchor.href = href;
-      anchor.download = encodedFilename ? decodeURIComponent(encodedFilename) : `${project.slug}.md`;
+      anchor.download = encodedFilename ? decodeURIComponent(encodedFilename) : `${project.slug}.${isPdf ? "pdf" : "md"}`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(href);
       setExportState("idle");
-      setActivity("Markdown 已导出。");
+      setActivity(`${isPdf ? "PDF" : "Markdown"} 已导出。`);
     } catch (error) {
       setExportState("error");
-      setExportError(error instanceof Error ? error.message : "Markdown 导出失败");
+      setExportError(error instanceof Error ? error.message : `${format === "pdf" ? "PDF" : "Markdown"} 导出失败`);
     }
   }
 
@@ -388,7 +396,8 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin, initialComme
           </div>
           <Button variant={starred ? "subtle" : "ghost"} size="sm" onClick={() => void toggleStar()} disabled={starState === "loading" || starState === "saving"} aria-pressed={starred} title={starState === "error" ? "Star 服务暂不可用，点击可重试" : undefined}>{starState === "saving" ? <Loader2 size={15} className="animate-spin" /> : <Star size={15} fill={starred ? "currentColor" : "none"} />}Star {starCount}</Button>
           <Button variant="ghost" size="sm" onClick={() => void shareProject()}><Share2 size={15} />分享</Button>
-          <Button variant="ghost" size="sm" onClick={() => void exportMarkdown()} disabled={exportState === "loading"} aria-busy={exportState === "loading"} title={exportState === "error" ? "导出失败，点击重试" : "下载公开 Markdown"}>{exportState === "loading" ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}导出 Markdown</Button>
+          <Button variant="ghost" size="sm" onClick={() => void exportFile("markdown")} disabled={exportState === "loading"} aria-busy={exportState === "loading"} title={exportState === "error" ? "导出失败，点击重试" : "下载公开 Markdown"}>{exportState === "loading" ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}导出 Markdown</Button>
+          <Button variant="ghost" size="sm" onClick={() => void exportFile("pdf")} disabled={exportState === "loading"} aria-busy={exportState === "loading"} title={exportState === "error" ? "导出失败，点击重试" : "下载公开 PDF"}>{exportState === "loading" ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}导出 PDF</Button>
           <Button variant="outline" size="sm" onClick={() => void ensureDraftBranch()} disabled={branchLoading}><GitBranch size={15} />创建草稿</Button>
           <Button size="sm" onClick={() => void submitMergeRequest()} disabled={branchLoading}>{branchLoading ? <Loader2 size={15} className="animate-spin" /> : <GitPullRequest size={15} />}提交修改</Button>
           {!authenticated ? <Button variant="ghost" size="sm" onClick={() => onRequireLogin("login")}><LogIn size={15} />登录</Button> : <span className="text-xs text-muted-foreground">已登录</span>}
@@ -405,7 +414,7 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin, initialComme
       </aside>
 
       {treeCollapsed ? <Button className="tree-reopen" size="icon" variant="outline" onClick={() => setTreeCollapsed(false)} aria-label="展开文件树"><ChevronRight size={17} /></Button> : null}
-      <main className="document-pane">{activeTab === "content" ? <><ProjectDocument project={project} activeNodeId={activeNodeId} viewCount={viewCount} starCount={starCount} commentCount={commentCount} onActivity={setActivity} onSelectNode={setActiveNodeId} onCommentSection={(anchor) => { setCommentAnchor(anchor); window.setTimeout(() => document.getElementById("project-comments-title")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0); }} /><ProjectComments projectId={project.id} authenticated={authenticated} onRequireLogin={() => onRequireLogin("login")} onCountChange={setCommentCount} initialAnchor={commentAnchor} initialCommentId={initialCommentId} /></> : activeTab === "graph" ? <ProjectGraph projectId={project.id} /> : activeTab === "history" ? <ProjectHistory projectId={project.id} /> : activeTab === "activity" ? <ProjectActivity projectId={project.id} onSelect={(event) => setActivity(`${event.actor.displayName}：${activityEventCopy[event.eventType] ?? event.eventType}`)} /> : activeTab === "contributors" ? <ProjectContributorsPanel project={project} /> : activeTab === "issues" ? <ProjectIssuesPanel /> : <CollaborationPanel projectId={project.id} authenticated={authenticated} canReview={canReview} onRequireLogin={() => onRequireLogin("login")} refreshToken={collaborationRefresh} />}{viewState === "loading" || starState === "loading" ? <div className="workspace-activity" role="status" aria-live="polite" aria-busy="true"><span>{viewState === "loading" ? "正在记录阅读…" : "正在读取 Star 状态…"}</span></div> : null}{viewState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>阅读统计暂不可用，正文仍可继续浏览。</span></div> : null}{starState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>Star 服务暂不可用，正文仍可继续浏览。</span></div> : null}{viewState === "ready" ? <div className="workspace-activity" role="status" aria-live="polite"><span>阅读已记录 · 去重读者 {viewCount}</span><button type="button" onClick={() => setViewState("ignored")}>关闭</button></div> : null}{exportState === "error" ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{exportError || "Markdown 导出失败"}</span><button type="button" onClick={() => { setExportState("idle"); setExportError(""); }}>关闭</button></div> : null}{collaborationError ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{collaborationError}</span><button type="button" onClick={() => setCollaborationError("")}>关闭</button></div> : null}{dropNotice ? <div className="workspace-activity" role="status"><span>{dropNotice}</span><button type="button" onClick={() => setDropNotice("")}>关闭</button></div> : null}{activity ? <div className="workspace-activity" role="status"><span>{activity}</span><button type="button" onClick={() => setActivity("")}>关闭</button></div> : null}</main>
+      <main className="document-pane">{activeTab === "content" ? <><ProjectDocument project={project} activeNodeId={activeNodeId} viewCount={viewCount} starCount={starCount} commentCount={commentCount} onActivity={setActivity} onSelectNode={setActiveNodeId} onCommentSection={(anchor) => { setCommentAnchor(anchor); window.setTimeout(() => document.getElementById("project-comments-title")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0); }} /><ProjectComments projectId={project.id} authenticated={authenticated} onRequireLogin={() => onRequireLogin("login")} onCountChange={setCommentCount} initialAnchor={commentAnchor} initialCommentId={initialCommentId} /></> : activeTab === "graph" ? <ProjectGraph projectId={project.id} /> : activeTab === "history" ? <ProjectHistory projectId={project.id} /> : activeTab === "activity" ? <ProjectActivity projectId={project.id} onSelect={(event) => setActivity(`${event.actor.displayName}：${activityEventCopy[event.eventType] ?? event.eventType}`)} /> : activeTab === "contributors" ? <ProjectContributorsPanel project={project} /> : activeTab === "issues" ? <ProjectIssuesPanel /> : <CollaborationPanel projectId={project.id} authenticated={authenticated} canReview={canReview} onRequireLogin={() => onRequireLogin("login")} refreshToken={collaborationRefresh} initialChangeId={initialChangeId} />}{viewState === "loading" || starState === "loading" ? <div className="workspace-activity" role="status" aria-live="polite" aria-busy="true"><span>{viewState === "loading" ? "正在记录阅读…" : "正在读取 Star 状态…"}</span></div> : null}{viewState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>阅读统计暂不可用，正文仍可继续浏览。</span></div> : null}{starState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>Star 服务暂不可用，正文仍可继续浏览。</span></div> : null}{viewState === "ready" ? <div className="workspace-activity" role="status" aria-live="polite"><span>阅读已记录 · 去重读者 {viewCount}</span><button type="button" onClick={() => setViewState("ignored")}>关闭</button></div> : null}{exportState === "error" ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{exportError || "Markdown 导出失败"}</span><button type="button" onClick={() => { setExportState("idle"); setExportError(""); }}>关闭</button></div> : null}{collaborationError ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{collaborationError}</span><button type="button" onClick={() => setCollaborationError("")}>关闭</button></div> : null}{dropNotice ? <div className="workspace-activity" role="status"><span>{dropNotice}</span><button type="button" onClick={() => setDropNotice("")}>关闭</button></div> : null}{activity ? <div className="workspace-activity" role="status"><span>{activity}</span><button type="button" onClick={() => setActivity("")}>关闭</button></div> : null}</main>
       <AssistantPanel project={project} activeFileName={activeNode?.name ?? "研究结论"} activeFileId={activeNode?.id} />
     </div>
   );

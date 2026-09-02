@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { AssetIngestionService } from "@/lib/services/assets/asset-ingestion-service";
 import { getAssetsOssProvider } from "@/lib/services/assets/oss-provider-factory";
 import { getAssetsRepository } from "@/lib/repositories/assets";
+import { getVisionParser } from "@/lib/providers/vision-provider";
 
 /**
  * 解析 Worker 可运行入口：默认处理一个任务；`ASSET_INGESTION_DRAIN=true` 时持续处理有限批次。
@@ -14,7 +15,8 @@ async function run(): Promise<void> {
   const workerId = process.env.ASSET_INGESTION_WORKER_ID?.trim() || `asset-worker-${randomUUID()}`;
   const drain = process.env.ASSET_INGESTION_DRAIN === "true";
   const maxJobs = Math.min(Math.max(Number(process.env.ASSET_INGESTION_MAX_JOBS ?? (drain ? 100 : 1)), 1), 1_000);
-  const service = new AssetIngestionService(repository, { readObject: (objectKey, maxBytes) => oss.readObject(objectKey, maxBytes) });
+  const visionParser = getVisionParser();
+  const service = new AssetIngestionService(repository, { readObject: (objectKey, maxBytes) => oss.readObject(objectKey, maxBytes) }, undefined, { visionParser });
   let processed = 0;
   for (; processed < maxJobs; processed += 1) {
     const result = await service.processNext(workerId);
@@ -22,7 +24,7 @@ async function run(): Promise<void> {
     console.log(JSON.stringify({ event: "asset_ingestion_finished", assetId: result.asset.id, jobId: result.job.id, status: result.job.status, parser: result.outcome.metadata.parser }));
     if (!drain) break;
   }
-  console.log(JSON.stringify({ event: "asset_ingestion_idle", workerId, processed }));
+  console.log(JSON.stringify({ event: "asset_ingestion_idle", workerId, processed, visionConfigured: Boolean(visionParser) }));
   const close = (repository as unknown as { end?: () => Promise<void> }).end;
   if (close) await close.call(repository);
 }

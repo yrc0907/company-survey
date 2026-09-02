@@ -12,6 +12,7 @@ interface NotificationItem {
   project: { id: string; title: string } | null;
   targetType: string;
   targetId: string;
+  payload?: Record<string, unknown>;
   readAt: string | null;
   createdAt: string;
 }
@@ -70,11 +71,20 @@ export function NotificationMenu(): JSX.Element | null {
   async function openTarget(item: NotificationItem): Promise<void> {
     if (!item.readAt) await fetch(`/api/platform/notifications/${encodeURIComponent(item.id)}/read`, { method: "POST", headers: { "content-type": "application/json" } });
     setOpen(false);
+    if (item.kind === "author_followed" && item.actor?.username) {
+      window.location.assign(`/u/${encodeURIComponent(item.actor.username)}`);
+      return;
+    }
     if (item.project?.id) {
       const url = new URL(window.location.origin);
       url.pathname = "/";
       url.searchParams.set("project", item.project.id);
       if (item.targetType === "comment") url.searchParams.set("comment", item.targetId);
+      if (item.targetType === "merge_request" || item.targetType === "review") {
+        url.searchParams.set("tab", "changes");
+        const mergeRequestId = item.targetType === "review" && typeof item.payload?.mergeRequestId === "string" ? item.payload.mergeRequestId : item.targetId;
+        url.searchParams.set("change", mergeRequestId);
+      }
       window.location.assign(`${url.pathname}${url.search}`);
     }
   }

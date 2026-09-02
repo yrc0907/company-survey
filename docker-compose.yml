@@ -153,6 +153,38 @@ services:
           cpus: "0.50"
           memory: 512M
 
+  source-refresh:
+    # URL 来源刷新是 one-shot 私网任务；默认不启动，交由 cron/systemd timer 调度。
+    profiles: ["source-refresh"]
+    image: ${SOURCE_REFRESH_IMAGE:-research-workbench:source-refresh}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ingestion
+    restart: "no"
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=384
+      SOURCE_REFRESH_MAX_JOBS: ${SOURCE_REFRESH_MAX_JOBS:-20}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: ["node_modules/.bin/tsx", "scripts/refresh-url-sources.ts"]
+    logging:
+      driver: local
+      options:
+        max-size: "5m"
+        max-file: "2"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.35"
+          memory: 384M
+
   postgres:
     image: postgres:16.4-alpine
     restart: unless-stopped

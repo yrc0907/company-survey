@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { AssetConflictError, AssetNotFoundError, IngestionLeaseLostError } from "@/lib/domain/assets";
 import type { AssetRecord, IngestionArtifactRecord, IngestionJobRecord, IngestionStatus } from "@/lib/domain/assets";
-import type { AssetRepository, CompleteIngestionInput, CreateAssetRecord, FailIngestionInput, IngestionClaim, NeedsReviewIngestionInput } from "@/lib/repositories/assets/assets-repository";
+import type { ApproveIngestionReviewInput, AssetRepository, CompleteIngestionInput, CreateAssetRecord, FailIngestionInput, IngestionClaim, NeedsReviewIngestionInput } from "@/lib/repositories/assets/assets-repository";
 
 /** 上传契约使用的内存实现；只用于测试，生产工厂永远选择 PostgreSQL。 */
 export class MemoryAssetsRepository implements AssetRepository {
@@ -99,6 +99,22 @@ export class MemoryAssetsRepository implements AssetRepository {
     return structuredClone(job);
   }
 
+  /** 内存仓储模拟人工确认状态机；与 PostgreSQL 使用相同的追加产物语义。 */
+  public async approveIngestionReview(input: ApproveIngestionReviewInput): Promise<IngestionJobRecord | null> {
+    const asset = await this.getOwnedAsset(input.assetId, input.ownerUserId);
+    const job = asset ? await this.getIngestionJob(input.assetId, input.ownerUserId) : null;
+    if (!asset || !job) return null;
+    if (job.status === "ready") return structuredClone(job);
+    if (job.status !== "needs_review") throw new AssetConflictError("只有待校对解析任务可以确认");
+    const artifacts = this.artifacts.get(job.id) ?? [];
+    const prior = artifacts.find((artifact) => artifact.id === input.expectedArtifactId && artifact.kind === "needs_review");
+    if (!prior) throw new AssetConflictError("待校对产物已更新，请重新加载后确认");
+    artifacts.push({ id: crypto.randomUUID(), ingestionJobId: job.id, assetId: input.assetId, attempt: job.attempt + 1, kind: "text", mimeType: "text/plain", content: input.content, contentHash: input.contentHash, metadata: structuredClone(input.metadata), createdAt: new Date().toISOString() });
+    job.status = "ready"; job.errorCode = null; job.errorMessage = null; job.completedAt = new Date().toISOString(); job.updatedAt = job.completedAt;
+    this.jobs.set(job.id, job);
+    return structuredClone(job);
+  }
+
   public async failIngestion(input: FailIngestionInput): Promise<IngestionJobRecord | null> {
     const job = this.jobs.get(input.jobId);
     if (!job || job.assetId !== input.assetId || job.status !== "processing" || job.leaseOwner !== input.leaseOwner) return null;
@@ -112,7 +128,8 @@ export class MemoryAssetsRepository implements AssetRepository {
     if (!asset) return null;
     const job = Array.from(this.jobs.values()).find((item) => item.assetId === assetId);
     const artifacts = job ? this.artifacts.get(job.id) : undefined;
-    const artifact = artifacts?.slice().sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+    // 内存实现按追加顺序模拟 PostgreSQL created_at/id 的最新记录，避免同毫秒时间戳时随机返回旧草稿。
+    const artifact = artifacts?.at(-1);
     return artifact ? structuredClone(artifact) : null;
   }
 }

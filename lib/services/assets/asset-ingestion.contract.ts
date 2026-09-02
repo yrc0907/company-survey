@@ -6,6 +6,7 @@ import { createObjectKey } from "@/lib/providers/oss";
 import { MemoryAssetsRepository } from "@/lib/repositories/assets";
 import { AssetIngestionService } from "@/lib/services/assets/asset-ingestion-service";
 import { parseAsset } from "@/lib/services/assets/asset-parser";
+import { VisionReviewService } from "@/lib/services/assets/vision-review-service";
 
 function digest(bytes: Buffer): string { return createHash("sha256").update(bytes).digest("hex"); }
 
@@ -54,6 +55,18 @@ async function run(): Promise<void> {
   assert.equal(imageResult?.job.status, "needs_review", "没有视觉模型时图片必须进入待校对");
   assert.equal(imageResult?.outcome.kind, "needs_review");
   assert.equal(imageResult?.outcome.code, "PARSER_REQUIRES_VISION");
+
+  const visionImageBytes = Buffer.concat([imageBytes, Buffer.from([1])]);
+  const visionImage = await seedVerified(repo, owner, "vision.png", "image/png", visionImageBytes);
+  objects.set(visionImage.asset.objectKey, visionImageBytes);
+  const visionWorker = new AssetIngestionService(repo, reader, 30, { visionParser: { parse: async () => ({ kind: "needs_review", code: "PARSER_REQUIRES_VISION", message: "待人工确认", metadata: { parser: "vision-test", reason: "image", extractedText: "图片中的原始字" } }) } });
+  const visionResult = await visionWorker.processNext("worker-vision");
+  assert.equal(visionResult?.job.status, "needs_review");
+  const draftArtifact = await repo.getIngestionArtifact(visionImage.asset.id, owner);
+  assert.equal(draftArtifact?.metadata.extractedText, "图片中的原始字");
+  const reviewed = await new VisionReviewService(repo).approve({ userId: owner, role: "user" }, visionImage.asset.id, { artifactId: draftArtifact!.id, text: "人工确认后的文字" });
+  assert.equal(reviewed.ingestion?.status, "ready");
+  assert.equal((await repo.getIngestionArtifact(visionImage.asset.id, owner))?.content, "人工确认后的文字");
 
   const spoofedImageBytes = Buffer.from("not-a-png", "utf8");
   const spoofedImage = await seedVerified(repo, owner, "spoofed.png", "image/png", spoofedImageBytes);

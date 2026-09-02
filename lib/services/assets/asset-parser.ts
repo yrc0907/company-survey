@@ -26,7 +26,7 @@ export interface NeedsReviewResult {
   kind: "needs_review";
   code: AssetParserFailureCode;
   message: string;
-  metadata: { parser: string; pageCount?: number | null; reason: "image" | "scanned_pdf" | "unsupported" | "invalid" };
+  metadata: { parser: string; pageCount?: number | null; reason: "image" | "scanned_pdf" | "unsupported" | "invalid"; /** 视觉模型生成的待校对草稿；永远不会被当作 ready 正文。 */ extractedText?: string };
 }
 
 export type AssetParserResult = ParsedTextResult | NeedsReviewResult;

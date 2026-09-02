@@ -3,3 +3,4 @@ export * from "@/lib/services/assets/asset-ingestion-service";
 export * from "@/lib/services/assets/artifact-source-index-service";
 export * from "@/lib/services/assets/asset-parser";
 export * from "@/lib/services/assets/oss-provider-factory";
+export * from "@/lib/services/assets/vision-review-service";

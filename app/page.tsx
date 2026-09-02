@@ -18,6 +18,8 @@ type RequestState = "idle" | "loading" | "ready" | "error";
 export default function HomePage() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [commentId, setCommentId] = useState<string | null>(null);
+  const [initialTab, setInitialTab] = useState<"changes" | null>(null);
+  const [changeId, setChangeId] = useState<string | null>(null);
   const [projects, setProjects] = useState(seedProjects);
   const [listState, setListState] = useState<RequestState>("loading");
   const [listError, setListError] = useState("");
@@ -43,8 +45,11 @@ export default function HomePage() {
     void loadProjects();
     const currentProject = new URLSearchParams(window.location.search).get("project");
     if (currentProject) setProjectId(currentProject);
-    setCommentId(new URLSearchParams(window.location.search).get("comment"));
-    const onPopState = () => { const params = new URLSearchParams(window.location.search); setProjectId(params.get("project")); setCommentId(params.get("comment")); };
+    const initialParams = new URLSearchParams(window.location.search);
+    setCommentId(initialParams.get("comment"));
+    setInitialTab(initialParams.get("tab") === "changes" ? "changes" : null);
+    setChangeId(initialParams.get("change"));
+    const onPopState = () => { const params = new URLSearchParams(window.location.search); setProjectId(params.get("project")); setCommentId(params.get("comment")); setInitialTab(params.get("tab") === "changes" ? "changes" : null); setChangeId(params.get("change")); };
     window.addEventListener("popstate", onPopState);
     return () => { cancelled = true; window.removeEventListener("popstate", onPopState); };
   }, []);
@@ -81,9 +86,13 @@ export default function HomePage() {
   function openProject(nextProjectId: string) {
     setProjectId(nextProjectId);
     setCommentId(null);
+    setInitialTab(null);
+    setChangeId(null);
     const url = new URL(window.location.href);
     url.searchParams.set("project", nextProjectId);
     url.searchParams.delete("comment");
+    url.searchParams.delete("tab");
+    url.searchParams.delete("change");
     window.history.pushState({}, "", url);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -91,10 +100,14 @@ export default function HomePage() {
   function closeProject() {
     setProjectId(null);
     setCommentId(null);
+    setInitialTab(null);
+    setChangeId(null);
     setProject(undefined);
     const url = new URL(window.location.href);
     url.searchParams.delete("project");
     url.searchParams.delete("comment");
+    url.searchParams.delete("tab");
+    url.searchParams.delete("change");
     window.history.pushState({}, "", url);
   }
 
@@ -104,7 +117,7 @@ export default function HomePage() {
 
   return (
     <>
-      {projectId && (projectState === "loading" || project) ? project ? <ProjectWorkspace project={project} onBack={closeProject} onRequireLogin={requireLogin} initialCommentId={commentId} /> : <main className="route-state route-state--loading" aria-live="polite" aria-busy="true"><Skeleton className="h-3 w-72" /><Skeleton className="h-3 w-48" /><p>正在读取公开项目…</p></main> : projectId ? <main className="route-state" role="alert"><h1>无法打开这个项目</h1><p>{projectError || "公开项目不存在或已下架。"}</p><Button variant="outline" onClick={closeProject}>返回项目列表</Button></main> : <PublicHome projects={projects} loading={listState === "loading"} error={listError} onRetry={() => window.location.reload()} onOpenProject={openProject} onRequireLogin={requireLogin} />}
+      {projectId && (projectState === "loading" || project) ? project ? <ProjectWorkspace project={project} onBack={closeProject} onRequireLogin={requireLogin} initialCommentId={commentId} initialTab={initialTab} initialChangeId={changeId} /> : <main className="route-state route-state--loading" aria-live="polite" aria-busy="true"><Skeleton className="h-3 w-72" /><Skeleton className="h-3 w-48" /><p>正在读取公开项目…</p></main> : projectId ? <main className="route-state" role="alert"><h1>无法打开这个项目</h1><p>{projectError || "公开项目不存在或已下架。"}</p><Button variant="outline" onClick={closeProject}>返回项目列表</Button></main> : <PublicHome projects={projects} loading={listState === "loading"} error={listError} onRetry={() => window.location.reload()} onOpenProject={openProject} onRequireLogin={requireLogin} />}
       <LoginGateDialog open={loginDialog.open} intent={loginDialog.intent} onOpenChange={(open) => setLoginDialog((current) => ({ ...current, open }))} />
     </>
   );

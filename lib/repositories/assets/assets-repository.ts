@@ -25,6 +25,8 @@ export interface AssetRepository {
   /** 只有持有当前租约的 Worker 才能写入结果，返回 false 表示租约已失效。 */
   completeIngestion(input: CompleteIngestionInput): Promise<IngestionJobRecord | null>;
   markIngestionNeedsReview(input: NeedsReviewIngestionInput): Promise<IngestionJobRecord | null>;
+  /** 所有者确认或编辑视觉草稿后，追加 text 产物并将任务转为 ready；旧待校对产物不可变。 */
+  approveIngestionReview(input: ApproveIngestionReviewInput): Promise<IngestionJobRecord | null>;
   failIngestion(input: FailIngestionInput): Promise<IngestionJobRecord | null>;
   getIngestionArtifact(assetId: string, ownerUserId: string): Promise<IngestionArtifactRecord | null>;
 }
@@ -49,6 +51,15 @@ export interface NeedsReviewIngestionInput {
   artifact: IngestionArtifactRecord;
   code: string;
   message: string;
+}
+
+export interface ApproveIngestionReviewInput {
+  assetId: string;
+  ownerUserId: string;
+  expectedArtifactId: string;
+  content: string;
+  contentHash: string;
+  metadata: Record<string, unknown>;
 }
 
 export interface FailIngestionInput {

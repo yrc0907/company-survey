@@ -4,6 +4,7 @@ import { IngestionLeaseLostError } from "@/lib/domain/assets";
 import type { AssetRecord, IngestionArtifactRecord, IngestionJobRecord } from "@/lib/domain/assets";
 import type { AssetRepository, IngestionClaim } from "@/lib/repositories/assets/assets-repository";
 import { assertAssetMagic, parseAsset, type AssetParserResult } from "@/lib/services/assets/asset-parser";
+import type { VisionParser } from "@/lib/providers/vision-provider";
 
 const DEFAULT_LEASE_SECONDS = 120;
 const MAX_OBJECT_BYTES = 25 * 1024 * 1024;
@@ -12,6 +13,8 @@ export interface AssetObjectReader {
   /** 受限读取原始对象；实现必须在超过 maxBytes 时中止流。 */
   readObject(objectKey: string, maxBytes: number): Promise<Buffer>;
 }
+
+export interface AssetIngestionOptions { visionParser?: VisionParser | null; }
 
 export interface IngestionProcessResult {
   asset: AssetRecord;
@@ -33,7 +36,7 @@ function asError(error: unknown): { code: string; message: string } {
  * Worker 崩溃后租约过期即可重试；晚到结果被仓储条件更新拒绝，不会覆盖新一轮任务。
  */
 export class AssetIngestionService {
-  public constructor(private readonly assets: AssetRepository, private readonly objects: AssetObjectReader, private readonly leaseSeconds = DEFAULT_LEASE_SECONDS) {}
+  public constructor(private readonly assets: AssetRepository, private readonly objects: AssetObjectReader, private readonly leaseSeconds = DEFAULT_LEASE_SECONDS, private readonly options: AssetIngestionOptions = {}) {}
 
   /** 处理一个队列任务；无任务时返回 null，便于脚本轮询或一次性 drain。 */
   public async processNext(workerId: string): Promise<IngestionProcessResult | null> {
@@ -55,6 +58,10 @@ export class AssetIngestionService {
       }
       assertAssetMagic(asset, bytes);
       outcome = parseAsset(asset, bytes);
+      if (outcome.kind === "needs_review" && outcome.code === "PARSER_REQUIRES_VISION" && this.options.visionParser) {
+        // 视觉结果仍保存为 needs_review metadata；不改变 Job 状态为 ready，避免未人工确认的 OCR 进入检索。
+        outcome = await this.options.visionParser.parse({ asset, bytes });
+      }
     } catch (error) {
       const failure = asError(error);
       const failed = await this.assets.failIngestion({ assetId: asset.id, jobId: job.id, leaseOwner, code: failure.code, message: failure.message });

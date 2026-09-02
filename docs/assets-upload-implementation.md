@@ -1,6 +1,6 @@
 # 私有 OSS 上传实现
 
-状态：后端私有 OSS 上传、下载、隔离对象清理和解析 Worker 闭环已实现。文本/原生文字 PDF/DOCX 会生成独立解析产物；图片和无文字层 PDF 明确进入 `needs_review`，不会伪造 OCR 正文。
+状态：后端私有 OSS 上传、下载、隔离对象清理和解析 Worker 闭环已实现。文本/原生文字 PDF/DOCX 会生成独立解析产物；图片和无文字层 PDF 明确进入 `needs_review`，不会伪造 OCR 正文。显式开启 `VISION_ENABLED=true` 后，图片可调用 OpenAI-compatible 多模态 Provider 生成带 `metadata.extractedText` 的待校对草稿，仍不会自动进入检索。
 
 ## 安全边界
 
@@ -69,7 +69,9 @@ Job: queued -> processing -> ready | needs_review | failed -> queued (retry)
 4. 图片、扫描 PDF、无支持解析器的格式写入 `kind=needs_review` 产物并将 Job 置为 `needs_review`，错误码为 `PARSER_REQUIRES_VISION` 或 `PARSER_REQUIRES_DOCUMENT_PARSER`。
 5. 只有持有租约且未过期的 Worker 能够 `completeIngestion`/`markIngestionNeedsReview`；晚到结果被条件更新拒绝。重复完成不会覆盖已有产物。
 
-当前 Worker 不调用视觉模型，也不声称图片 OCR 已完成；配置视觉解析器后可对 `needs_review` Job 使用原有重试接口。
+默认 Worker 不调用视觉模型，也不声称图片 OCR 已完成；配置 `VISION_ENABLED=true` 和 Provider 后，图片任务才会调用 `lib/providers/vision-provider.ts`，结果保留为 `needs_review` 草稿，需人工确认后才能建立 source/source_chunk。扫描 PDF 仍需 PDF 页面渲染器或人工校对，不能把图片接口直接当作 PDF 解析。
+
+人工确认通过 `POST /api/platform/assets/:id/review` 完成。请求携带当前 `artifactId` 和可编辑正文；服务端在所有者权限、状态和长度校验后追加 `text` 产物，将 Job 置为 `ready`，原视觉产物仍保留不可变审计记录。之后必须再调用受权限约束的 `.../index` 接口，才能把正文写入 source/source_chunk。
 
 契约测试：`pnpm test` 中的 `lib/services/assets/asset-ingestion.contract.ts` 覆盖文本完成、图片待校对、PDF 文字层/扫描降级、OSS 完整性失败、显式重试和重复消费边界。
 

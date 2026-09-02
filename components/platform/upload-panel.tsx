@@ -10,7 +10,7 @@ type UploadStage = "checking" | "editing" | "creating" | "uploading" | "confirmi
 type UploadPayload = { asset: { id: string; filename: string; expectedSize: number }; upload: { url: string; method: "PUT"; requiredHeaders: Record<string, string> }; ingestion: { id: string; status: string } };
 type ProjectPayload = { project: { id: string; title: string } };
 type BranchPayload = { branch: { id: string; name: string } };
-type UploadStatusPayload = { asset?: { status?: string }; ingestion?: { status?: string; errorCode?: string | null; errorMessage?: string | null; attempt?: number }; artifact?: { kind?: string } | null; error?: string };
+type UploadStatusPayload = { asset?: { status?: string }; ingestion?: { status?: string; errorCode?: string | null; errorMessage?: string | null; attempt?: number }; artifact?: { id?: string; kind?: string; content?: string | null; metadata?: { extractedText?: unknown } } | null; error?: string };
 
 const ACCEPT = ".md,.txt,.pdf,.docx,.png,.jpg,.jpeg,.webp,.gif";
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -33,6 +33,9 @@ export function UploadPanel() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState("等待上传");
   const [dropActive, setDropActive] = useState(false);
+  const [reviewArtifactId, setReviewArtifactId] = useState<string | null>(null);
+  const [reviewText, setReviewText] = useState("");
+  const [reviewSaving, setReviewSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
 
@@ -72,6 +75,12 @@ export function UploadPanel() {
           return;
         }
         if (status === "needs_review") {
+          const artifactId = payload.artifact?.id;
+          const extractedText = payload.artifact?.metadata?.extractedText;
+          if (artifactId && artifactId !== reviewArtifactId) {
+            setReviewArtifactId(artifactId);
+            setReviewText(typeof extractedText === "string" ? extractedText : "");
+          }
           setNotice(payload.ingestion?.errorMessage ?? "解析已完成，但该文件需要人工校对后才能建立检索来源。");
           return;
         }
@@ -90,7 +99,7 @@ export function UploadPanel() {
     };
     void poll();
     return () => { cancelled = true; if (timer !== undefined) window.clearTimeout(timer); };
-  }, [assetId, stage]);
+  }, [assetId, reviewArtifactId, stage]);
 
   const canSubmit = Boolean(title.trim() && file && stage === "editing");
   const stageLabel = useMemo(() => ({ checking: "确认登录状态", editing: "填写项目资料", creating: "创建私人项目", uploading: "上传到私有 OSS", confirming: "校验上传对象", queued: "等待解析任务", failed: "上传失败" } satisfies Record<UploadStage, string>)[stage], [stage]);
@@ -104,6 +113,8 @@ export function UploadPanel() {
     // 更换文件时丢弃旧资产引用，防止误把上一次失败任务重试到新文件上。
     setAssetId(null);
     setProjectId(null);
+    setReviewArtifactId(null);
+    setReviewText("");
     setProgress(0);
     setJobStatus("等待上传");
     setStage("editing");
@@ -185,6 +196,22 @@ export function UploadPanel() {
     } catch (requestError) { setStage("failed"); setError(requestError instanceof Error ? requestError.message : "重试失败"); }
   }
 
+  /** 保存人工修改后的视觉草稿；确认后任务才进入 ready，随后可在工作台显式建立索引。 */
+  async function approveReview(): Promise<void> {
+    if (!assetId || !reviewArtifactId || !reviewText.trim() || reviewSaving) return;
+    setReviewSaving(true); setError(""); setNotice("");
+    try {
+      const response = await fetch(`/api/platform/assets/${encodeURIComponent(assetId)}/review`, {
+        method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ artifactId: reviewArtifactId, text: reviewText }),
+      });
+      const payload = await response.json().catch(() => ({})) as { ingestion?: { status?: string }; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "保存校对正文失败");
+      setJobStatus(payload.ingestion?.status ?? "ready");
+      setNotice("校对已保存；解析任务已就绪，进入工作台后可显式建立检索来源。" );
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "保存校对正文失败"); }
+    finally { setReviewSaving(false); }
+  }
+
   function cancelUpload(): void {
     if (stage !== "uploading") return;
     xhrRef.current?.abort();
@@ -203,7 +230,8 @@ export function UploadPanel() {
       <div className="grid gap-5"><label className="grid gap-1.5 text-sm"><span className="font-medium">项目名称</span><input value={title} onChange={(event) => setTitle(event.target.value)} disabled={stage !== "editing"} maxLength={160} className="h-10 rounded-md border bg-background px-3 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60" placeholder="例如：慧策掌上先机产品调研" /></label><label className="grid gap-1.5 text-sm"><span className="font-medium">简介 <span className="font-normal text-muted-foreground">（可选）</span></span><textarea value={summary} onChange={(event) => setSummary(event.target.value)} disabled={stage !== "editing"} maxLength={2000} rows={3} className="resize-none rounded-md border bg-background px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60" placeholder="说明这份研究覆盖什么问题和资料范围" /></label>
         <div className="grid gap-1.5 text-sm"><span className="font-medium">原始资料</span><div className="relative"><button type="button" disabled={stage !== "editing"} onClick={() => inputRef.current?.click()} onDragEnter={(event) => { event.preventDefault(); if (stage === "editing") setDropActive(true); }} onDragOver={(event) => { event.preventDefault(); if (stage === "editing") setDropActive(true); }} onDragLeave={(event) => { const related = event.relatedTarget; if (!(related instanceof Node) || !event.currentTarget.contains(related)) setDropActive(false); }} onDrop={handleDrop} aria-label="选择或拖入原始资料" className={`grid min-h-32 w-full place-items-center rounded-lg border border-dashed px-4 py-6 text-center transition-colors hover:border-primary/50 hover:bg-primary/5 disabled:pointer-events-none disabled:opacity-60 ${dropActive ? "border-primary bg-primary/10 ring-2 ring-primary/20" : "bg-muted/20"}`}>{file ? <span className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary"><FileUp size={19} /></span><span className="grid text-left"><strong className="max-w-[min(60vw,420px)] truncate text-sm">{file.name}</strong><small className="mt-1 text-xs text-muted-foreground">{formatBytes(file.size)} · {file.type || "未知 MIME"}</small><small className="mt-1 text-xs text-primary">{dropActive ? "松开以替换文件" : "可拖入文件替换"}</small></span></span> : <span className="grid place-items-center gap-2 text-muted-foreground"><FileUp size={22} /><span>{dropActive ? "松开以上传资料" : "点击选择或拖入 PDF、DOCX、Markdown、文本或图片"}</span><small>单文件不超过 25 MiB</small></span>}</button>{file && stage === "editing" ? <button type="button" className="absolute right-2 top-2 rounded border bg-background px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={(event) => { event.stopPropagation(); removeQueuedFile(); }}>移除</button> : null}</div><input ref={inputRef} type="file" accept={ACCEPT} className="sr-only" onChange={(event) => selectFile(event.target.files?.[0])} /></div>
         {stage === "uploading" ? <div className="grid gap-2"><div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-[width] duration-200" style={{ width: `${progress}%` }} /></div><p className="m-0 text-xs text-muted-foreground">正在使用短期签名地址直传私有 OSS，页面不会接触永久密钥。</p></div> : null}
-        {stage === "queued" ? <div className={`flex items-start gap-3 rounded-lg border p-3 text-sm ${jobStatus === "needs_review" ? "border-amber-200 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}><CheckCircle2 className="mt-0.5 shrink-0" size={17} /><span><strong>{jobStatus === "ready" ? "解析完成" : jobStatus === "needs_review" ? "上传完成，等待人工校对" : "上传已确认"}</strong><small className="mt-1 block text-xs">解析任务状态：{jobStatus}。{jobStatus === "ready" ? "可在项目工作台校对并建立检索来源。" : jobStatus === "needs_review" ? "图片、扫描 PDF 或暂不支持的格式不会被伪造成正文，请在工作台补充或重试。" : "你可以关闭页面，稍后在项目工作台查看解析状态。"}</small></span></div> : null}
+        {stage === "queued" ? <div className={`flex items-start gap-3 rounded-lg border p-3 text-sm ${jobStatus === "needs_review" ? "border-amber-200 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}><CheckCircle2 className="mt-0.5 shrink-0" size={17} /><span><strong>{jobStatus === "ready" ? "解析完成" : jobStatus === "needs_review" ? "上传完成，等待人工校对" : "上传已确认"}</strong><small className="mt-1 block text-xs">解析任务状态：{jobStatus}。{jobStatus === "ready" ? "可在项目工作台校对并建立检索来源。" : jobStatus === "needs_review" ? "图片、扫描 PDF 或暂不支持的格式不会被伪造成正文；下方可编辑视觉草稿后确认。" : "你可以关闭页面，稍后在项目工作台查看解析状态。"}</small></span></div> : null}
+        {stage === "queued" && jobStatus === "needs_review" && reviewArtifactId ? <div className="grid gap-2 rounded-lg border border-amber-200 bg-amber-50/50 p-3"><label className="grid gap-1 text-xs font-medium text-amber-950" htmlFor="vision-review-text">视觉转写草稿（确认前不会进入检索）</label><textarea id="vision-review-text" value={reviewText} onChange={(event) => setReviewText(event.target.value)} maxLength={120000} rows={8} className="min-h-36 resize-y rounded-md border bg-background px-3 py-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring" placeholder="视觉模型没有返回草稿，请手动录入可核验文字。" /><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[11px] text-muted-foreground">{reviewText.length}/120000 · 原件保持不可变</span><Button size="sm" onClick={() => void approveReview()} disabled={!reviewText.trim() || reviewSaving}>{reviewSaving ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}确认校对并就绪</Button></div></div> : null}
         {notice ? <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-primary" role="status">{notice}</div> : null}
         {error ? <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" role="alert"><AlertCircle className="mt-0.5 shrink-0" size={16} />{error}</div> : null}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-5"><p className="m-0 flex items-center gap-1.5 text-xs text-muted-foreground"><ShieldCheck size={14} />上传后仍需在工作台校对，解析器不会覆盖原始证据。</p><div className="flex gap-2">{stage === "uploading" ? <Button variant="outline" onClick={cancelUpload}><X size={15} />取消上传</Button> : null}{stage === "failed" && assetId ? <Button variant="outline" onClick={() => void retry()}><RefreshCw size={15} />重试解析</Button> : null}{stage === "failed" && !assetId ? <Button variant="outline" onClick={removeQueuedFile}>移除并重选</Button> : null}{stage === "queued" ? <Button variant="outline" onClick={removeQueuedFile}>从队列移除</Button> : null}<Button onClick={() => void upload()} disabled={!canSubmit}>{stage === "creating" || stage === "confirming" ? <Loader2 size={15} className="animate-spin" /> : <UploadCloud size={15} />}开始上传</Button></div></div>

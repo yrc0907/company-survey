@@ -13,6 +13,8 @@ interface CollaborationPanelProps {
   canReview: boolean;
   onRequireLogin: () => void;
   refreshToken?: number;
+  /** 通知深链携带的 MR/审核目标；申请列表加载后自动选中。 */
+  initialChangeId?: string | null;
 }
 
 interface ListResponse { mergeRequests?: MergeRequestSummary[]; error?: string; }
@@ -21,7 +23,7 @@ interface DetailResponse { mergeRequest?: MergeRequestSummary; reviews?: ReviewS
 const statusCopy: Record<MergeRequestSummary["status"], string> = { draft: "草稿", open: "待审核", changes_requested: "需修改", approved: "已批准", merged: "已合并", closed: "已关闭" };
 
 /** 项目修改申请面板：匿名仅读公开申请，审核与合并按钮必须通过真实会话和服务端授权。 */
-export function CollaborationPanel({ projectId, authenticated, canReview, onRequireLogin, refreshToken = 0 }: CollaborationPanelProps) {
+export function CollaborationPanel({ projectId, authenticated, canReview, onRequireLogin, refreshToken = 0, initialChangeId = null }: CollaborationPanelProps) {
   const [requests, setRequests] = useState<MergeRequestSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DetailResponse | null>(null);
@@ -43,7 +45,7 @@ export function CollaborationPanel({ projectId, authenticated, canReview, onRequ
 
   useEffect(() => { void loadRequests(); }, [loadRequests, refreshToken]);
 
-  async function selectRequest(id: string) {
+  const selectRequest = useCallback(async (id: string) => {
     setSelectedId(id); setDetail(null); setDetailLoading(true); setError("");
     if (!authenticated) { setError("登录后才能查看修改申请的 Diff 和审核记录；公开内容仍可匿名阅读。"); setDetailLoading(false); return; }
     try {
@@ -53,7 +55,11 @@ export function CollaborationPanel({ projectId, authenticated, canReview, onRequ
       setDetail(payload);
     } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "修改申请详情加载失败"); }
     finally { setDetailLoading(false); }
-  }
+  }, [authenticated]);
+
+  useEffect(() => {
+    if (initialChangeId && selectedId !== initialChangeId && requests.some((request) => request.id === initialChangeId)) void selectRequest(initialChangeId);
+  }, [initialChangeId, requests, selectedId, selectRequest]);
 
   async function review(verdict: "approve" | "request_changes" | "reject") {
     if (!selectedId) return;

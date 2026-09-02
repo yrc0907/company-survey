@@ -61,10 +61,10 @@ Yu 的判断和证据台账；不做默认总排名，也不把五家公司强�
 - [~] 建立 `uploaded_asset`、`ingestion_job`、`project_view_daily`、`project_stats` schema 与聚合任务；公开阅读统计已通过 `project_reader` + `project_view_daily` + `project_stats` 同步幂等聚合，项目评论数实时聚合，项目/作者/评论点赞与关注均有唯一关系，异步热度聚合仍待补齐
 - [x] 接入 TipTap，正文 Block 使用稳定 ID，支持 Markdown 导入导出（`components/report-editor.tsx` 与 `tiptap-document` 契约已通过）
 - [~] 登录后创建空白项目、创建私有草稿分支和 OSS 隔离上传入口已实现；真实账号上传正向 E2E 与解析后自动进入工作台仍待联调
-- [~] Markdown/TXT/PDF/DOCX/PNG/JPEG 白名单、MIME magic、大小、哈希、重复检测、解析状态和幂等重试；解析 Worker 已支持文本/原生 PDF/DOCX，图片与扫描 PDF 进入 `needs_review`；ready 文本可通过受权限约束的索引接口写入 source/source_chunk
+- [~] Markdown/TXT/PDF/DOCX/PNG/JPEG 白名单、MIME magic、大小、哈希、重复检测、解析状态和幂等重试；解析 Worker 已支持文本/原生 PDF/DOCX，图片可在显式开启视觉 Provider 后生成 `needs_review` 待校对草稿，扫描 PDF 仍需页面渲染器；ready 文本可通过受权限约束的索引接口写入 source/source_chunk
 - [x] 原始上传文件不可变，可编辑派生正文与原始证据分离；`uploaded_asset.original_asset_id`、`ingestion_artifact` 和 source 索引契约已验证，向他人项目写入仍受个人分支/MR 权限约束
 - [~] 游客 IndexedDB 草稿与防抖自动保存已实现并有契约；登录迁移回调、过期 base revision 变基 UI 仍待补齐
-- [~] Diff、三方合并、冲突处理、审核和单事务合并；项目级楼中楼、段落锚点和图片/GIF 附件已完成，实时协同仍待实现
+- [~] Diff、三方合并、冲突处理、审核和单事务合并；公开主分支已支持逐 Commit 逐文件/逐行 Diff，独立反向回滚 API/UI、冲突逐段决策和实时协同仍待实现；项目级楼中楼、段落锚点和图片/GIF 附件已完成
 - [~] 段落级贡献追踪和用户贡献历史已接入公开作者页；AI 辅助标记仍待接入
 - [~] 公开首页、全站搜索（项目/作者/公开文档 API）、项目详情、编辑、审核、用户主页、收件箱和管理员页面；全站搜索 UI 结果面板与收件箱/管理员页面仍待补齐
 - [x] 已执行历史迁移 `022_public_company_seed.sql`、`024_public_company_seed_additional.sql`、`025_public_research_file_tree.sql`、`029_muyuan_foods_seed.sql`；香港数据库曾复核 13 个项目、项目文件树和研究章节
@@ -76,7 +76,7 @@ Yu 的判断和证据台账；不做默认总排名，也不把五家公司强�
 - [~] 企业、产品、行业、竞品、政策与关系边已写入统一 entity/relation_edge 模型并由 GraphRAG-lite 查询；跨报告同名合并仍要求人工确认
 - [~] 公开首发 manifest 校验脚本已加入（重复 ID/slug、HTTPS、来源类型、哈希格式、待核验边界和社区统计污染检查）；网络可达性、许可证人工确认与生产导入审批仍待补齐
 - [x] 首页展示真实数据库项目和真实聚合统计；公网 E2E 已验证公开项目、来源和真实统计投影，空统计保持明确空状态
-- [~] 来源刷新与变更检测服务已实现安全 URL、DNS、超时、大小和哈希边界，并对变化生成 `needs_review` 新来源；HTTP 路由和定时任务仍待接入
+- [~] 来源刷新与变更检测服务已实现安全 URL、DNS、超时、大小和哈希边界，并对变化生成 `needs_review` 新来源；已接入 owner 鉴权 HTTP 路由和 one-shot 定时 Worker，仍需在生产配置调度器并记录真实变更复核结果
 - [~] 首页列表式卡片展示 owner、published_at、main 最新合并、去重阅读、已合并贡献者、来源与 open MR；去重阅读、作者主页、关注、项目级评论、段落锚点评论和评论点赞已接入真实数据库，部分通知深链仍待补齐
 - [~] 项目 Star 已完成真实用户唯一关系、GET/POST/DELETE API 和详情页反馈；作者主页、关注关系、项目评论、评论点赞和 GitHub 风格搜索/项目导航已完成，完整 Session 角色回放仍待补齐
 - [x] 历史社区 seed batch 已在备份后退役 49 个 synthetic 账号及其可变互动；当前 seed 已禁止创建 synthetic 用户，只允许已有真实 active 账号参与；生产真实账号不足 3 个时明确 fail-closed，不用假用户填充
@@ -120,7 +120,7 @@ Yu 的判断和证据台账；不做默认总排名，也不把五家公司强�
 - [~] 已展示已有引用、来源 URL、页码和摘要；没有来源范围、刷新状态或引用编辑 UI
 - [x] 当前报告可打开“添加文本资料”对话框，粘贴标题和正文后刷新来源列表；内存演示模式明确禁用
 - [~] 保存会生成不可变 revision 且乐观锁拒绝冲突；公开主分支版本浏览已上线并展示 Commit/作者/时间/变更文件数，逐段 Diff、回滚 UI/API 仍待补齐
-- [~] 设置、来源刷新；Markdown 导出已通过公开投影完成，PDF 导出仍待实现；公开文件预览已支持 Markdown/TXT/PDF/图片/CSV/XLSX 的安全投影
+- [~] 设置、来源刷新；Markdown 和基础 CJK PDF 导出已通过公开投影完成，PDF 的复杂排版/图表嵌入仍待实现；公开文件预览已支持 Markdown/TXT/PDF/图片/CSV/XLSX 的安全投影
 - [~] `Ctrl/Cmd+K`、窄屏 CSS 和 reduced-motion 已有；旧报告编辑器已接入真实 `Ctrl/Cmd+S -> onSave` 并有契约覆盖；公开平台正文仍是只读投影，键盘全流程和公开编辑器 E2E 待正文编辑 UI 挂载后验收
 
 ## 2. 数据与 API V1
@@ -131,7 +131,7 @@ Yu 的判断和证据台账；不做默认总排名，也不把五家公司强�
 - [x] 已导入资料的受限搜索 API，返回命中、父章节和相邻 Chunk
 - [x] 手动文本来源导入 API：输入上限、SHA-256、`active` 状态、连续 Chunk、PostgreSQL 事务写入与 memory_demo 拒绝
 - [~] URL 来源刷新服务已复用 `assertSafeSourceUrl` 并覆盖重定向/DNS/大小/超时/哈希防护；独立 URL/PDF/图片导入 API 与解析路由仍待接入
-- [~] 原生文本 PDF、DOCX 解析、扫描 PDF/图片视觉解析边界、文件上传存储与任务状态；当前扫描件/图片不调用视觉模型，写入 `needs_review` 并允许显式重试
+- [~] 原生文本 PDF、DOCX 解析、扫描 PDF/图片视觉解析边界、文件上传存储与任务状态；图片已接入显式开关的 OpenAI-compatible 视觉 Provider，人工确认 API 可将草稿转为 ready，扫描 PDF 页面渲染和真实账号端到端索引回归仍待完成
 - [~] 手动文本已写入来源快照、内容哈希、时间和 `active` 状态；来源刷新、变更检测和状态迁移待实现
 - [~] 手动文本已写入带偏移和上下文前缀的 Chunk；页码、文件解析、引用和图谱的写入流水线待实现
 - [~] revision 数据已持久化；协作 MR 已有确定性 Diff，公开版本历史 API/UI 已上线，独立回滚 API、审计查询和逐段 Diff 展示仍待补齐
