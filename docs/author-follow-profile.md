@@ -36,5 +36,4 @@
 
 契约脚本：`pnpm exec tsx lib/services/platform/author.contract.ts`
 
-覆盖匿名主页读取、空项目作者、项目列表、匿名关注状态、未登录写入拒绝、登录关注、重复关注幂等、主页状态回显、重复取消和自关注拒绝。执行结果：`author follow contract: passed`；同时通过 `pnpm typecheck` 与 `pnpm lint`。
-
+作者页还会读取 `activity_event` 的最近 365 天公开聚合：每个日期按事件类型和项目分组，前端用黑白灰热力图渲染；点击日期展示当天事件，并可回到对应公开项目。没有事件的日期保持空白，不使用静态热度。匿名主页读取、空项目作者、项目列表、匿名关注状态、未登录写入拒绝、登录关注、重复关注幂等、主页状态回显、重复取消和自关注拒绝仍由 `author follow contract` 覆盖；同时通过 `pnpm typecheck` 与 `pnpm lint`。

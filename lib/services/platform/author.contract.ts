@@ -26,10 +26,11 @@ async function run(): Promise<void> {
 
   const anonymousProfile = await getAuthor(new Request("http://localhost/api/platform/authors/author"), { params: { username: "author" } });
   assert.equal(anonymousProfile.status, 200);
-  const profileBody = await anonymousProfile.json() as { author: { projectCount: number; followerCount: number; followedByCurrentUser: boolean; projects: unknown[]; contributions: unknown[] } };
+  const profileBody = await anonymousProfile.json() as { author: { projectCount: number; followerCount: number; followedByCurrentUser: boolean; projects: unknown[]; contributions: unknown[]; activity: unknown[] } };
   assert.equal(profileBody.author.projectCount, 1);
   assert.equal(profileBody.author.followerCount, 0);
   assert.equal(profileBody.author.followedByCurrentUser, false);
+  assert.ok(Array.isArray(profileBody.author.activity), "作者主页必须返回可核验活动日聚合");
   assert.equal(profileBody.author.projects.length, 1);
   assert.deepEqual(profileBody.author.contributions, [], "内存模式不能伪造段落贡献行为");
 

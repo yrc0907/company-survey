@@ -64,9 +64,9 @@ Yu 的判断和证据台账；不做默认总排名，也不把五家公司强�
 - [~] Markdown/TXT/PDF/DOCX/PNG/JPEG 白名单、MIME magic、大小、哈希、重复检测、解析状态和幂等重试；解析 Worker 已支持文本/原生 PDF/DOCX，图片可在显式开启视觉 Provider 后生成 `needs_review` 待校对草稿，扫描 PDF 仍需页面渲染器；ready 文本可通过受权限约束的索引接口写入 source/source_chunk
 - [x] 原始上传文件不可变，可编辑派生正文与原始证据分离；`uploaded_asset.original_asset_id`、`ingestion_artifact` 和 source 索引契约已验证，向他人项目写入仍受个人分支/MR 权限约束
 - [~] 游客 IndexedDB 草稿与防抖自动保存已实现并有契约；登录迁移回调、过期 base revision 变基 UI 仍待补齐
-- [~] Diff、三方合并、冲突处理、审核和单事务合并；公开主分支已支持逐 Commit 逐文件/逐行 Diff，独立反向回滚 API/UI、冲突逐段决策和实时协同仍待实现；项目级楼中楼、段落锚点和图片/GIF 附件已完成
+- [~] Diff、三方合并、冲突处理、审核和单事务合并；公开主分支已支持逐 Commit 逐文件/逐行 Diff 与 owner-only HEAD 反向回滚 API/UI，冲突逐段决策和实时协同仍待实现；项目级楼中楼、段落锚点和图片/GIF 附件已完成
 - [~] 段落级贡献追踪和用户贡献历史已接入公开作者页；AI 辅助标记仍待接入
-- [~] 公开首页、全站搜索（项目/作者/公开文档 API）、项目详情、编辑、审核、用户主页、收件箱和管理员页面；全站搜索 UI 结果面板与收件箱/管理员页面仍待补齐
+- [~] 公开首页、全站搜索（项目/作者/公开文档 API）、项目详情、编辑、审核、用户主页、收件箱和管理员页面；全站搜索 UI 与作者活动日聚合已接入，收件箱/管理员页面和真实 Session 回放仍待补齐
 - [x] 已执行历史迁移 `022_public_company_seed.sql`、`024_public_company_seed_additional.sql`、`025_public_research_file_tree.sql`、`029_muyuan_foods_seed.sql`；香港数据库曾复核 13 个项目、项目文件树和研究章节
 - [~] 公开首发数据包清单已改为五家冻结企业；历史八家项目资料保留在可回滚归档中，不再出现在公开首发列表
 - [~] 当前数据库仍有历史首发项目；五家冻结项目已具备公开 URL/摘要、来源元数据和 `needs_verification` 状态，其他项目待按范围冻结迁移清理
@@ -77,12 +77,12 @@ Yu 的判断和证据台账；不做默认总排名，也不把五家公司强�
 - [~] 公开首发 manifest 校验脚本已加入（重复 ID/slug、HTTPS、来源类型、哈希格式、待核验边界和社区统计污染检查）；网络可达性、许可证人工确认与生产导入审批仍待补齐
 - [x] 首页展示真实数据库项目和真实聚合统计；公网 E2E 已验证公开项目、来源和真实统计投影，空统计保持明确空状态
 - [~] 来源刷新与变更检测服务已实现安全 URL、DNS、超时、大小和哈希边界，并对变化生成 `needs_review` 新来源；已接入 owner 鉴权 HTTP 路由和 one-shot 定时 Worker，仍需在生产配置调度器并记录真实变更复核结果
-- [~] 首页列表式卡片展示 owner、published_at、main 最新合并、去重阅读、已合并贡献者、来源与 open MR；去重阅读、作者主页、关注、项目级评论、段落锚点评论和评论点赞已接入真实数据库，部分通知深链仍待补齐
+- [~] 首页列表式卡片展示 owner、published_at、main 最新合并、去重阅读、已合并贡献者、来源与 open MR；去重阅读、作者主页、关注、项目级评论、段落锚点评论、评论点赞、评论/MR/作者通知深链和作者年度活动热力图已接入，真实 Session 回放仍待补齐
 - [~] 项目 Star 已完成真实用户唯一关系、GET/POST/DELETE API 和详情页反馈；作者主页、关注关系、项目评论、评论点赞和 GitHub 风格搜索/项目导航已完成，完整 Session 角色回放仍待补齐
 - [x] 历史社区 seed batch 已在备份后退役 49 个 synthetic 账号及其可变互动；当前 seed 已禁止创建 synthetic 用户，只允许已有真实 active 账号参与；生产真实账号不足 3 个时明确 fail-closed，不用假用户填充
 - [x] 历史企业项目已写入可追溯社区活动；清理迁移必须保留社区账户和非项目专属互动，项目专属活动按外键和审计规则处理，统计由同一事实聚合
 - [x] seed batch 重建/清理脚本、唯一约束校验和跨表一致性验收已通过；`--check` 输出 `statsMismatch=0`、`mergedMergeRequests=12`
-- [~] 站内消息提醒 API、未读数、全部已读和首页登录态通知菜单已接入；评论回复、MR 审核/合并和关注更新的深链 UI 仍需补齐并用真实 Session 验收
+- [~] 站内消息提醒 API、未读数、全部已读和首页登录态通知菜单已接入；评论回复、MR 审核/合并和关注更新的深链 UI 已接入，仍需用真实 Session 验收
 - [~] 匿名 AI 已接入签名 Cookie、访客/IP 双桶限流和明确 429；Redis 共享限流、额度计费和跨实例滥用防护仍待接入
 - [~] 私有 OSS 文件上传、头像魔数/EXIF 校验和资产隔离已实现；许可证、举报、下架审计和头像派生仍待接入
 - [~] 私有 Bucket `reaserch` 已创建，ECS 已绑定 `research-oss` 且 IMDSv2 临时凭据状态为 `Success`；OSS SDK、预签名读写、隔离对象删除、所有者边界和 ECS 临时对象 Put/Head/Delete 已验证，目标 Bucket CORS、浏览器直传权限 E2E 仍待接入；解析 Worker 已实现租约、重试、明确待校对降级和 ready 文本的 source/source_chunk 索引接口
@@ -106,7 +106,7 @@ Yu 的判断和证据台账；不做默认总排名，也不把五家公司强�
 - [x] 实现 OpenAI-compatible 模型 Provider、显式未配置降级和思考强度白名单
 - [~] DeepSeek 原生 `web_search` 请求构造已存在；没有执行搜索的 Job、路由或来源落库
 - [x] 实测 Cloudmist 模型目录、`gemini-embedding-2-preview` Embedding 与三种 Reranker API
-- [~] 轮换后的服务器环境已验证模型、Embedding、Rerank 三个 Provider；原生联网搜索和视觉输入尚未作为完整用户闭环验收，且凭据未提交
+- [~] 轮换后的服务器环境已验证模型、Embedding、Rerank 三个 Provider；图片视觉 Provider、待校对和人工确认链路已实现，原生联网搜索、扫描 PDF 页面渲染和真实模型投递仍未作为完整用户闭环验收，且凭据未提交
 - [x] 当前实现已提交为 `20229c7`，并同步到 GitHub `main` 与 Gitee `master`
 
 ## 1. 前端工作台 V1
@@ -119,7 +119,7 @@ Yu 的判断和证据台账；不做默认总排名，也不把五家公司强�
 - [~] AI 状态覆盖未配置、准备上下文、结果和错误；没有真实工具调用时间线、流式输出或重试策略
 - [~] 已展示已有引用、来源 URL、页码和摘要；没有来源范围、刷新状态或引用编辑 UI
 - [x] 当前报告可打开“添加文本资料”对话框，粘贴标题和正文后刷新来源列表；内存演示模式明确禁用
-- [~] 保存会生成不可变 revision 且乐观锁拒绝冲突；公开主分支版本浏览已上线并展示 Commit/作者/时间/变更文件数，逐段 Diff、回滚 UI/API 仍待补齐
+- [~] 保存会生成不可变 revision 且乐观锁拒绝冲突；公开主分支版本浏览已上线并展示 Commit/作者/时间/变更文件数，逐段 Diff 与 owner-only 当前 HEAD 回滚 UI/API 已接入，冲突逐段决策仍待补齐
 - [~] 设置、来源刷新；Markdown 和基础 CJK PDF 导出已通过公开投影完成，PDF 的复杂排版/图表嵌入仍待实现；公开文件预览已支持 Markdown/TXT/PDF/图片/CSV/XLSX 的安全投影
 - [~] `Ctrl/Cmd+K`、窄屏 CSS 和 reduced-motion 已有；旧报告编辑器已接入真实 `Ctrl/Cmd+S -> onSave` 并有契约覆盖；公开平台正文仍是只读投影，键盘全流程和公开编辑器 E2E 待正文编辑 UI 挂载后验收
 
@@ -130,11 +130,11 @@ Yu 的判断和证据台账；不做默认总排名，也不把五家公司强�
 - [~] 报告创建/保存 API、版本冲突 `409` 和事务写入已实现；没有企业 CRUD、报告归档或删除 API
 - [x] 已导入资料的受限搜索 API，返回命中、父章节和相邻 Chunk
 - [x] 手动文本来源导入 API：输入上限、SHA-256、`active` 状态、连续 Chunk、PostgreSQL 事务写入与 memory_demo 拒绝
-- [~] URL 来源刷新服务已复用 `assertSafeSourceUrl` 并覆盖重定向/DNS/大小/超时/哈希防护；独立 URL/PDF/图片导入 API 与解析路由仍待接入
+- [~] URL 来源刷新服务已复用 `assertSafeSourceUrl` 并覆盖重定向/DNS/大小/超时/哈希防护；owner 鉴权刷新路由和 one-shot Worker 已接入，独立 URL/PDF/图片导入与生产调度仍待补齐
 - [~] 原生文本 PDF、DOCX 解析、扫描 PDF/图片视觉解析边界、文件上传存储与任务状态；图片已接入显式开关的 OpenAI-compatible 视觉 Provider，人工确认 API 可将草稿转为 ready，扫描 PDF 页面渲染和真实账号端到端索引回归仍待完成
 - [~] 手动文本已写入来源快照、内容哈希、时间和 `active` 状态；来源刷新、变更检测和状态迁移待实现
 - [~] 手动文本已写入带偏移和上下文前缀的 Chunk；页码、文件解析、引用和图谱的写入流水线待实现
-- [~] revision 数据已持久化；协作 MR 已有确定性 Diff，公开版本历史 API/UI 已上线，独立回滚 API、审计查询和逐段 Diff 展示仍待补齐
+- [~] revision 数据已持久化；协作 MR 已有确定性 Diff，公开版本历史逐段 Diff、owner-only HEAD 反向回滚 API/UI 已上线，回滚审计查询和冲突逐段决策仍待补齐
 - [~] Auth.js Session、注册和项目授权 API 已实现；公开平台 Caddy 仅保护旧 `/api/research/*`，密码找回、邮箱验证和完整治理流程仍待实现
 
 ## 3. 当前检索、GraphRAG-lite 与上下文
@@ -175,6 +175,6 @@ Yu 的判断和证据台账；不做默认总排名，也不把五家公司强�
 
 - [x] 服务契约测试覆盖保存、版本冲突、手动文本导入/重复拒绝/报告不存在、memory_demo 持久化拒绝、active 来源过滤、图边过滤、选区隔离、SSRF 基础拒绝和客户端快照裁剪
 - [x] `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm build` 已在提交 `20229c7` 前全部通过
-- [~] 已在服务器 PostgreSQL 模式完成浏览器资料导入、混合检索、带引用 AI 回答、关系图、行情序列和 API 保存/版本冲突验收；新建报告 UI、完整 Diff/回滚和 PDF 导出待对应功能完成后纳入
+- [~] 已在服务器 PostgreSQL 模式完成浏览器资料导入、混合检索、带引用 AI 回答、关系图、行情序列、API 保存/版本冲突、公开 Diff/回滚入口和 PDF 导出验收；真实账号上传/人工视觉校对、复杂 PDF 排版和冲突决策仍待对应功能完成后纳入
 - [x] Docker Compose 启动、`postgres/app/caddy` 健康检查、数据库 seed、4C8G 构建、源站持久化和 ESA 公网 HTTPS 均已验收
 - [~] RAG Golden Set 与无证据拒答评测已通过确定性契约；Reranker 降级和向量重建仍待接入真实评测任务

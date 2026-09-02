@@ -148,6 +148,13 @@ export interface PublicContributionRecord {
   createdAt: string;
 }
 
+/** 作者公开活动日聚合；事件类型和项目均来自 public/published 活动账本。 */
+export interface PublicAuthorActivityDay {
+  day: string;
+  totalCount: number;
+  events: Array<{ eventType: string; count: number; project: { id: string; slug: string; title: string } | null }>;
+}
+
 export interface ListPublicProjectActivityInput {
   projectIdOrSlug: string;
   limit: number;

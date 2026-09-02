@@ -24,6 +24,7 @@ interface AuthorProfileData {
   followedByCurrentUser: boolean;
   projects: SeedProject[];
   contributions: Array<{ id: string; project: { id: string; title: string }; blockId: string; nodeId: string; createdAt: string; mergeRequestId: string | null }>;
+  activity: Array<{ day: string; totalCount: number; events: Array<{ eventType: string; count: number; project: { id: string; slug: string; title: string } | null }> }>;
 }
 
 type RequestState = "loading" | "ready" | "error";
@@ -36,6 +37,8 @@ function text(value: unknown, fallback = ""): string {
 function number(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
 }
+
+const activityLabels: Record<string, string> = { project_created: "创建项目", commit_created: "提交版本", merge_request_opened: "发起修改申请", merge_request_merged: "合并修改申请", review_submitted: "提交审核", comment_created: "发表评论", project_starred: "收藏项目", project_unstarred: "取消收藏项目" };
 
 /** API 响应仅经过此适配器进入作者页，避免不可信 JSON 直接驱动 JSX。 */
 function adaptAuthor(value: unknown): AuthorProfileData | null {
@@ -63,12 +66,38 @@ function adaptAuthor(value: unknown): AuthorProfileData | null {
       const p = project as Record<string, unknown>; if (typeof row.id !== "string" || typeof row.blockId !== "string" || typeof row.nodeId !== "string" || typeof p.id !== "string" || typeof p.title !== "string") return [];
       return [{ id: row.id, blockId: row.blockId, nodeId: row.nodeId, createdAt: text(row.createdAt), mergeRequestId: typeof row.mergeRequestId === "string" ? row.mergeRequestId : null, project: { id: p.id, title: p.title } }];
     }) : [],
+    activity: Array.isArray(source.activity) ? source.activity.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const row = item as Record<string, unknown>; if (typeof row.day !== "string") return [];
+      const events = Array.isArray(row.events) ? row.events.flatMap((event) => {
+        if (!event || typeof event !== "object") return [];
+        const e = event as Record<string, unknown>; const project = e.project;
+        const projectValue = project && typeof project === "object" && typeof (project as Record<string, unknown>).id === "string" && typeof (project as Record<string, unknown>).title === "string" ? { id: String((project as Record<string, unknown>).id), slug: text((project as Record<string, unknown>).slug), title: String((project as Record<string, unknown>).title) } : null;
+        return typeof e.eventType === "string" ? [{ eventType: e.eventType, count: number(e.count), project: projectValue }] : [];
+      }) : [];
+      return [{ day: row.day, totalCount: number(row.totalCount), events }];
+    }) : [],
   };
 }
 
 function dateLabel(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.valueOf()) ? "未知" : new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "short" }).format(date);
+}
+
+type AuthorActivityDay = AuthorProfileData["activity"][number];
+
+/** GitHub 风格年度活动图；空数据保持空白，不用虚构热度填充。 */
+function AuthorActivityHeatmap({ activity, selectedDay, onSelect }: { activity: AuthorActivityDay[]; selectedDay: string | null; onSelect: (day: string | null) => void }) {
+  const byDay = new Map(activity.map((item) => [item.day, item]));
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = new Date(today); start.setDate(start.getDate() - 364);
+  const leading = start.getDay();
+  const dates = Array.from({ length: 365 }, (_, index) => { const date = new Date(start); date.setDate(start.getDate() + index); return date.toISOString().slice(0, 10); });
+  const cells: Array<string | null> = [...Array.from({ length: leading }, () => null), ...dates];
+  const columns = Math.ceil(cells.length / 7);
+  const selected = selectedDay ? byDay.get(selectedDay) : undefined;
+  return <div className="grid gap-3"><div className="overflow-x-auto pb-1"><div className="grid min-w-[620px] gap-1" style={{ gridTemplateColumns: `repeat(${columns}, minmax(10px, 1fr))`, gridTemplateRows: "repeat(7, 11px)", gridAutoFlow: "column" }} aria-label="最近 365 天贡献活动"><div className="sr-only">点击活动方块查看当天具体事件</div>{cells.map((day, index) => { if (!day) return <span key={`blank-${index}`} aria-hidden="true" />; const item = byDay.get(day); const count = item?.totalCount ?? 0; const level = count === 0 ? "bg-muted" : count === 1 ? "bg-foreground/25" : count <= 3 ? "bg-foreground/50" : count <= 7 ? "bg-foreground/75" : "bg-foreground"; return <button key={day} type="button" className={`size-[11px] rounded-[2px] ${level} ring-offset-1 transition-transform hover:scale-125 focus-visible:ring-2 focus-visible:ring-ring ${selectedDay === day ? "ring-2 ring-foreground" : ""}`} title={`${day} · ${count} 次活动`} aria-label={`${day}，${count} 次活动`} onClick={() => onSelect(selectedDay === day ? null : day)} />; })}</div></div><div className="flex items-center justify-between text-[10px] text-muted-foreground"><span>{dates[0]} → {dates.at(-1)}</span><span className="flex items-center gap-1.5">少 <i className="size-2.5 rounded-[2px] bg-muted" /> <i className="size-2.5 rounded-[2px] bg-foreground/50" /> <i className="size-2.5 rounded-[2px] bg-foreground" /> 多</span></div>{selected ? <div className="rounded-lg border bg-muted/20 p-3" aria-live="polite"><div className="flex items-center justify-between gap-3"><strong className="text-sm">{selected.day}</strong><span className="text-xs text-muted-foreground">{selected.totalCount} 次活动</span></div>{selected.events.length ? <ul className="mt-2 grid gap-1.5 text-xs">{selected.events.map((event, index) => <li key={`${event.eventType}-${event.project?.id ?? "global"}-${index}`} className="flex items-center justify-between gap-3"><span>{activityLabels[event.eventType] ?? event.eventType} × {event.count}</span>{event.project ? <a className="max-w-[55%] truncate text-muted-foreground underline hover:text-foreground" href={`/?project=${encodeURIComponent(event.project.id)}`}>{event.project.title}</a> : null}</li>)}</ul> : <p className="mb-0 mt-2 text-xs text-muted-foreground">当天没有可公开展示的事件明细。</p>}</div> : <p className="mb-0 text-xs text-muted-foreground">选择一个日期查看当天发生了什么。</p>}</div>;
 }
 
 /**
@@ -84,6 +113,7 @@ export function AuthorProfile({ username }: { username: string }) {
   const [followerCount, setFollowerCount] = useState(0);
   const [feedback, setFeedback] = useState("");
   const [loginOpen, setLoginOpen] = useState(false);
+  const [selectedActivityDay, setSelectedActivityDay] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -176,6 +206,7 @@ export function AuthorProfile({ username }: { username: string }) {
           </aside>
           <div className="min-w-0 space-y-8">
           <section id="pinned-projects" className="rounded-xl border bg-background p-5 shadow-sm sm:p-6"><div className="mb-4 flex items-center justify-between"><div><h2 className="m-0 text-base font-semibold">Pinned 项目</h2><p className="mb-0 mt-1 text-xs text-muted-foreground">作者希望优先展示的公开研究。</p></div><span className="font-mono text-xs text-muted-foreground">{Math.min(author.projects.length, 4)} / 4</span></div>{author.projects.length ? <div className="grid gap-3 sm:grid-cols-2">{author.projects.slice(0, 4).map((project) => <button key={project.id} type="button" onClick={() => openProject(project.id)} className="group rounded-lg border bg-background p-4 text-left transition-[border-color,box-shadow] hover:border-foreground/25 hover:shadow-sm"><span className="flex items-center gap-2"><FolderGit2 size={15} className="text-muted-foreground" /><strong className="truncate text-sm">{project.title}</strong></span><span className="mt-2 block line-clamp-2 text-xs leading-5 text-muted-foreground">{project.summary}</span><span className="mt-3 flex items-center gap-3 text-[11px] text-muted-foreground"><span>{project.category}</span><span>v{project.version}</span><span>{project.uniqueReaders} 阅读</span></span></button>)}</div> : <div className="grid place-items-center gap-2 py-8 text-sm text-muted-foreground"><FolderGit2 size={20} /><p className="m-0">还没有可置顶的公开项目。</p></div>}</section>
+          <section className="author-projects" aria-labelledby="author-activity-title"><div className="author-projects__heading"><div><h2 id="author-activity-title">贡献活动</h2><p>每个小方块来自公开活动账本；点击某天查看当天发生的提交、评论、审核或合并。</p></div><span>{author.activity.reduce((sum, item) => sum + item.totalCount, 0)} 次</span></div><AuthorActivityHeatmap activity={author.activity} selectedDay={selectedActivityDay} onSelect={setSelectedActivityDay} /></section>
           <section className="author-projects" aria-labelledby="author-projects-title"><div className="author-projects__heading"><div><h2 id="author-projects-title">公开项目</h2><p>作者维护或发布的公开研究，可直接进入项目详情。</p></div><span>{author.projects.length}</span></div>{author.projects.length ? <div className="author-projects__list">{author.projects.map((project) => <ProjectCard key={project.id} project={project} onOpen={openProject} />)}</div> : <div className="author-projects__empty"><FolderGit2 size={22} /><p>还没有公开项目。</p></div>}</section>
           <section className="author-projects" aria-labelledby="author-contributions-title"><div className="author-projects__heading"><div><h2 id="author-contributions-title">段落贡献历史</h2><p>仅展示已合并到公开项目、仍处于 active 的真实归因。</p></div><span>{author.contributions.length}</span></div>{author.contributions.length ? <ol className="author-contribution-list">{author.contributions.map((item) => <li key={item.id}><strong>{item.project.title}</strong><span>Block {item.blockId}</span><time dateTime={item.createdAt}>{dateLabel(item.createdAt)}</time></li>)}</ol> : <div className="author-projects__empty"><BookOpen size={22} /><p>暂无公开段落贡献。</p></div>}</section>
           </div>

@@ -36,7 +36,7 @@ export class AuthorService {
       id: owner.id, username: owner.username, displayName: owner.displayName, bio: "",
       avatarAssetId: owner.avatarAssetId, createdAt: owned[0]!.publishedAt ?? owned[0]!.updatedAt,
       projectCount: owned.length, followerCount: 0, followingCount: 0, followedByCurrentUser: false,
-      projects: owned, contributions: [], // seed 没有可写关注事实，因此不伪造 following 状态。
+      projects: owned, contributions: [], activity: [], // seed 没有可写关注事实，因此不伪造 following 状态。
     };
   }
 

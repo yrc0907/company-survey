@@ -595,6 +595,20 @@ export class PostgresPlatformRepository implements PlatformRepository {
       JOIN platform_profile profile ON profile.user_id = contributor.id
       WHERE LOWER(profile.username) = LOWER(${input.username}) AND ca.active = TRUE
       ORDER BY ca.created_at DESC, ca.id DESC LIMIT 100`;
+    const activityRows = await this.sql<DatabaseRow[]>`SELECT ae.occurred_at::date::text AS day, ae.event_type, COUNT(*)::int AS event_count,
+        kp.id AS project_id, kp.slug AS project_slug, kp.title AS project_title
+      FROM activity_event ae
+      LEFT JOIN knowledge_project kp ON kp.id = ae.project_id AND kp.visibility = 'public' AND kp.status = 'published'
+      WHERE ae.actor_user_id = ${String(row.id)} AND ae.occurred_at >= CURRENT_DATE - INTERVAL '364 days'
+        AND (ae.project_id IS NULL OR kp.id IS NOT NULL)
+      GROUP BY ae.occurred_at::date, ae.event_type, kp.id, kp.slug, kp.title
+      ORDER BY day ASC, event_count DESC, ae.event_type ASC`;
+    const activityByDay = new Map<string, PublicAuthorRecord["activity"][number]>();
+    for (const item of activityRows) {
+      const day = String(item.day); const event = { eventType: String(item.event_type), count: Number(item.event_count ?? 0), project: item.project_id ? { id: String(item.project_id), slug: String(item.project_slug), title: String(item.project_title) } : null };
+      const current = activityByDay.get(day) ?? { day, totalCount: 0, events: [] };
+      current.totalCount += event.count; current.events.push(event); activityByDay.set(day, current);
+    }
     return {
       id: String(row.id), username: String(row.username), displayName: String(row.display_name), bio: String(row.bio ?? ""),
       avatarAssetId: row.avatar_asset_id ? String(row.avatar_asset_id) : null, createdAt: iso(row.created_at),
@@ -602,6 +616,7 @@ export class PostgresPlatformRepository implements PlatformRepository {
       followingCount: Number(row.following_count ?? 0), followedByCurrentUser: Boolean(row.followed_by_current_user),
       projects: projects.map(mapPublicProject),
       contributions: contributionRows.map((item): PublicContributionRecord => ({ id: String(item.id), project: { id: String(item.project_id), slug: String(item.slug), title: String(item.title) }, nodeId: String(item.node_id), blockId: String(item.block_id), originCommitId: String(item.origin_commit_id), lastTouchCommitId: String(item.last_touch_commit_id), reviewerUserId: item.reviewer_user_id ? String(item.reviewer_user_id) : null, mergeRequestId: item.merge_request_id ? String(item.merge_request_id) : null, createdAt: iso(item.created_at) })),
+      activity: Array.from(activityByDay.values()),
     };
   }
 
