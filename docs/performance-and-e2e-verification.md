@@ -54,6 +54,7 @@ pnpm exec node scripts/platform-e2e.mjs
 | `E2E-PROJECT-001` | 项目详情与文件树 | 文件点击选中、修改申请 Tab 可打开 |
 | `E2E-PROJECT-002` | 文件筛选与分享 | 文件树过滤、分享成功/失败状态 |
 | `E2E-PROJECT-004` | 活动时间线 | 历史 Tab、活动加载/错误状态与返回内容 |
+| `E2E-PROJECT-005` | 公开导出 | 导出按钮加载/下载与错误状态 |
 | `E2E-ASSISTANT-001` | 助手输入交互 | `@` 文件候选、附件拖放/移除、新对话反馈 |
 | `E2E-ASSISTANT-002` | 历史会话入口 | 历史 Sheet 打开，匿名登录提示可见 |
 | `E2E-AUTHOR-001` | 作者主页与关注入口 | 项目卡作者跳转、主页项目回链、匿名关注状态和登录门槛 |
@@ -67,7 +68,7 @@ pnpm exec node scripts/platform-e2e.mjs
 | 日期 | 环境 | 结果 |
 | --- | --- | --- |
 | 2026-09-02 | 本地开发服务 `http://127.0.0.1:3141` | `pnpm test:e2e:platform`：11/11 通过；包含首页搜索/全站搜索 API、排序、快捷键、项目详情、文件筛选、分享成功/失败反馈、讨论区、历史活动时间线、助手 `@`/拖放/历史、作者主页/关注入口和 390px 无溢出 |
-| 2026-09-02 | 香港 ECS `47.57.138.55` | 发布 `4fae6d9` 后通过 SSH 隧道直连真实 App/数据库，`pnpm test:e2e:platform`：11/11 通过；包含全站搜索 API、段落锚点入口、历史活动时间线、讨论区加载/匿名登录门槛、作者主页、Star、移动端；OSS 隔离对象真实 Put/Head/Delete 通过。迁移 `017_comment_anchors.sql`、`018_activity_events.sql`、`019_auth_governance.sql`、`020_comment_attachments.sql` 已应用。评论附件真实上传需登录并依赖 Bucket CORS，未在 E2E 中污染生产对象。ESA 返回 ICP/525，443 公网验收待人工切换后复跑 |
+| 2026-09-02 | 香港 ECS `47.57.138.55` | 发布 `4fae6d9` 后通过 SSH 隧道直连真实 App/数据库，`pnpm test:e2e:platform`：11/11 通过；包含全站搜索 API、段落锚点入口、历史活动时间线、讨论区加载/匿名登录门槛、作者主页、Star、移动端；OSS 隔离对象真实 Put/Head/Delete 通过。迁移 `017_comment_anchors.sql`、`018_activity_events.sql`、`019_auth_governance.sql`、`020_comment_attachments.sql` 已应用。评论附件真实上传需登录并依赖 Bucket CORS，未在 E2E 中污染生产对象。导出功能随后在 `6159548` 部署前完成本地 12/12，香港新版需复跑 12/12。ESA 返回 ICP/525，443 公网验收待人工切换后复跑 |
 | 2026-09-02 | 香港 ECS `47.57.138.55` | 迁移 `011/012/013/014/015` 成功；匿名阅读 API 200 + Cookie、匿名 Star GET 200、作者主页/关注 API 200、评论 GET 200、pgvector `available=false` 降级均已验证；`app/postgres/caddy` 健康 |
 
 本地 E2E 的剪贴板场景在无头浏览器中会触发权限错误，页面正确显示可读的 Alert；测试将“成功复制”或“权限错误提示”都视为该场景的可验证终态，避免把浏览器能力差异误判为无反馈。

@@ -19,7 +19,7 @@ Internet
 
 ## 1.1 实际部署记录（2026-09-02）
 
-本次香港迁移已更新到分支提交 `4fae6d9`，服务器目录为 `/srv/research-workbench`。以下为实际命令与运行结果，不包含任何密码、Key 或 Basic Auth 凭据：
+本次香港迁移已更新到分支提交 `6159548`，服务器目录为 `/srv/research-workbench`。以下为实际命令与运行结果，不包含任何密码、Key 或 Basic Auth 凭据：
 
 | 项目 | 实际结果 |
 | --- | --- |
@@ -64,7 +64,7 @@ GET /api/platform/projects/project-huice/comments（匿名） -> 200，返回公
 
 完整界面流程通过 SSH 隧道连接实际服务器 App 验收：浏览器写入资料后来源数立即更新，PostgreSQL FTS 与 Dense RRF 均返回真实状态（`lexical=postgres_fts`、`dense=completed`），AI 使用 `gemini-embedding-2-preview -> qwen3-rerank -> gpt-5.6-terra` 生成带来源回答。服务器 API 另行验证了版本从 1 保存到 2，以及旧版本写入被 `409 VERSION_CONFLICT` 拒绝。公网入口因 ESA ICP/源站证书链路尚未切换，不能把上述源站验收写成公网验收。
 
-发布 `4fae6d9` 后复跑 `scripts/platform-e2e.mjs` 共 `11/11` 通过，包含全站搜索 API、历史活动时间线和评论附件入口；同时查询 `GET /api/platform/search?q=慧策` 返回 PostgreSQL 公开项目结果，迁移记录包含 `016_artifact_source_index.sql`、`017_comment_anchors.sql`、`018_activity_events.sql`、`019_auth_governance.sql` 和 `020_comment_attachments.sql`。活动时间线接口返回真实 append-only 事件，身份状态接口明确报告未配置能力。评论图片/GIF 需登录并经私有 OSS/CORS 校验，未在 E2E 中写入生产对象。这仍是源站隧道验收，不代表 ESA 公网入口已解除 ICP/证书阻塞。
+发布 `6159548` 后复跑 `scripts/platform-e2e.mjs` 共 `12/12` 通过，包含全站搜索 API、历史活动时间线、评论附件入口和公开 Markdown 导出；同时查询 `GET /api/platform/search?q=慧策` 返回 PostgreSQL 公开项目结果，迁移记录包含 `016_artifact_source_index.sql`、`017_comment_anchors.sql`、`018_activity_events.sql`、`019_auth_governance.sql` 和 `020_comment_attachments.sql`。活动时间线接口返回真实 append-only 事件，身份状态接口明确报告未配置能力。评论图片/GIF 需登录并经私有 OSS/CORS 校验，未在 E2E 中写入生产对象。导出只读取公开投影。这仍是源站隧道验收，不代表 ESA 公网入口已解除 ICP/证书阻塞。
 
 应用 `3000` 和数据库 `5432` 均未向公网发布。解析 Worker 已通过 `ingestion` profile 实际构建、空队列运行并正常退出，未作为常驻服务启动。当前安全组仍需收尾：将 SSH `22` 从 `0.0.0.0/0` 限制为可信管理来源，并删除 Linux 实例不需要的 RDP `3389` 规则。
 
