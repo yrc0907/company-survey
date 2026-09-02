@@ -1,6 +1,9 @@
 # DOMAIN、APP_USERNAME 和 CADDY_BASIC_AUTH_HASH 来自 docker-compose 的服务器环境变量。
 # CADDY_BASIC_AUTH_HASH 必须是 `caddy hash-password` 生成的哈希，禁止填入明文密码。
 {$DOMAIN} {
+    # 源站证书由证书管理服务签发并通过服务器外部 Secret 目录挂载；ESA 边缘证书仍由 ESA 托管。
+    # 私钥不进入 Git，文件缺失时 Caddy 必须启动失败，避免降级成无证书的假 HTTPS。
+    tls /etc/caddy/certs/research.webyrc.com.pem /etc/caddy/certs/research.webyrc.com.key
     encode zstd gzip
 
     # 不返回版本信息，并为浏览器建立保守的默认安全边界。

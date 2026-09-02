@@ -17,6 +17,8 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 源站证书只在香港服务器上以 600 权限保存；仓库和镜像不包含证书/私钥。
+      - ./certs:/etc/caddy/certs:ro
       - caddy_data:/data
       - caddy_config:/config
     healthcheck:

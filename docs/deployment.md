@@ -155,6 +155,28 @@ docker compose ps
 
 首次启动由 Caddy 申请 HTTPS 证书。若 DNS 或安全组未准备好，Caddy 不能签发证书，必须先修正网络配置，不能改为长期裸露的 `IP:3000`。
 
+### 4.3 ESA 源站证书
+
+启用 ESA HTTPS/443 回源时，边缘证书和源站证书是两套证书。源站证书与私钥只放在香港 ECS 的外部目录：
+
+```text
+/srv/research-workbench/certs/research.webyrc.com.pem
+/srv/research-workbench/certs/research.webyrc.com.key
+```
+
+目录权限为 `700`，文件权限为 `600`；`certs/` 已加入 `.gitignore`，Compose 只读挂载到 Caddy。当前证书由证书管理服务签发，Caddy 使用显式 `tls` 文件配置，避免 ESA 代理阻断 ACME HTTP-01/TLS-ALPN-01 验证。ESA 的“源站证书校验”只有在源站证书链确认有效后才开启；“回源双向校验”需要额外 mTLS 客户端证书和 Caddy 校验配置，当前保持关闭。
+
+### 4.3 ESA 源站证书
+
+当域名启用 ESA 且使用 HTTPS/443 回源时，边缘证书和源站证书是两套不同证书。源站证书文件通过服务器外部目录提供：
+
+```text
+/srv/research-workbench/certs/research.webyrc.com.pem
+/srv/research-workbench/certs/research.webyrc.com.key
+```
+
+目录权限应为 `700`，文件权限应为 `600`；`certs/` 已加入 `.gitignore`，不会进入镜像或远端仓库。Compose 只读挂载该目录，Caddy 使用证书启动。证书更新时先安全替换文件，再执行 `docker compose restart caddy` 并检查证书有效期和公网 `525` 状态。ESA 的“源站证书校验”可在确认源站证书链完整后开启；“回源双向校验”需要额外的 mTLS 客户端证书和 Caddy 校验配置，当前保持关闭。
+
 ### 4.2 部署预检和健康检查
 
 在 Windows 本地或装有 PowerShell 的环境执行：

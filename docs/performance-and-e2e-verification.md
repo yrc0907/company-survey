@@ -14,6 +14,7 @@
 - 所有按钮使用统一 shadcn 风格反馈：pending 禁用、成功就地状态 + Toast、失败 Alert + 重试、权限阻断明确原因。
 - Reduced Motion 下关闭装饰动画，但保留加载和状态文本。
 - 视觉基调使用中性黑灰主色；绿色/黄色/红色仅用于成功、待核验和错误等语义状态，避免主色干扰数据扫描。
+- 文件树拖放兼容性：优先读取 `DataTransfer.files`，在 React/Chromium 合成事件返回空列表时回退 `items.getAsFile()`，仍交给登录、OSS 和分支权限链路处理。
 
 ### 1.2 后端
 

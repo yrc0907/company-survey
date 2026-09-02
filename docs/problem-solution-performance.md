@@ -84,6 +84,14 @@
 - **状态**：待人工控制台操作；仓库脚本不会自动切换 DNS/ESA/备案。
 - **性能影响**：切换期间公网不可用；源站容器和 SSH 隧道验收不受影响。
 
+## EDGE-ESA-002：边缘证书正常但源站 HTTPS 握手失败
+
+- **场景**：ESA 边缘证书已显示正常，回源协议为 HTTPS/443，但公网访问仍返回 `525 Origin SSL Handshake Error`。
+- **根因**：边缘证书只保护“用户 -> ESA”；香港 Caddy 没有可用的源站证书时，ESA 无法建立第二段 TLS。关闭“源站证书校验”只能跳过 CA 链检查，不能让无证书的端口完成 TLS；开启回源双向校验还会额外要求 mTLS 客户端证书。
+- **方案**：使用证书管理服务签发的 `research.webyrc.com` 源站证书和私钥，通过服务器外部 `certs/` 目录只读挂载到 Caddy 的 `tls` 配置；ESA 保持 HTTPS/443，源站证书校验在确认链完整后再开启，回源双向校验保持关闭。证书文件不进入 Git、镜像或日志。
+- **复验**：服务器内用 `openssl s_client -servername research.webyrc.com` 检查 CN/SAN/有效期，公网分别检查首页和 `/api/healthz` 不再返回 525；Caddy 配置校验和容器健康必须同时通过。
+- **性能影响**：TLS 握手仍由 ESA 和 Caddy 两端完成，应用请求不增加数据库或模型调用；证书由 Caddy 复用内存缓存，续期/替换只需重载 Caddy。
+
 ## OSS-E2E-001：临时对象元数据读取差异
 
 - **场景**：ECS RAM Role 对私有 OSS 隔离对象执行 PUT/HEAD/DELETE。

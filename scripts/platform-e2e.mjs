@@ -128,8 +128,12 @@ try {
   await check("E2E-MOBILE-001", async () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.reload({ waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: /慧策掌上先机/ }).waitFor();
     const metrics = await page.evaluate(() => ({ innerWidth: window.innerWidth, scrollWidth: document.documentElement.scrollWidth }));
     assert.ok(metrics.scrollWidth <= metrics.innerWidth, JSON.stringify(metrics));
+    await page.mouse.wheel(0, 1200);
+    await page.waitForTimeout(80);
+    assert.ok(await page.evaluate(() => window.scrollY > 0 || Array.from(document.querySelectorAll<HTMLElement>(".document-pane, .assistant-messages, .file-sidebar")).some((element) => element.scrollTop > 0)), "移动端页面应能实际滚动");
   });
 
   console.log(JSON.stringify({ baseUrl, checks }, null, 2));

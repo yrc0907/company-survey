@@ -112,8 +112,17 @@ export function ProjectFileTree({ nodes, activeNodeId, onActiveNodeChange, onCom
     });
   }
   const visibleNodes = filterNodes(nodes);
+  function readDroppedFiles(event: React.DragEvent<HTMLDivElement>): FileList | null {
+    if (event.dataTransfer.files.length > 0) return event.dataTransfer.files;
+    // 某些 Chromium/React 合成 drop 事件会暂时暴露空 files，但 items 仍保留 File 对象。
+    const files = Array.from(event.dataTransfer.items).map((item) => item.kind === "file" ? item.getAsFile() : null).filter((file): file is File => Boolean(file));
+    if (files.length === 0) return null;
+    const transfer = new DataTransfer();
+    files.forEach((file) => transfer.items.add(file));
+    return transfer.files;
+  }
   return (
-    <div className={dropActive ? "project-tree is-drop-target" : "project-tree"} onDragOver={(event) => { if (!onDropFiles) return; event.preventDefault(); setDropActive(true); }} onDragLeave={(event) => { if (event.currentTarget === event.target) setDropActive(false); }} onDrop={(event) => { if (!onDropFiles) return; event.preventDefault(); setDropActive(false); if (event.dataTransfer.files.length) onDropFiles(event.dataTransfer.files); }}>
+    <div className={dropActive ? "project-tree is-drop-target" : "project-tree"} onDragOver={(event) => { if (!onDropFiles) return; event.preventDefault(); setDropActive(true); }} onDragLeave={(event) => { if (event.currentTarget === event.target) setDropActive(false); }} onDrop={(event) => { if (!onDropFiles) return; event.preventDefault(); setDropActive(false); const files = readDroppedFiles(event); if (files) onDropFiles(files); }}>
       <div className="tree-heading"><span>文件</span><NewNodeMenu parent={null} onCommand={onCommand} /></div>
       {dropActive ? <div className="tree-drop-hint" role="status">松开以加入当前项目草稿</div> : null}
       <div className="tree-list">{visibleNodes.map((node) => <TreeNode key={node.id} node={node} depth={0} activeNodeId={activeNodeId} expanded={expanded} setExpanded={setExpanded} onActiveNodeChange={onActiveNodeChange} onCommand={onCommand} />)}{visibleNodes.length === 0 ? <p className="tree-empty">没有匹配文件</p> : null}</div>
