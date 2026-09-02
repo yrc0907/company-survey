@@ -45,4 +45,3 @@ export class PublicProjectGraphService {
     return { projectId: project.id, projectSlug: project.slug, graph: await this.graph.getPublicGraph(reportId), source: projectResult.source };
   }
 }
-
