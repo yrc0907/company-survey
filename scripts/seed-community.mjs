@@ -240,6 +240,10 @@ async function seedViews(tx, assignments) {
         await markSeed(tx, "project_view_daily", `${projectId}:${day}:${viewerKeyHash}`, "community_view_daily", { projectId, viewer, day });
       }
     }
+    // 用 project_reader 事实重算，避免脚本中断后 project_stats 只增加了一部分。
+    await tx`UPDATE project_stats ps SET unique_readers = (
+      SELECT COUNT(*) FROM project_reader pr WHERE pr.project_id = ps.project_id
+    ), updated_at = ${now} WHERE ps.project_id = ${projectId}`;
   }
 }
 
@@ -462,6 +466,10 @@ async function verifyBatch(tx) {
   if (result.activeUsers < 40 || result.activeUsers > 60) throw new Error(`社区用户数不在 40-60 范围：${result.activeUsers}`);
   if (result.publicProjects < 12) throw new Error(`首发公开项目不足 12 个：${result.publicProjects}`);
   if (result.duplicateStars !== 0 || result.duplicateFollows !== 0) throw new Error("关系唯一性校验失败");
+  if ((result.project_comment ?? 0) < 48) throw new Error(`项目评论/回复不足：${result.project_comment ?? 0}`);
+  if ((result.project_star ?? 0) < 72) throw new Error(`项目 Star 不足：${result.project_star ?? 0}`);
+  if ((result.author_follow ?? 0) < 100) throw new Error(`作者关注关系不足：${result.author_follow ?? 0}`);
+  if ((result.merge_request ?? 0) < 12 || (result.merge_review ?? 0) < 12) throw new Error("协作审核记录不足 12 项");
   return result;
 }
 
