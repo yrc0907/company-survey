@@ -90,6 +90,26 @@ function codeExpireMinutes(environment: Record<string, string | undefined>): num
   return Number.isInteger(value) && value >= 1 && value <= 30 ? value : 10;
 }
 
+function boundedInteger(environment: Record<string, string | undefined>, name: string, fallback: number, min: number, max: number): number {
+  const value = Number(environment[name] ?? fallback);
+  return Number.isInteger(value) && value >= min && value <= max ? value : fallback;
+}
+
+/** 将同一请求的目标、IP、设备限制组成一组，仓储保证任一维度拒绝时不部分消费。 */
+function rateLimitInputs(input: RequestVerificationInput, destinationHash: string, environment: Record<string, string | undefined>): Array<{ keyHash: string; windowSeconds: number; maxAttempts: number }> {
+  const windowSeconds = boundedInteger(environment, "AUTH_RATE_LIMIT_WINDOW_SECONDS", 3600, 60, 86_400);
+  const destinationMax = boundedInteger(environment, "AUTH_RATE_LIMIT_DESTINATION_MAX", 10, 1, 1000);
+  const ipMax = boundedInteger(environment, "AUTH_RATE_LIMIT_IP_MAX", 40, 1, 5000);
+  const deviceMax = boundedInteger(environment, "AUTH_RATE_LIMIT_DEVICE_MAX", 20, 1, 5000);
+  const values = [
+    { value: `destination:${input.channel}:${destinationHash}`, maxAttempts: destinationMax },
+    input.clientIp ? { value: `ip:${stableHash(input.clientIp)}`, maxAttempts: ipMax } : null,
+    input.deviceId ? { value: `device:${stableHash(input.deviceId)}`, maxAttempts: deviceMax } : null,
+  ].filter((value): value is { value: string; maxAttempts: number } => value !== null);
+  const pepper = secretFrom(environment);
+  return values.map((value) => ({ keyHash: hashValue(value.value, pepper), windowSeconds, maxAttempts: value.maxAttempts }));
+}
+
 function genericAcceptedReceipt(input: RequestVerificationInput, destination: string, environment: Record<string, string | undefined>): VerificationChallengeReceipt {
   const now = Date.now();
   const expiresAt = new Date(now + codeExpireMinutes(environment) * 60_000).toISOString();
@@ -123,15 +143,18 @@ export class VerificationService {
       if (!actorUserId) throw new ValidationError("绑定手机号需要登录");
       if (account && account.id !== actorUserId) throw new ValidationError("该手机号已绑定其他账户");
     }
-    if ((input.purpose === "email_login" || input.purpose === "password_reset" || input.purpose === "phone_login") && !account) {
-      // 登录/找回对未知目标保持统一响应，防止枚举账户；不发送也不创建挑战。
-      return genericAcceptedReceipt(input, destination, this.environment);
-    }
-
     await this.assertCaptcha(input, actorUserId);
     const destinationHash = hashValue(`${input.channel}:${destination}`, secretFrom(this.environment));
     const active = await this.dependencies.challenges.findLatestActive(destinationHash, input.purpose);
     if (active && Date.parse(active.resendAfter) > Date.now()) throw new VerificationRateLimitError();
+
+    const rateLimit = await this.dependencies.challenges.consumeRateLimits(rateLimitInputs(input, destinationHash, this.environment));
+    if (!rateLimit.allowed) throw new VerificationRateLimitError(`操作过于频繁，请在 ${rateLimit.retryAfterSeconds} 秒后再试`);
+
+    if ((input.purpose === "email_login" || input.purpose === "password_reset" || input.purpose === "phone_login") && !account) {
+      // 登录/找回对未知目标保持统一响应，防止枚举账户；仍经过图形验证和限流，但不发送、不创建挑战。
+      return genericAcceptedReceipt(input, destination, this.environment);
+    }
 
     const code = String(randomInt(100000, 1_000_000));
     const expiresAt = new Date(Date.now() + codeExpireMinutes(this.environment) * 60_000).toISOString();
@@ -145,7 +168,7 @@ export class VerificationService {
     try {
       const result = input.channel === "email"
         ? await this.sendEmail(input.purpose, destination, code)
-        : await this.sendSms(destination, code);
+        : await this.sendSms(destination, code, challenge.id);
       await this.dependencies.challenges.setProviderResult(challenge.id, { status: "sent", providerMessageId: result.providerMessageId });
     } catch (error) {
       await this.dependencies.challenges.setProviderResult(challenge.id, { status: "failed", failureCode: "PROVIDER_ERROR" });
@@ -193,8 +216,13 @@ export class VerificationService {
     const required = (this.environment.CAPTCHA_REQUIRED ?? "true").toLowerCase() !== "false";
     if (!required) return;
     if (!this.dependencies.captchaProvider || !input.captchaTicket) throw new VerificationProviderError("图形验证尚未配置或缺少验证票据");
-    if (!await this.dependencies.captchaProvider.verify({ ticket: input.captchaTicket, scene: `${input.channel}:${input.purpose}`, clientIp: input.clientIp, userId: actorUserId })) {
-      throw new VerificationRateLimitError("图形验证未通过，请重新验证");
+    try {
+      if (!await this.dependencies.captchaProvider.verify({ ticket: input.captchaTicket, scene: `${input.channel}:${input.purpose}`, clientIp: input.clientIp, userId: actorUserId })) {
+        throw new VerificationRateLimitError("图形验证未通过，请重新验证");
+      }
+    } catch (error) {
+      if (error instanceof VerificationRateLimitError) throw error;
+      throw new VerificationProviderError("图形验证服务暂时不可用");
     }
   }
 
@@ -209,8 +237,8 @@ export class VerificationService {
     });
   }
 
-  private async sendSms(destination: string, code: string): Promise<{ providerMessageId: string | null }> {
+  private async sendSms(destination: string, code: string, idempotencyKey: string): Promise<{ providerMessageId: string | null }> {
     if (!this.dependencies.smsProvider) throw new VerificationProviderError("短信 Provider 尚未配置");
-    return this.dependencies.smsProvider.send({ phoneE164: destination, code, codeExpireMinutes: codeExpireMinutes(this.environment) });
+    return this.dependencies.smsProvider.send({ phoneE164: destination, code, codeExpireMinutes: codeExpireMinutes(this.environment), idempotencyKey });
   }
 }

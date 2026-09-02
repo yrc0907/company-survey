@@ -2,6 +2,8 @@ export interface SmsMessage {
   phoneE164: string;
   code: string;
   codeExpireMinutes: number;
+  /** 挑战 UUID；供应商若支持幂等键可避免超时重试造成重复短信。 */
+  idempotencyKey?: string;
 }
 
 export interface SmsProvider {
@@ -45,37 +47,61 @@ export class AliyunSmsProvider implements SmsProvider {
   }
 
   public async send(message: SmsMessage): Promise<{ providerMessageId: string | null }> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    try {
-      const response = await fetch(this.endpoint, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-app-id": this.appId,
-          "x-app-key": this.appKey,
-          authorization: `Basic ${Buffer.from(`${this.appId}:${this.appKey}`).toString("base64")}`,
-        },
-        body: JSON.stringify({
-          phoneNumber: message.phoneE164,
-          code: message.code,
-          codeExpire: message.codeExpireMinutes,
-          schemeCode: this.schemeCode || undefined,
-          signName: this.signName || undefined,
-          templateCode: this.templateCode,
-        }),
-        signal: controller.signal,
-      });
-      const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
-      if (!response.ok || payload.success === false || payload.code && String(payload.code) !== "OK" && String(payload.code) !== "200") {
-        throw new Error(`短信 Provider 返回失败 (${response.status})`);
+    const body = JSON.stringify({
+      phoneNumber: message.phoneE164,
+      code: message.code,
+      codeExpire: message.codeExpireMinutes,
+      schemeCode: this.schemeCode || undefined,
+      signName: this.signName || undefined,
+      templateCode: this.templateCode,
+      idempotencyKey: message.idempotencyKey,
+    });
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+      try {
+        const response = await fetch(this.endpoint, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-app-id": this.appId,
+            "x-app-key": this.appKey,
+            ...(message.idempotencyKey ? { "x-idempotency-key": message.idempotencyKey } : {}),
+            authorization: `Basic ${Buffer.from(`${this.appId}:${this.appKey}`).toString("base64")}`,
+          },
+          body,
+          signal: controller.signal,
+        });
+        const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+        const statusCode = payload.code ?? payload.Code;
+        const success = payload.success === true || payload.Success === true || statusCode === undefined || ["OK", "200", "0", 200, 0].includes(statusCode as string | number);
+        if (!response.ok || payload.success === false || payload.Success === false || !success) {
+          lastError = new Error(`短信 Provider 返回失败 (${response.status})`);
+          (lastError as Error & { retryable?: boolean }).retryable = response.status === 429 || response.status >= 500;
+          if (attempt === 0 && (response.status === 429 || response.status >= 500)) {
+            const retryAfter = Number(response.headers.get("retry-after") ?? 0);
+            await new Promise((resolve) => setTimeout(resolve, Number.isFinite(retryAfter) ? Math.min(1000, Math.max(100, retryAfter * 1000)) : 250));
+            continue;
+          }
+          throw lastError;
+        }
+        const data = payload.data && typeof payload.data === "object" ? payload.data as Record<string, unknown> : {};
+        const providerMessageId = payload.messageId ?? payload.requestId ?? payload.MessageId ?? payload.RequestId ?? data.messageId ?? data.requestId;
+        return { providerMessageId: providerMessageId ? String(providerMessageId) : null };
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error("短信 Provider 请求失败");
+        const retryable = (lastError as Error & { retryable?: boolean }).retryable ?? true;
+        if (attempt === 0 && retryable) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          continue;
+        }
+        throw lastError;
+      } finally {
+        clearTimeout(timeout);
       }
-      const dataMessageId = payload.data && typeof payload.data === "object" ? (payload.data as Record<string, unknown>).messageId : null;
-      const providerMessageId = payload.messageId ?? payload.requestId ?? dataMessageId;
-      return { providerMessageId: providerMessageId ? String(providerMessageId) : null };
-    } finally {
-      clearTimeout(timeout);
     }
+    throw lastError ?? new Error("短信 Provider 请求失败");
   }
 }
 

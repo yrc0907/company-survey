@@ -44,9 +44,17 @@ ALIYUN_CAPTCHA_API_URL=<图形验证服务端校验端点>
 ALIYUN_CAPTCHA_APP_ID=<验证码方案 AppId>
 ALIYUN_CAPTCHA_APP_KEY=<验证码方案 AppKey>
 NEXT_PUBLIC_ALIYUN_CAPTCHA_SCENE_ID=<前端场景 ID>
+
+# PostgreSQL 兜底限流（生产高并发时可替换同一接口为 Redis）
+AUTH_RATE_LIMIT_WINDOW_SECONDS=3600
+AUTH_RATE_LIMIT_DESTINATION_MAX=10
+AUTH_RATE_LIMIT_IP_MAX=40
+AUTH_RATE_LIMIT_DEVICE_MAX=20
 ```
 
-阿里云短信认证服务的具体 API 端点和返回字段以当前控制台/SDK 文档为准，适配器不把 Provider 响应直接返回客户端。若 Provider 未配置，页面显示明确的“服务未配置”错误，不伪造发送成功。生产配置前应轮换曾在截图或聊天中出现过的密钥。
+阿里云短信认证服务的具体 API 端点和返回字段以当前控制台/SDK 文档为准，适配器不把 Provider 响应直接返回客户端；当前 HTTP 适配器兼容 `success/code/Code` 及常见消息 ID 字段，并对 429/5xx 或网络超时最多重试一次，使用挑战 UUID 作为幂等键。若 Provider 未配置，页面显示明确的“服务未配置”错误，不伪造发送成功。生产配置前应轮换曾在截图或聊天中出现过的密钥。
+
+迁移 `db/migrations/023_verification_rate_limits.sql` 建立 PostgreSQL 限流桶。服务端先完成图形验证，再用目标、IP、设备三维 HMAC key 原子消费一组桶；任一维度拒绝时整组不增加计数。清理任务可以按 `updated_at` 删除超过窗口的桶，不影响挑战历史。
 
 ## 邮箱 DNS
 
@@ -60,4 +68,5 @@ NEXT_PUBLIC_ALIYUN_CAPTCHA_SCENE_ID=<前端场景 ID>
 - 密码找回成功更新 Argon2id 哈希并解除旧锁定状态。
 - 错误、过期、重复验证码和图形验证失败均不会建立 Session。
 - Provider 超时、429、5xx 时记录失败状态，前端可回退密码登录。
+- 限流桶拒绝、Provider 重试和挑战状态更新均可审计；不会把验证码或密钥写入日志。
 - 不在测试、生产日志和 API 响应中输出验证码、密钥或完整目标地址。

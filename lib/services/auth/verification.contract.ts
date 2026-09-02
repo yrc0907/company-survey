@@ -53,6 +53,21 @@ async function run(): Promise<void> {
   const loginReceipt = await service.requestCode({ channel: "sms", purpose: "phone_login", destination: "+8613800138000", actor: null, captchaTicket: "ticket", clientIp: "127.0.0.1", deviceId: "device-2" });
   const logged = await service.verifyChallenge({ challengeId: loginReceipt.challengeId, destination: "+8613800138000", code: sms.lastCode });
   assert.equal(logged.account.id, account.id, "手机号验证码登录不能创建重复账户");
+
+  // 第五次输入仍允许正确验证码，只有第六次才应被错误次数上限拒绝。
+  const fifthAttempt = await service.requestCode({ channel: "email", purpose: "email_login", destination: account.email, actor: null, captchaTicket: "ticket", clientIp: "127.0.0.2", deviceId: "device-3" });
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await assert.rejects(service.verifyChallenge({ challengeId: fifthAttempt.challengeId, destination: account.email, code: "000000" }), /验证码无效/);
+  }
+  const fifthVerified = await service.verifyChallenge({ challengeId: fifthAttempt.challengeId, destination: account.email, code: email.lastCode });
+  assert.equal(fifthVerified.account.id, account.id, "第五次输入正确验证码仍应允许消费");
+
+  // 限流桶按目标维度计数，挑战消费后再次请求仍不得绕过窗口。
+  const limitedAccount = await new AccountService(accounts, argon2idPasswordHasher).register({ email: "limited@example.com", username: "limited", password: "securePass123" });
+  const limitedService = new VerificationService({ accounts, challenges, emailProvider: email, smsProvider: sms, captchaProvider: new PassCaptcha(), environment: { NODE_ENV: "test", NEXTAUTH_SECRET: "test-secret", CAPTCHA_REQUIRED: "true", AUTH_CODE_EXPIRE_MINUTES: "1", AUTH_RATE_LIMIT_DESTINATION_MAX: "1" } });
+  const limitedReceipt = await limitedService.requestCode({ channel: "email", purpose: "email_login", destination: limitedAccount.email, actor: null, captchaTicket: "ticket", clientIp: "127.0.0.3", deviceId: "device-4" });
+  await limitedService.verifyChallenge({ challengeId: limitedReceipt.challengeId, destination: limitedAccount.email, code: email.lastCode });
+  await assert.rejects(limitedService.requestCode({ channel: "email", purpose: "email_login", destination: limitedAccount.email, actor: null, captchaTicket: "ticket", clientIp: "127.0.0.3", deviceId: "device-4" }), /操作过于频繁/);
   console.log("verification contract: passed");
 }
 
