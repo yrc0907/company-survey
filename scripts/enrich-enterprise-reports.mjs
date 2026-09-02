@@ -65,7 +65,7 @@ function sectionContent(company, focus, section, snapshot, url) {
     "客户与场景": `围绕“${focus}”建立客户场景清单：目标组织、核心痛点、使用角色、上线前置条件、可量化结果和失败边界。官网摘要只能作为场景候选，客户案例需保留原文和发布日期。`,
     "政策关联": `可从数字化转型、人工智能+、数据治理、网络安全、降低物流成本或现代服务业等方向建立政策索引。政策契合度属于研究推断，必须分别引用政策原文和企业能力证据，不能写成政策背书。`,
     "风险与开放问题": `开放问题包括数据安全与跨境边界、合同与 SLA、供应商锁定、实施复杂度、价格透明度、客户迁移成本和 AI 输出责任。所有未取得独立证据的结论标记为 needs_verification。`,
-    "证据目录": `来源 1：${url}\n来源类型：企业官网公开页面\n内容哈希：${sha256(snapshot)}\n抓取时间：${now}\n\n快照原文保存在来源对象和 Chunk 中；后续年报、公告、白皮书、公开访谈和客户案例按同一格式追加，不覆盖本条记录。`,
+    "证据目录": `来源 1：${url}\n来源类型：企业官网公开页面\n内容哈希：${sha256(snapshot)}\n抓取时间：${now}\n\n快照原文（由页面解析得到，保留在 source/source_chunk）：\n${snapshot}\n\n后续年报、公告、白皮书、公开访谈和客户案例按同一格式追加，不覆盖本条记录。`,
   };
   return lead + (specific[section] ?? `${section}\n\n${boundary}`);
 }
@@ -80,15 +80,15 @@ async function enrichCompany(tx, [projectId, company, url, focus]) {
     WHERE p.id = ${projectId} AND p.visibility = 'public' AND p.status = 'published' LIMIT 1`;
   const project = projectRows[0];
   if (!project) return { status: "skipped", reason: "project_missing" };
-  const commitId = `${projectId}-official-dossier-v1`;
+  const commitId = `${projectId}-official-dossier-v2`;
   const existingCommit = await tx`SELECT id FROM knowledge_commit WHERE id = ${commitId} LIMIT 1`;
   if (existingCommit.length) return { status: "skipped", reason: "already_imported" };
   const snapshot = await fetchSnapshot(url);
   const contentHash = sha256(snapshot);
   const reportRows = await tx`SELECT r.id AS report_id FROM report r JOIN company c ON c.id = r.company_id WHERE c.name = ${company} LIMIT 1`;
   const reportId = reportRows[0]?.report_id ? String(reportRows[0].report_id) : null;
-  const sourceId = `${projectId}-official-dossier-v1`;
-  const sourceNodeId = `${projectId}-node-official-dossier-v1`;
+  const sourceId = `${projectId}-official-dossier-v2`;
+  const sourceNodeId = `${projectId}-node-official-dossier-v2`;
   const sourceTitle = `${company}官网公开资料快照`;
 
   await tx`INSERT INTO knowledge_commit (id, project_id, branch_id, parent_commit_id, author_user_id, message, ai_assisted, idempotency_key, idempotency_fingerprint, change_summary, created_at)
@@ -112,7 +112,7 @@ async function enrichCompany(tx, [projectId, company, url, focus]) {
     const rawName = String(row.name);
     const section = sectionNames.find((name) => rawName.includes(name)) ?? sectionNames[position % sectionNames.length];
     const text = sectionContent(company, focus, section, snapshot, url);
-    const revisionId = `${String(row.node_id)}-official-dossier-v1`;
+    const revisionId = `${String(row.node_id)}-official-dossier-v2`;
     const previousRows = await tx`SELECT id FROM document_revision WHERE project_id = ${projectId} AND node_id = ${String(row.node_id)} AND branch_id = ${String(project.branch_id)} ORDER BY created_at DESC LIMIT 1`;
     const previousId = previousRows[0]?.id ? String(previousRows[0].id) : null;
     await tx`INSERT INTO document_revision (id, project_id, node_id, branch_id, commit_id, previous_revision_id, content, content_text, content_hash, created_by_user_id, created_at)
