@@ -2,8 +2,13 @@
 
 import { Check, ChevronRight, CircleAlert, Clock3, Copy, FileDown, FilePlus2, History, Link2, Pencil, Plus, Save, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { Extension } from "@tiptap/react";
 import type { Citation, Report, ReportSection, SelectionContext, Source } from "./research-types";
 import { isReportSaveShortcut } from "@/lib/ui/report-editor-shortcuts";
+import { contentToTiptap, tiptapToMarkdown } from "@/lib/services/tiptap-document";
+import { createIndexedDbGuestDraftStore, type GuestDraftStore } from "@/lib/services/guest-draft-store";
 
 interface ReportEditorProps {
   report: Report | undefined;
@@ -17,7 +22,28 @@ interface ReportEditorProps {
   onSelectionAction: (context: SelectionContext) => void;
   onCreateReport: () => void;
   onAddTextSource: () => void;
+  /** 传入后启用游客 IndexedDB 草稿与自动保存；不传则维持服务器报告行为。 */
+  guestDraftId?: string;
+  baseRevision?: number;
+  guestDraftStore?: GuestDraftStore;
   onSave: (input: { title: string; expectedVersion: number; sections: Array<Pick<ReportSection, "id" | "parentSectionId" | "heading" | "anchor" | "level" | "position" | "content" | "evidenceState">> }) => Promise<void>;
+}
+
+const stableBlockId = Extension.create({
+  name: "stableBlockId",
+  addGlobalAttributes() {
+    return [{ types: ["paragraph", "heading", "blockquote", "codeBlock", "listItem"], attributes: { blockId: { default: null, parseHTML: (element) => element.getAttribute("data-block-id"), renderHTML: (attributes) => attributes.blockId ? { "data-block-id": attributes.blockId } : {} } } }];
+  },
+});
+
+function TipTapSection({ section, editing, onChange }: { section: ReportSection; editing: boolean; onChange: (content: string) => void }) {
+  const editor = useEditor({ extensions: [StarterKit, stableBlockId], content: contentToTiptap(section.content, section.id), editable: editing, immediatelyRender: false, onUpdate: ({ editor: current }) => onChange(tiptapToMarkdown(current.getJSON())) });
+  useEffect(() => { editor?.setEditable(editing); }, [editor, editing]);
+  // 只在章节切换时灌入外部内容；编辑过程中不能因父组件重渲染覆盖用户输入。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (editor && editor.isDestroyed) return; editor?.commands.setContent(contentToTiptap(section.content, section.id), { emitUpdate: false }); }, [editor, section.id]);
+  if (!editor) return <div className="section-content-placeholder" aria-busy="true">正在加载编辑器…</div>;
+  return <EditorContent editor={editor} className={editing ? "tiptap-section-editor is-editing" : "tiptap-section-editor"} aria-label={`${section.heading}正文`} />;
 }
 
 const statusCopy: Record<ReportSection["evidenceState"], string> = {
@@ -33,7 +59,7 @@ function contentParagraphs(content: string): string[] {
 }
 
 /** 报告区只将用户的显式编辑提交为版本写入；AI 提示不会自动覆盖正文。 */
-export function ReportEditor({ report, sections, citations, sources, activeSectionId, loading, persistence, onSectionChange, onSelectionAction, onCreateReport, onAddTextSource, onSave }: ReportEditorProps) {
+export function ReportEditor({ report, sections, citations, sources, activeSectionId, loading, persistence, onSectionChange, onSelectionAction, onCreateReport, onAddTextSource, onSave, guestDraftId, baseRevision, guestDraftStore: providedGuestDraftStore }: ReportEditorProps) {
   const [selection, setSelection] = useState<{ text: string; sectionId: string; top: number; left: number } | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftSections, setDraftSections] = useState<ReportSection[]>([]);
@@ -41,6 +67,9 @@ export function ReportEditor({ report, sections, citations, sources, activeSecti
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const articleRef = useRef<HTMLElement>(null);
+  const guestDraftStore = useMemo(() => providedGuestDraftStore ?? (typeof window !== "undefined" ? createIndexedDbGuestDraftStore() : undefined), [providedGuestDraftStore]);
+
+  const dirty = report ? draftTitle !== report.title || JSON.stringify(draftSections) !== JSON.stringify(sections) : false;
 
   useEffect(() => {
     setDraftTitle(report?.title ?? "");
@@ -51,7 +80,27 @@ export function ReportEditor({ report, sections, citations, sources, activeSecti
     setSelection(null);
   }, [report?.id, report?.currentVersion, report?.title, sections]);
 
-  const dirty = report ? draftTitle !== report.title || JSON.stringify(draftSections) !== JSON.stringify(sections) : false;
+  useEffect(() => {
+    if (!guestDraftId || !report || !guestDraftStore) return;
+    let cancelled = false;
+    void guestDraftStore.get(guestDraftId).then((draft) => {
+      if (!cancelled && draft && draft.reportId === report.id && draft.baseRevision <= (baseRevision ?? report.currentVersion)) {
+        setDraftTitle(draft.title);
+        setDraftSections(draft.sections);
+        setEditing(true);
+      }
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [baseRevision, guestDraftId, guestDraftStore, report]);
+
+  useEffect(() => {
+    if (!guestDraftId || !report || !guestDraftStore || !dirty) return;
+    const timer = window.setTimeout(() => {
+      void guestDraftStore.put({ id: guestDraftId, reportId: report.id, baseRevision: baseRevision ?? report.currentVersion, title: draftTitle, sections: draftSections, updatedAt: new Date().toISOString() }).catch(() => undefined);
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [baseRevision, dirty, draftSections, draftTitle, guestDraftId, guestDraftStore, report]);
+
   const sourceById = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources]);
   const canPersist = persistence === "postgres";
   const citationsBySection = useMemo(() => {
@@ -179,7 +228,7 @@ export function ReportEditor({ report, sections, citations, sources, activeSecti
               const sectionCitations = citationsBySection.get(section.id) ?? [];
               return <section id={`section-${section.id}`} data-section-id={section.id} key={section.id} className="report-section" onFocus={() => onSectionChange(section.id)} tabIndex={-1}>
                 <div className="section-heading-row"><div><span className="section-number">{String(index + 1).padStart(2, "0")}</span>{editing ? <input className="section-heading-input" value={section.heading} onChange={(event) => updateSection(section.id, { heading: event.target.value })} aria-label={`章节 ${index + 1} 标题`} /> : <h2>{section.heading}</h2>}</div><span className={`claim-status claim-status--${section.evidenceState}`}>{section.evidenceState === "conflict" ? <CircleAlert size={13} aria-hidden="true" /> : null}{statusCopy[section.evidenceState]}</span></div>
-                {editing ? <textarea className="section-content-input" value={section.content} onChange={(event) => updateSection(section.id, { content: event.target.value })} aria-label={`${section.heading}正文`} rows={Math.max(5, Math.min(16, section.content.split("\n").length + 3))} /> : contentParagraphs(section.content).map((paragraph, paragraphIndex) => <p key={paragraphIndex}>{paragraph}</p>)}
+                {editing ? <TipTapSection section={section} editing={editing} onChange={(content) => updateSection(section.id, { content })} /> : contentParagraphs(section.content).map((paragraph, paragraphIndex) => <p key={paragraphIndex}>{paragraph}</p>)}
                 {sectionCitations.length ? <div className="citation-line" aria-label={`${section.heading}的引用`}><span><Link2 size={14} aria-hidden="true" />证据</span>{sectionCitations.map((citation) => {
                   const source = sourceById.get(citation.sourceId);
                   return source?.url ? <a key={citation.id} href={source.url} target="_blank" rel="noreferrer" title={source.title}>{citation.id}</a> : <span className="citation-missing-url" key={citation.id} title={source?.title ?? "来源已缺失"}>{citation.id}</span>;

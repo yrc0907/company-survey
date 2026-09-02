@@ -2,8 +2,8 @@ import postgres, { type Sql, type TransactionSql } from "postgres";
 
 import { AccountConflictError } from "@/lib/domain/platform/errors";
 import { ValidationError } from "@/lib/domain/errors";
-import type { AuthorFollowState, KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PlatformRole, PublicAuthorRecord } from "@/lib/domain/platform";
-import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, ListPublicProjectActivityInput, PlatformRepository, PublicAuthorInput, PublicProjectActivityEvent, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, PublicSearchResult, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
+import type { AuthorFollowState, IdentityAuditRecord, KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PlatformRole, PublicAuthorRecord } from "@/lib/domain/platform";
+import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, ListPublicProjectActivityInput, PlatformRepository, PublicAuthorInput, PublicProjectActivityEvent, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, PublicSearchResult, RecordIdentityAuditInput, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
 
 type DatabaseRow = Record<string, unknown>;
 type Queryable = Sql | TransactionSql;
@@ -141,9 +141,49 @@ export class PostgresPlatformRepository implements PlatformRepository {
       if (!rows[0]) return null;
       return this.findAccountById(userId);
     } catch (error) {
-      if (isUniqueViolation(error)) throw new AccountConflictError("email", "该手机号已绑定其他账户");
+      if (isUniqueViolation(error)) throw new AccountConflictError("phone", "该手机号已绑定其他账户");
       throw error;
     }
+  }
+
+  public async changeVerifiedEmail(userId: string, email: string): Promise<PlatformAccount | null> {
+    try {
+      const rows = await this.sql<DatabaseRow[]>`UPDATE platform_user SET email = ${email.trim().toLowerCase()}, email_verified_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ${userId} AND status = 'active' RETURNING id`;
+      if (!rows[0]) return null;
+      return this.findAccountById(userId);
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new AccountConflictError("email", "该邮箱已绑定其他账户");
+      throw error;
+    }
+  }
+
+  public async recordIdentityAudit(input: RecordIdentityAuditInput): Promise<IdentityAuditRecord> {
+    const rows = await this.sql<DatabaseRow[]>`INSERT INTO platform_identity_audit
+      (id, user_id, actor_user_id, channel, action, outcome, previous_destination_hash, destination_hash,
+       previous_masked_destination, masked_destination, challenge_id, reason_code)
+      VALUES (${input.id}, ${input.userId}, ${input.actorUserId}, ${input.channel}, ${input.action}, ${input.outcome},
+        ${input.previousDestinationHash}, ${input.destinationHash}, ${input.previousMaskedDestination}, ${input.maskedDestination},
+        ${input.challengeId}, ${input.reasonCode}) RETURNING *`;
+    const row = rows[0]!;
+    return {
+      id: String(row.id), userId: String(row.user_id), actorUserId: row.actor_user_id ? String(row.actor_user_id) : null,
+      channel: row.channel as IdentityAuditRecord["channel"], action: row.action as IdentityAuditRecord["action"], outcome: row.outcome as IdentityAuditRecord["outcome"],
+      previousDestinationHash: row.previous_destination_hash ? String(row.previous_destination_hash) : null, destinationHash: String(row.destination_hash),
+      previousMaskedDestination: row.previous_masked_destination ? String(row.previous_masked_destination) : null, maskedDestination: String(row.masked_destination),
+      challengeId: row.challenge_id ? String(row.challenge_id) : null, reasonCode: row.reason_code ? String(row.reason_code) : null, createdAt: iso(row.created_at),
+    };
+  }
+
+  public async listIdentityAudit(userId: string, limit = 50): Promise<IdentityAuditRecord[]> {
+    const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+    const rows = await this.sql<DatabaseRow[]>`SELECT * FROM platform_identity_audit WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT ${safeLimit}`;
+    return rows.map((row) => ({
+      id: String(row.id), userId: String(row.user_id), actorUserId: row.actor_user_id ? String(row.actor_user_id) : null,
+      channel: row.channel as IdentityAuditRecord["channel"], action: row.action as IdentityAuditRecord["action"], outcome: row.outcome as IdentityAuditRecord["outcome"],
+      previousDestinationHash: row.previous_destination_hash ? String(row.previous_destination_hash) : null, destinationHash: String(row.destination_hash),
+      previousMaskedDestination: row.previous_masked_destination ? String(row.previous_masked_destination) : null, maskedDestination: String(row.masked_destination),
+      challengeId: row.challenge_id ? String(row.challenge_id) : null, reasonCode: row.reason_code ? String(row.reason_code) : null, createdAt: iso(row.created_at),
+    }));
   }
 
   public async setPasswordHash(userId: string, passwordHash: string): Promise<PlatformAccount | null> {

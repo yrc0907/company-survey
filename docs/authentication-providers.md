@@ -68,6 +68,8 @@ AUTH_RATE_LIMIT_DEVICE_MAX=20
 - 注册后发送邮箱验证，验证后 `email_verified_at` 只允许正向写入。
 - 已验证邮箱验证码登录成功建立同一 Auth.js Session。
 - 已验证手机号验证码登录不能创建重复用户。
+- 邮箱/手机号绑定与换绑写入追加式 `platform_identity_audit`；查询接口仅允许当前账户读取哈希、脱敏目标、挑战 ID、结果和时间，不返回目标原文。
+- `email_change` 只接受已登录 Session，目标邮箱若属于其他账户在发码前拒绝；手机号换绑同样 fail-closed，数据库唯一索引是最终边界。
 - 密码找回成功更新 Argon2id 哈希并解除旧锁定状态。
 - 错误、过期、重复验证码和图形验证失败均不会建立 Session。
 - Provider 超时、429、5xx 时记录失败状态，前端可回退密码登录。

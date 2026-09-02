@@ -53,7 +53,7 @@ export interface AuthenticatedActor {
 export type VerificationChannel = "email" | "sms";
 
 /** 验证码业务用途，服务端会按用途限制可执行动作。 */
-export type VerificationPurpose = "email_verification" | "email_login" | "password_reset" | "phone_login" | "phone_bind" | "phone_change";
+export type VerificationPurpose = "email_verification" | "email_login" | "password_reset" | "email_change" | "phone_login" | "phone_bind" | "phone_change";
 
 /** 验证码挑战的非敏感公开投影；绝不包含验证码明文或哈希。 */
 export interface VerificationChallengeReceipt {
@@ -63,4 +63,21 @@ export interface VerificationChallengeReceipt {
   maskedDestination: string;
   expiresAt: string;
   resendAfter: string;
+}
+
+/** 账户身份绑定审计；目标只保留哈希和脱敏值，不保存邮箱/手机号原文。 */
+export interface IdentityAuditRecord {
+  id: string;
+  userId: string;
+  actorUserId: string | null;
+  channel: VerificationChannel;
+  action: "verify" | "bind" | "change";
+  outcome: "success" | "conflict" | "rejected";
+  previousDestinationHash: string | null;
+  destinationHash: string;
+  previousMaskedDestination: string | null;
+  maskedDestination: string;
+  challengeId: string | null;
+  reasonCode: string | null;
+  createdAt: string;
 }

@@ -18,7 +18,7 @@ export async function POST(request: Request): Promise<Response> {
     const input = schema.parse(await request.json());
     const actor = await requireAuthenticatedActor();
     const result = await getVerificationService().verifyChallenge({ ...input, actorUserId: actor.userId });
-    if ((result.purpose === "email_verification" || result.purpose === "phone_bind" || result.purpose === "phone_change") && result.account.id !== actor.userId) {
+    if ((result.purpose === "email_verification" || result.purpose === "email_change" || result.purpose === "phone_bind" || result.purpose === "phone_change") && result.account.id !== actor.userId) {
       return json({ error: "不能验证其他账户的身份", code: "PERMISSION_DENIED" }, { status: 403 });
     }
     if (result.purpose === "email_login" || result.purpose === "phone_login") return json({ error: "登录验证码请通过登录接口提交", code: "INVALID_VERIFICATION_PURPOSE" }, { status: 400 });

@@ -50,16 +50,25 @@ async function run(): Promise<void> {
   const phoneAccount = await accounts.findAccountByPhone("+8613800138000");
   assert.equal(phoneAccount?.id, account.id, "手机号绑定后应落到同一用户");
 
+  const emailChange = await service.requestCode({ channel: "email", purpose: "email_change", destination: "member-new@example.com", actor, captchaTicket: "ticket", clientIp: "127.0.0.1", deviceId: "device-1" });
+  await service.verifyChallenge({ challengeId: emailChange.challengeId, destination: "member-new@example.com", code: email.lastCode, actorUserId: account.id });
+  assert.equal((await accounts.findAccountByEmail("member-new@example.com"))?.id, account.id, "邮箱换绑后应仍属于原账户");
+  const audits = await accounts.listIdentityAudit(account.id);
+  assert.ok(audits.some((entry) => entry.channel === "email" && entry.action === "change" && entry.outcome === "success"));
+
+  const other = await new AccountService(accounts, argon2idPasswordHasher).register({ email: "other@example.com", username: "other", password: "securePass123" });
+  await assert.rejects(service.requestCode({ channel: "email", purpose: "email_change", destination: other.email, actor, captchaTicket: "ticket", clientIp: "127.0.0.1", deviceId: "device-1" }), /已绑定其他账户/);
+
   const loginReceipt = await service.requestCode({ channel: "sms", purpose: "phone_login", destination: "+8613800138000", actor: null, captchaTicket: "ticket", clientIp: "127.0.0.1", deviceId: "device-2" });
   const logged = await service.verifyChallenge({ challengeId: loginReceipt.challengeId, destination: "+8613800138000", code: sms.lastCode });
   assert.equal(logged.account.id, account.id, "手机号验证码登录不能创建重复账户");
 
   // 第五次输入仍允许正确验证码，只有第六次才应被错误次数上限拒绝。
-  const fifthAttempt = await service.requestCode({ channel: "email", purpose: "email_login", destination: account.email, actor: null, captchaTicket: "ticket", clientIp: "127.0.0.2", deviceId: "device-3" });
+  const fifthAttempt = await service.requestCode({ channel: "email", purpose: "email_login", destination: "member-new@example.com", actor: null, captchaTicket: "ticket", clientIp: "127.0.0.2", deviceId: "device-3" });
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    await assert.rejects(service.verifyChallenge({ challengeId: fifthAttempt.challengeId, destination: account.email, code: "000000" }), /验证码无效/);
+    await assert.rejects(service.verifyChallenge({ challengeId: fifthAttempt.challengeId, destination: "member-new@example.com", code: "000000" }), /验证码无效/);
   }
-  const fifthVerified = await service.verifyChallenge({ challengeId: fifthAttempt.challengeId, destination: account.email, code: email.lastCode });
+  const fifthVerified = await service.verifyChallenge({ challengeId: fifthAttempt.challengeId, destination: "member-new@example.com", code: email.lastCode });
   assert.equal(fifthVerified.account.id, account.id, "第五次输入正确验证码仍应允许消费");
 
   // 限流桶按目标维度计数，挑战消费后再次请求仍不得绕过窗口。

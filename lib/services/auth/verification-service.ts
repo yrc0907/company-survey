@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 
 import type { AuthenticatedActor, PlatformAccount, VerificationChannel, VerificationPurpose, VerificationChallengeReceipt } from "@/lib/domain/platform";
-import { InvalidVerificationCodeError, VerificationProviderError, VerificationRateLimitError } from "@/lib/domain/platform";
+import { AccountConflictError, InvalidVerificationCodeError, VerificationProviderError, VerificationRateLimitError } from "@/lib/domain/platform";
 import { ValidationError } from "@/lib/domain/errors";
 import type { CaptchaProvider } from "@/lib/providers/auth/captcha-provider";
 import type { EmailProvider } from "@/lib/providers/auth/email-provider";
@@ -81,7 +81,7 @@ function secretFrom(environment: Record<string, string | undefined>): string {
 
 function purposeMatches(channel: VerificationChannel, purpose: VerificationPurpose): boolean {
   return channel === "email"
-    ? purpose === "email_verification" || purpose === "email_login" || purpose === "password_reset"
+    ? purpose === "email_verification" || purpose === "email_login" || purpose === "password_reset" || purpose === "email_change"
     : purpose === "phone_login" || purpose === "phone_bind" || purpose === "phone_change";
 }
 
@@ -138,6 +138,10 @@ export class VerificationService {
     if (input.purpose === "email_verification") {
       if (!actorUserId || !account || account.id !== actorUserId || account.email !== destination) throw new ValidationError("只能为当前账户验证邮箱");
       if (account.emailVerifiedAt) return genericAcceptedReceipt(input, destination, this.environment);
+    }
+    if (input.purpose === "email_change") {
+      if (!actorUserId) throw new ValidationError("换绑邮箱需要登录");
+      if (account && account.id !== actorUserId) throw new ValidationError("该邮箱已绑定其他账户");
     }
     if (input.purpose === "phone_bind" || input.purpose === "phone_change") {
       if (!actorUserId) throw new ValidationError("绑定手机号需要登录");
@@ -197,11 +201,39 @@ export class VerificationService {
 
     if (!challenge.userId) throw new InvalidVerificationCodeError();
     let account: PlatformAccount | null = null;
-    if (challenge.purpose === "email_verification") account = await this.dependencies.accounts.markEmailVerified(challenge.userId);
-    else if (challenge.purpose === "phone_bind" || challenge.purpose === "phone_change") account = await this.dependencies.accounts.bindVerifiedPhone(challenge.userId, destination);
-    else account = await this.dependencies.accounts.findAccountById(challenge.userId);
+    const before = await this.dependencies.accounts.findAccountById(challenge.userId);
+    try {
+      if (challenge.purpose === "email_verification") account = await this.dependencies.accounts.markEmailVerified(challenge.userId);
+      else if (challenge.purpose === "email_change") account = await this.dependencies.accounts.changeVerifiedEmail(challenge.userId, destination);
+      else if (challenge.purpose === "phone_bind" || challenge.purpose === "phone_change") account = await this.dependencies.accounts.bindVerifiedPhone(challenge.userId, destination);
+      else account = before;
+    } catch (error) {
+      if (error instanceof AccountConflictError) {
+        await this.writeIdentityAudit({ challenge, userId: challenge.userId, actorUserId: input.actorUserId ?? null, destination, outcome: "conflict", before, reasonCode: `ACCOUNT_CONFLICT_${error.field.toUpperCase()}` });
+      }
+      throw error;
+    }
     if (!account || account.status !== "active") throw new InvalidVerificationCodeError();
+    if (challenge.purpose === "email_verification" || challenge.purpose === "email_change" || challenge.purpose === "phone_bind" || challenge.purpose === "phone_change") {
+      await this.writeIdentityAudit({ challenge, userId: challenge.userId, actorUserId: input.actorUserId ?? null, destination, outcome: "success", before });
+    }
     return { purpose: challenge.purpose, account };
+  }
+
+  /** 审计写入失败不覆盖身份变更结果，但会在服务日志中保留可定位错误。 */
+  private async writeIdentityAudit(input: { challenge: { id: string; channel: VerificationChannel; purpose: VerificationPurpose; destinationHash: string; maskedDestination: string }; userId: string; actorUserId: string | null; destination: string; outcome: "success" | "conflict" | "rejected"; before: PlatformAccount | null; reasonCode?: string }): Promise<void> {
+    const secret = secretFrom(this.environment);
+    try {
+      await this.dependencies.accounts.recordIdentityAudit({
+        id: randomUUID(), userId: input.userId, actorUserId: input.actorUserId, channel: input.challenge.channel,
+        action: input.challenge.purpose === "email_verification" ? "verify" : input.before?.email && input.challenge.channel === "email" ? "change" : input.before?.phoneE164 ? "change" : "bind",
+        outcome: input.outcome, previousDestinationHash: input.before ? hashValue(`${input.challenge.channel}:${input.challenge.channel === "email" ? input.before.email : input.before.phoneE164 ?? ""}`, secret) : null,
+        destinationHash: input.challenge.destinationHash, previousMaskedDestination: input.before ? maskDestination(input.challenge.channel, input.challenge.channel === "email" ? input.before.email : input.before.phoneE164 ?? "") : null,
+        maskedDestination: input.challenge.maskedDestination, challengeId: input.challenge.id, reasonCode: input.reasonCode ?? null,
+      });
+    } catch (error) {
+      console.error("identity audit write failed", error instanceof Error ? error.message : "unknown error");
+    }
   }
 
   public async resetPassword(input: VerifyChallengeInput & { newPasswordHash: string }): Promise<PlatformAccount> {
@@ -229,7 +261,7 @@ export class VerificationService {
   private async sendEmail(purpose: VerificationPurpose, destination: string, code: string): Promise<{ providerMessageId: string | null }> {
     if (!this.dependencies.emailProvider) throw new VerificationProviderError("邮件 Provider 尚未配置");
     const minutes = codeExpireMinutes(this.environment);
-    const subject = purpose === "password_reset" ? "研见：重置密码验证码" : purpose === "email_verification" ? "研见：验证邮箱" : "研见：登录验证码";
+    const subject = purpose === "password_reset" ? "研见：重置密码验证码" : purpose === "email_verification" ? "研见：验证邮箱" : purpose === "email_change" ? "研见：换绑邮箱验证码" : "研见：登录验证码";
     return this.dependencies.emailProvider.send({
       to: destination, subject,
       text: `你的研见验证码是 ${code}，${minutes} 分钟内有效。请勿将验证码告知他人。`,

@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { AccountConflictError } from "@/lib/domain/platform/errors";
 import { ValidationError } from "@/lib/domain/errors";
-import type { AuthorFollowState, KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PublicAuthorRecord } from "@/lib/domain/platform";
-import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, ListPublicProjectActivityInput, PlatformRepository, PublicAuthorInput, PublicProjectActivityEvent, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, PublicSearchResult, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
+import type { AuthorFollowState, IdentityAuditRecord, KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PublicAuthorRecord } from "@/lib/domain/platform";
+import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, ListPublicProjectActivityInput, PlatformRepository, PublicAuthorInput, PublicProjectActivityEvent, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, PublicSearchResult, RecordIdentityAuditInput, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
 
 /** 契约测试使用的内存仓储；复制所有返回值，避免测试误改内部事实。 */
 export class MemoryPlatformRepository implements PlatformRepository {
@@ -17,6 +17,7 @@ export class MemoryPlatformRepository implements PlatformRepository {
   private readonly projectDailyViews = new Set<string>();
   private readonly projectStars = new Map<string, Map<string, boolean>>();
   private readonly authorFollows = new Map<string, Map<string, boolean>>();
+  private readonly identityAudits: IdentityAuditRecord[] = [];
 
   public async createPasswordAccount(record: CreatePasswordAccountRecord): Promise<PlatformAccount> {
     const email = record.account.email.toLowerCase();
@@ -65,6 +66,28 @@ export class MemoryPlatformRepository implements PlatformRepository {
     account.phoneVerifiedAt = new Date().toISOString();
     account.updatedAt = new Date().toISOString();
     return this.findAccountById(userId);
+  }
+
+  public async changeVerifiedEmail(userId: string, email: string): Promise<PlatformAccount | null> {
+    const existing = Array.from(this.accounts.values()).find((item) => item.email.toLowerCase() === email.toLowerCase() && item.id !== userId);
+    if (existing) throw new AccountConflictError("email", "该邮箱已绑定其他账户");
+    const account = this.accounts.get(userId);
+    if (!account || account.status !== "active") return null;
+    account.email = email.toLowerCase();
+    account.emailVerifiedAt = new Date().toISOString();
+    account.updatedAt = new Date().toISOString();
+    return this.findAccountById(userId);
+  }
+
+  public async recordIdentityAudit(input: RecordIdentityAuditInput): Promise<IdentityAuditRecord> {
+    const record: IdentityAuditRecord = { ...structuredClone(input), createdAt: new Date().toISOString() };
+    this.identityAudits.push(record);
+    return structuredClone(record);
+  }
+
+  public async listIdentityAudit(userId: string, limit = 50): Promise<IdentityAuditRecord[]> {
+    const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+    return structuredClone(this.identityAudits.filter((item) => item.userId === userId).slice(-safeLimit).reverse());
   }
 
   public async setPasswordHash(userId: string, passwordHash: string): Promise<PlatformAccount | null> {

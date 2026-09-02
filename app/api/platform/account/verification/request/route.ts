@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 const requestSchema = z.object({
   channel: z.enum(["email", "sms"]),
-  purpose: z.enum(["email_verification", "email_login", "password_reset", "phone_login", "phone_bind", "phone_change"]),
+  purpose: z.enum(["email_verification", "email_login", "password_reset", "email_change", "phone_login", "phone_bind", "phone_change"]),
   destination: z.string().trim().min(3).max(320),
   captchaTicket: z.string().trim().max(4096).nullable().optional(),
   deviceId: z.string().trim().max(256).nullable().optional(),

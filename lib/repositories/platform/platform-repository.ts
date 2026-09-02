@@ -7,6 +7,7 @@ import type {
   PlatformAccount,
   PublicAuthorRecord,
   AuthorFollowState,
+  IdentityAuditRecord,
 } from "@/lib/domain/platform";
 
 /** 公开项目所有者的最小资料；不包含邮箱、权限或任何私有字段。 */
@@ -159,6 +160,21 @@ export interface CreatePasswordAccountRecord {
   passwordHash: string;
 }
 
+export interface RecordIdentityAuditInput {
+  id: string;
+  userId: string;
+  actorUserId: string | null;
+  channel: "email" | "sms";
+  action: "verify" | "bind" | "change";
+  outcome: "success" | "conflict" | "rejected";
+  previousDestinationHash: string | null;
+  destinationHash: string;
+  previousMaskedDestination: string | null;
+  maskedDestination: string;
+  challengeId: string | null;
+  reasonCode: string | null;
+}
+
 /**
  * 开放平台数据访问边界。
  * 输入均为服务层规范化后的值，输出不泄漏任意 SQL；写入由实现保证事务性。
@@ -170,6 +186,9 @@ export interface PlatformRepository {
   findAccountByPhone(phoneE164: string): Promise<PlatformAccount | null>;
   markEmailVerified(userId: string): Promise<PlatformAccount | null>;
   bindVerifiedPhone(userId: string, phoneE164: string): Promise<PlatformAccount | null>;
+  changeVerifiedEmail(userId: string, email: string): Promise<PlatformAccount | null>;
+  recordIdentityAudit(input: RecordIdentityAuditInput): Promise<IdentityAuditRecord>;
+  listIdentityAudit(userId: string, limit?: number): Promise<IdentityAuditRecord[]>;
   setPasswordHash(userId: string, passwordHash: string): Promise<PlatformAccount | null>;
   findAccountById(userId: string): Promise<PlatformAccount | null>;
   findOrCreateOAuthAccount(input: OAuthIdentityInput): Promise<PlatformAccount>;

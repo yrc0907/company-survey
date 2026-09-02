@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS verification_challenge (
   id TEXT PRIMARY KEY,
   user_id TEXT NULL REFERENCES platform_user(id) ON DELETE CASCADE,
   channel TEXT NOT NULL CHECK (channel IN ('email', 'sms')),
-  purpose TEXT NOT NULL CHECK (purpose IN ('email_verification', 'email_login', 'password_reset', 'phone_login', 'phone_bind', 'phone_change')),
+  purpose TEXT NOT NULL CHECK (purpose IN ('email_verification', 'email_login', 'password_reset', 'email_change', 'phone_login', 'phone_bind', 'phone_change')),
   destination_hash TEXT NOT NULL,
   masked_destination TEXT NOT NULL,
   code_hash TEXT NOT NULL,

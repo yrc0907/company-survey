@@ -1,8 +1,8 @@
 /** 身份治理配置只读状态；不返回凭据、客户端密钥或邮件内容。 */
 export interface AuthGovernanceStatus {
   oauth: { github: "configured" | "not_configured" };
-  email: { verification: "configured" | "not_configured"; passwordReset: "configured" | "not_configured"; loginCode: "configured" | "not_configured" };
-  sms: { loginCode: "configured" | "not_configured"; bindPhone: "configured" | "not_configured" };
+  email: { verification: "configured" | "not_configured"; passwordReset: "configured" | "not_configured"; loginCode: "configured" | "not_configured"; change: "configured" | "not_configured" };
+  sms: { loginCode: "configured" | "not_configured"; bindPhone: "configured" | "not_configured"; changePhone: "configured" | "not_configured" };
   captcha: { configured: "configured" | "not_configured" };
   scenario_id: "AUTH-GOVERNANCE-001";
 }
@@ -17,8 +17,8 @@ export function getAuthGovernanceStatus(environment: Record<string, string | und
   const captchaConfigured = Boolean(environment.CAPTCHA_PROVIDER && environment.CAPTCHA_PROVIDER !== "disabled" && environment.ALIYUN_CAPTCHA_API_URL?.trim() && environment.ALIYUN_CAPTCHA_APP_ID?.trim() && environment.ALIYUN_CAPTCHA_APP_KEY?.trim());
   return {
     oauth: { github: githubConfigured ? "configured" : "not_configured" },
-    email: { verification: emailConfigured ? "configured" : "not_configured", passwordReset: emailConfigured ? "configured" : "not_configured", loginCode: emailConfigured ? "configured" : "not_configured" },
-    sms: { loginCode: smsConfigured ? "configured" : "not_configured", bindPhone: smsConfigured ? "configured" : "not_configured" },
+    email: { verification: emailConfigured ? "configured" : "not_configured", passwordReset: emailConfigured ? "configured" : "not_configured", loginCode: emailConfigured ? "configured" : "not_configured", change: emailConfigured ? "configured" : "not_configured" },
+    sms: { loginCode: smsConfigured ? "configured" : "not_configured", bindPhone: smsConfigured ? "configured" : "not_configured", changePhone: smsConfigured ? "configured" : "not_configured" },
     captcha: { configured: captchaConfigured ? "configured" : "not_configured" },
     scenario_id: "AUTH-GOVERNANCE-001",
   };
