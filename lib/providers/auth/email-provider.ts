@@ -32,7 +32,16 @@ export class SmtpEmailProvider implements EmailProvider {
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("SMTP_PORT 必须是合法端口");
     const secure = (environment.SMTP_SECURE ?? "true").toLowerCase() !== "false";
     const from = environment.EMAIL_FROM?.trim() || user;
-    return new SmtpEmailProvider(nodemailer.createTransport({ host, port, secure, auth: { user, pass: password } }), from);
+    const connectionTimeout = Number(environment.SMTP_CONNECTION_TIMEOUT_MS ?? 10_000);
+    const greetingTimeout = Number(environment.SMTP_GREETING_TIMEOUT_MS ?? 10_000);
+    const socketTimeout = Number(environment.SMTP_SOCKET_TIMEOUT_MS ?? 15_000);
+    const timeout = (value: number, fallback: number) => Number.isInteger(value) && value >= 1000 && value <= 120_000 ? value : fallback;
+    return new SmtpEmailProvider(nodemailer.createTransport({
+      host, port, secure, auth: { user, pass: password },
+      connectionTimeout: timeout(connectionTimeout, 10_000),
+      greetingTimeout: timeout(greetingTimeout, 10_000),
+      socketTimeout: timeout(socketTimeout, 15_000),
+    }), from);
   }
 
   public async send(message: EmailMessage): Promise<{ providerMessageId: string | null }> {
