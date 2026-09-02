@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { AccountConflictError } from "@/lib/domain/platform/errors";
 import { ValidationError } from "@/lib/domain/errors";
 import type { AuthorFollowState, KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PublicAuthorRecord } from "@/lib/domain/platform";
-import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicAuthorInput, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, PublicSearchResult, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
+import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, ListPublicProjectActivityInput, PlatformRepository, PublicAuthorInput, PublicProjectActivityEvent, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, PublicSearchResult, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
 
 /** 契约测试使用的内存仓储；复制所有返回值，避免测试误改内部事实。 */
 export class MemoryPlatformRepository implements PlatformRepository {
@@ -164,6 +164,12 @@ export class MemoryPlatformRepository implements PlatformRepository {
     const starCount = Array.from(stars.values()).filter(Boolean).length;
     this.publicProjects.set(project.id, structuredClone({ ...project, starCount }));
     return { projectId: project.id, starred: input.starred, starCount };
+  }
+
+  /** 内存仓储不伪造活动事件；真实时间线仅由 PostgreSQL 触发器产生。 */
+  public async listPublicProjectActivity(input: ListPublicProjectActivityInput): Promise<PublicProjectActivityEvent[] | null> {
+    const project = await this.getPublicProject(input.projectIdOrSlug);
+    return project ? [] : null;
   }
 
   /** 内存仓储复刻公开作者主页，供契约测试验证匿名读取边界。 */

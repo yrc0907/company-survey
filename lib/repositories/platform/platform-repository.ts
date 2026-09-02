@@ -106,6 +106,24 @@ export interface PublicProjectStarState {
   starCount: number;
 }
 
+/** 公开项目活动；来源是 PostgreSQL append-only activity_event，不携带私密正文。 */
+export interface PublicProjectActivityEvent {
+  id: string;
+  eventType: "project_created" | "commit_created" | "merge_request_opened" | "merge_request_merged" | "review_submitted" | "comment_created" | "project_starred" | "project_unstarred";
+  targetType: "project" | "commit" | "merge_request" | "review" | "comment" | "star";
+  targetId: string;
+  actor: PublicProjectOwnerRecord;
+  project: { id: string; slug: string; title: string };
+  metadata: Record<string, unknown>;
+  occurredAt: string;
+}
+
+export interface ListPublicProjectActivityInput {
+  projectIdOrSlug: string;
+  limit: number;
+  before?: string;
+}
+
 export interface SetPublicProjectStarInput {
   projectIdOrSlug: string;
   userId: string;
@@ -158,6 +176,7 @@ export interface PlatformRepository {
   getPublicProject(projectIdOrSlug: string): Promise<PublicProjectRecord | null>;
   recordPublicProjectView(input: RecordPublicProjectViewInput): Promise<PublicProjectViewResult | null>;
   getPublicProjectStarState(projectIdOrSlug: string, userId: string | null): Promise<PublicProjectStarState | null>;
+  listPublicProjectActivity(input: ListPublicProjectActivityInput): Promise<PublicProjectActivityEvent[] | null>;
   setPublicProjectStar(input: SetPublicProjectStarInput): Promise<PublicProjectStarState | null>;
   getPublicAuthor(input: PublicAuthorInput): Promise<PublicAuthorRecord | null>;
   getAuthorFollowState(input: PublicAuthorInput): Promise<AuthorFollowState | null>;

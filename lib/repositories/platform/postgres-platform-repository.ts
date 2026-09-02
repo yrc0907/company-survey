@@ -3,7 +3,7 @@ import postgres, { type Sql, type TransactionSql } from "postgres";
 import { AccountConflictError } from "@/lib/domain/platform/errors";
 import { ValidationError } from "@/lib/domain/errors";
 import type { AuthorFollowState, KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PlatformRole, PublicAuthorRecord } from "@/lib/domain/platform";
-import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, PlatformRepository, PublicAuthorInput, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, PublicSearchResult, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
+import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, ListPublicProjectActivityInput, PlatformRepository, PublicAuthorInput, PublicProjectActivityEvent, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, PublicSearchResult, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
 
 type DatabaseRow = Record<string, unknown>;
 type Queryable = Sql | TransactionSql;
@@ -383,6 +383,30 @@ export class PostgresPlatformRepository implements PlatformRepository {
       const row = rows[0];
       return { projectId, starred: Boolean(row?.starred), starCount: Number(row?.star_count ?? 0) };
     });
+  }
+
+  /** 公开项目活动时间线：先确认项目可见，再按事件时间分页读取，不泄漏私有正文。 */
+  public async listPublicProjectActivity(input: ListPublicProjectActivityInput): Promise<PublicProjectActivityEvent[] | null> {
+    const limit = Math.min(100, Math.max(1, Math.trunc(input.limit)));
+    const rows = await this.sql<DatabaseRow[]>`SELECT ae.id, ae.event_type, ae.target_type, ae.target_id, ae.metadata, ae.occurred_at,
+        p.id AS project_id, p.slug AS project_slug, p.title AS project_title,
+        u.id AS actor_id, pr.username AS actor_username, pr.display_name AS actor_display_name, pr.avatar_asset_id AS actor_avatar_asset_id
+      FROM activity_event ae
+      JOIN knowledge_project p ON p.id = ae.project_id AND p.visibility = 'public' AND p.status = 'published'
+      JOIN platform_user u ON u.id = ae.actor_user_id AND u.status = 'active'
+      JOIN platform_profile pr ON pr.user_id = u.id
+      WHERE (p.id = ${input.projectIdOrSlug} OR p.slug = ${input.projectIdOrSlug})
+        AND (${input.before ?? null}::timestamptz IS NULL OR ae.occurred_at < ${input.before ?? null}::timestamptz)
+      ORDER BY ae.occurred_at DESC, ae.id DESC LIMIT ${limit}`;
+    if (!rows.length) {
+      const project = await this.sql<DatabaseRow[]>`SELECT id FROM knowledge_project WHERE (id = ${input.projectIdOrSlug} OR slug = ${input.projectIdOrSlug}) AND visibility = 'public' AND status = 'published' LIMIT 1`;
+      return project[0] ? [] : null;
+    }
+    return rows.map((row) => ({
+      id: String(row.id), eventType: row.event_type as PublicProjectActivityEvent["eventType"], targetType: row.target_type as PublicProjectActivityEvent["targetType"], targetId: String(row.target_id),
+      actor: { id: String(row.actor_id), username: String(row.actor_username), displayName: String(row.actor_display_name), avatarAssetId: row.actor_avatar_asset_id == null ? null : String(row.actor_avatar_asset_id) },
+      project: { id: String(row.project_id), slug: String(row.project_slug), title: String(row.project_title) }, metadata: (row.metadata ?? {}) as Record<string, unknown>, occurredAt: iso(row.occurred_at),
+    }));
   }
 
   /** 读取作者主页；仅聚合 active/public 项目与关注关系，不返回邮箱或草稿。 */

@@ -203,3 +203,11 @@
 - **方案**：`/api/auth/status` 只读报告能力状态；GitHub 双凭据缺一即 `not_configured`，邮箱验证与找回密码固定 `not_configured`。迁移 019 预留仅存令牌哈希的短期表，当前不触发发送。
 - **复验**：`pnpm test:auth-governance` 覆盖缺失、半配置、完整配置及 `no-store` 响应；状态检查 O(1)。
 - **人工接管**：完成邮件 Provider、限流、回执、令牌消费和删除策略验收后，才可开放邮箱流程。
+
+## ACTIVITY-EVENT-001：活动时间线由页面拼接导致事实漂移
+
+- **场景**：项目评论、Star、Commit 或合并后，前端自行拼接活动记录；重复请求、取消 Star 或软删除评论会造成重复、缺失或虚构活动。
+- **根因**：没有统一的追加式事件事实源，统计投影不能替代行为历史。
+- **方案**：迁移 `018_activity_events.sql` 增加 `activity_event`，由 PostgreSQL 触发器从真实表追加事件；账本禁止更新/删除，公开 API 只按项目公开状态和操作者 active 状态过滤，并用时间游标分页。
+- **复验**：`public-activity.contract.ts` 覆盖 404、非法游标 400、无持久化时 409；生产数据库需验证评论、Star、Commit、MR/Review 各触发一次并检查 append-only 约束。
+- **性能影响**：每个行为写入增加一次轻量 JSONB 事件 INSERT；读取使用 `(project_id, occurred_at DESC, id DESC)` 部分索引和最多 100 条分页，避免扫描全库或从页面临时聚合。
