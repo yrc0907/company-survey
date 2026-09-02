@@ -300,6 +300,8 @@ V1 提供：
 
 Golden Set 覆盖偏好更新、事实 supersession、同名项目、无 Scope、跨项目攻击、长工具结果、多次压缩、损坏检查点、删除记忆、匿名转登录和旧对话搜索。
 
+当前已提供 `lib/services/memory/memory-evaluation-service.ts` 的确定性脱敏评测器与契约，先覆盖 Recall、Precision、Stale Injection、Compression Fact Retention、Resume Fidelity 和成本口径；生产标注集与跨设备真实 Resume 仍需接入后再报告真实准确率。
+
 ## 13. 分阶段实现
 
 V1：原始对话持久化、新建/历史/搜索、项目 Scope、最近窗口、结构化摘要检查点、上下文查看器、匿名 IndexedDB、登录迁移、用户删除。

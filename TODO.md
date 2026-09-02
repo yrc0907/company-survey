@@ -64,7 +64,7 @@
 - [~] 实现最近窗口、确定性 Tool Result 裁剪、结构化摘要检查点、工具配对保护、压缩失败回滚和连续失败熔断；自动触发策略仍待接入
 - [~] 建立 memory_item/version/source、候选确认、supersession、有效期、混合检索、时间加权和注入 token 上限；pgvector 持久化仍待实现
 - [~] 实现项目 Scope fail-closed、跨用户/项目/分支泄漏测试、记忆删除和敏感信息脱敏；删除清理任务仍待接入
-- [ ] 建立 Memory Recall/Precision、Stale Injection、Compression Fact Retention、Resume Fidelity 和成本 Golden Set
+- [x] 建立 Memory Recall/Precision、Stale Injection、Compression Fact Retention、Resume Fidelity 和成本 Golden Set（确定性脱敏夹具与契约已覆盖）
 
 ## 0. 项目与交付
 
