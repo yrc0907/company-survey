@@ -216,7 +216,7 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO report_section
   (id, report_id, parent_section_id, heading, anchor, level, position, content, evidence_state, updated_at)
-SELECT section_id, report_id, NULL, '公开摘要与证据边界', 'public-summary-evidence', 1, 1,
+SELECT section_id, report_id, NULL, '公开摘要与证据边界', 'public-summary-evidence', 1, 100,
   snapshot || E'\n\n该段仅记录官网公开表述；商业数据、客户规模和效果结论需要独立来源。', 'needs_verification', captured_at
 FROM _public_company_seed
 ON CONFLICT (id) DO NOTHING;
