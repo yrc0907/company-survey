@@ -19,7 +19,7 @@
 
 - [x] 完成开放知识平台产品、权限、版本、合并、署名和技术架构文档
 - [x] 完成 shadcn/ui 页面、组件、响应式、状态和动效规范文档
-- [~] Auth.js 邮箱/密码注册、登录和 Session/RBAC 校验已实现；GitHub OAuth、邮箱验证与找回密码待实现
+- [~] Auth.js 邮箱/密码注册、登录和 Session/RBAC 校验已实现；GitHub OAuth 可配置状态已公开，邮箱验证与找回密码仍待接入真实邮件 Provider
 - [~] Caddy 已只保护旧版 `/api/research/*`，公开读与平台写接口由应用会话/权限处理；完整公网身份治理仍待补齐
 - [ ] 建立用户、项目、成员、文件树、Branch、Commit、Revision、MR、Review、Attribution schema 与迁移
 - [~] 建立 `uploaded_asset`、`ingestion_job`、`project_view_daily`、`project_stats` schema 与聚合任务；公开阅读统计已通过 `project_reader` + `project_view_daily` + `project_stats` 同步幂等聚合，项目评论数已由 `project_comment` 实时聚合，点赞/关注统计仍待实现

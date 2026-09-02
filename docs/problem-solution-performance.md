@@ -195,3 +195,11 @@
 - **方案**：压缩前验证 call/result 同会话、call 为 assistant/system、result 为 tool；已结束调用必须有结果，未登记 tool 消息直接拒绝。PostgreSQL 迁移 009 增加触发器和 InMemory 同接口校验。
 - **复验**：工具边界契约和数据库迁移在隔离环境执行；不闭合范围返回明确 ValidationError。
 - **性能影响**：每次压缩线性扫描当前会话消息和工具事件；不读取其他会话。
+
+## AUTH-GOVERNANCE-001：身份治理能力未配置时的误导
+
+- **场景**：OAuth 仅配置一半，或用户看到邮箱验证/找回密码入口后误以为邮件会发送。
+- **根因**：Auth.js 管理会话与 OAuth 协议，但邮件 Provider、令牌消费和回执尚未接入。
+- **方案**：`/api/auth/status` 只读报告能力状态；GitHub 双凭据缺一即 `not_configured`，邮箱验证与找回密码固定 `not_configured`。迁移 019 预留仅存令牌哈希的短期表，当前不触发发送。
+- **复验**：`pnpm test:auth-governance` 覆盖缺失、半配置、完整配置及 `no-store` 响应；状态检查 O(1)。
+- **人工接管**：完成邮件 Provider、限流、回执、令牌消费和删除策略验收后，才可开放邮箱流程。
