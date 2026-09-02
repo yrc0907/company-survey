@@ -22,7 +22,7 @@ async function run(): Promise<void> {
   assert.equal(params.get("OutId"), "challenge-1");
   assert.ok(params.get("Signature"));
   assert.match(params.get("TemplateParam") ?? "", /123456/);
-  assert.ok(AliyunSmsProvider.fromEnvironment({ ALIYUN_SMS_ACCESS_KEY_ID: "id", ALIYUN_SMS_ACCESS_KEY_SECRET: "secret", ALIYUN_SMS_SCHEME_CODE: "scheme" }));
+  assert.ok(AliyunSmsProvider.fromEnvironment({ ALIYUN_SMS_ACCESS_KEY_ID: "id", ALIYUN_SMS_ACCESS_KEY_SECRET: "secret", ALIYUN_SMS_SCHEME_NAME: "research" }));
   assert.equal(AliyunSmsProvider.fromEnvironment({ ALIYUN_SMS_ACCESS_KEY_ID: "id", ALIYUN_SMS_ACCESS_KEY_SECRET: "secret" }), null);
   console.log("sms-provider contract: passed");
 }
