@@ -19,12 +19,12 @@ Internet
 
 ## 1.1 实际部署记录（2026-09-02）
 
-本次香港迁移已更新到分支提交 `6159548`，服务器目录为 `/srv/research-workbench`。以下为实际命令与运行结果，不包含任何密码、Key 或 Basic Auth 凭据：
+本次香港迁移已更新到分支提交 `2eb919e`，服务器目录为 `/srv/research-workbench`。以下为实际命令与运行结果，不包含任何密码、Key 或 Basic Auth 凭据：
 
 | 项目 | 实际结果 |
 | --- | --- |
 | 运行环境 | Ubuntu Linux、Docker `29.7.2`、Docker Compose `v5.5.0` |
-| 资源 | 扩容后 `4 vCPU / 8 GiB`（系统可见约 `7.1 GiB`）、已启用 `4 GiB` swap；根盘 `40 GiB`、约 `7.6 GiB` 可用 |
+| 资源 | 扩容后 `4 vCPU / 8 GiB`（系统可见约 `7.1 GiB`）、已启用 `4 GiB` swap；根盘 `100 GiB`（分区已在线扩展），约 `84 GiB` 可用 |
 | 构建 | 香港 ECS 上 `docker compose build app migrate` 成功完成 Next.js 生产构建 |
 | 容器 | `postgres`、`app`、`caddy` 三个容器均为 `healthy` |
 | 数据库 | 容器内 `/api/healthz` 返回 `200` 和 `persistence: "postgres"`；旧服务器备份已恢复，`project-huice` 存在，迁移表包含 `015_project_comments.sql` |
@@ -34,19 +34,18 @@ Internet
 
 ### 公网验收状态
 
-香港源站的 HTTP 直连（`--resolve research.webyrc.com:80:47.57.138.55`）返回 Caddy 的 `308`，容器和安全组端口正常。当前 ESA 代理仍处于启用状态，公网请求返回阿里云 `403 Non-compliance ICP Filing`；ESA 回源 HTTPS 在源站证书签发前返回 `525`，因此下列 HTTPS 公网验收尚未成立。必须先在 ESA 暂时关闭代理（DNS-only）或把回源协议临时改为 HTTP，让 Caddy 完成 ACME 证书申请；证书成功后再恢复 ESA HTTPS 回源，并重新执行验收。该切换属于高影响人工操作，不能由仓库脚本擅自完成。
+香港源站与 ESA 公网入口均已恢复：`https://research.webyrc.com/healthz` 和首页返回 `200`，容器和安全组端口正常。公网 E2E 已通过；后续仅需继续观察证书续期和带宽/磁盘告警。
 
 当前已验证结果：
 
 ```text
 HTTP /healthz              -> 308 redirect to HTTPS
 HTTP source /healthz       -> 308, Caddy source reachable
-ESA HTTP /healthz          -> 403, ICP compliance block
-ESA HTTPS /healthz         -> 525, origin certificate not ready
+ESA HTTPS /healthz         -> 200, 公网入口可访问
 App / PostgreSQL / Caddy   -> healthy inside ECS
 ```
 
-公开平台补充验收（通过 SSH 隧道直连源站容器/API 已完成；ESA 公网入口待切换后复跑）：
+公开平台补充验收（通过公网域名与源站容器/API 完成）：
 
 ```text
 GET /api/platform/projects（源站隧道）               -> 200，`project-huice` 可匿名读取
@@ -62,9 +61,9 @@ GET /api/platform/authors/yu-research/follow（匿名）   -> 200，返回公开
 GET /api/platform/projects/project-huice/comments（匿名） -> 200，返回公开评论列表
 ```
 
-完整界面流程通过 SSH 隧道连接实际服务器 App 验收：浏览器写入资料后来源数立即更新，PostgreSQL FTS 与 Dense RRF 均返回真实状态（`lexical=postgres_fts`、`dense=completed`），AI 使用 `gemini-embedding-2-preview -> qwen3-rerank -> gpt-5.6-terra` 生成带来源回答。服务器 API 另行验证了版本从 1 保存到 2，以及旧版本写入被 `409 VERSION_CONFLICT` 拒绝。公网入口因 ESA ICP/源站证书链路尚未切换，不能把上述源站验收写成公网验收。
+完整界面流程通过公网与源站 App 验收：公开项目、文件树、来源投影、搜索、评论匿名读取、作者主页、Star 和移动端均可访问；服务器 API 另行验证了版本冲突 `409 VERSION_CONFLICT`。AI/Embedding/Rerank 是否启用仍以服务器 `.env` 能力状态为准，不把未配置能力描述成成功。
 
-发布 `6159548` 后复跑 `scripts/platform-e2e.mjs` 共 `12/12` 通过，包含全站搜索 API、历史活动时间线、评论附件入口和公开 Markdown 导出；同时查询 `GET /api/platform/search?q=慧策` 返回 PostgreSQL 公开项目结果，迁移记录包含 `016_artifact_source_index.sql`、`017_comment_anchors.sql`、`018_activity_events.sql`、`019_auth_governance.sql` 和 `020_comment_attachments.sql`。活动时间线接口返回真实 append-only 事件，身份状态接口明确报告未配置能力。评论图片/GIF 需登录并经私有 OSS/CORS 校验，未在 E2E 中写入生产对象。导出只读取公开投影。这仍是源站隧道验收，不代表 ESA 公网入口已解除 ICP/证书阻塞。
+发布 `2eb919e` 后复跑 `scripts/platform-e2e.mjs` 共 `12/12` 通过，包含全站搜索 API、迁移后研究文件树、历史活动时间线、评论附件入口、公开 Markdown 导出和移动端滚动。活动时间线接口返回真实 append-only 事件；评论图片/GIF 需登录并经私有 OSS/CORS 校验，未在 E2E 中写入生产对象。导出只读取公开投影。
 
 应用 `3000` 和数据库 `5432` 均未向公网发布。解析 Worker 已通过 `ingestion` profile 实际构建、空队列运行并正常退出，未作为常驻服务启动。当前安全组仍需收尾：将 SSH `22` 从 `0.0.0.0/0` 限制为可信管理来源，并删除 Linux 实例不需要的 RDP `3389` 规则。
 
