@@ -376,10 +376,11 @@ async function seedMergeFlows(tx, assignments) {
     await markActivity(tx, reviewId, maintainer, "review_submitted");
     await createNotification(tx, `${reviewId}:reviewed`, contributor, maintainer, "merge_request_reviewed", projectId, "review", reviewId, { verdict: "approve" }, isoFor(projectIndex, 42));
 
-    await tx`INSERT INTO knowledge_commit (id, project_id, branch_id, parent_commit_id, author_user_id, message, ai_assisted, idempotency_key, idempotency_fingerprint, change_summary, created_at)
+    const mergedCommitRows = await tx`INSERT INTO knowledge_commit (id, project_id, branch_id, parent_commit_id, author_user_id, message, ai_assisted, idempotency_key, idempotency_fingerprint, change_summary, created_at)
       VALUES (${mergedCommitId}, ${projectId}, ${mainBranchId}, ${parentCommit}, ${maintainer}, '合并社区贡献：补充证据边界', FALSE,
         ${`${batch}:${mergedCommitId}`}, ${sha256(`${batch}:${mergedCommitId}`)}, ${JSON.stringify({ seed: true, merged: true, mergeRequestId })}::jsonb, ${isoFor(projectIndex, 43)})
-      ON CONFLICT (id) DO NOTHING`;
+      ON CONFLICT (id) DO NOTHING RETURNING id`;
+    const mergedCommitInserted = mergedCommitRows.length > 0;
     await markSeed(tx, "knowledge_commit", mergedCommitId, "community_merge_commit", { projectId, author: maintainer, mergeRequestId });
     await markActivity(tx, mergedCommitId, maintainer, "commit_created");
     await tx`INSERT INTO document_revision (id, project_id, node_id, branch_id, commit_id, previous_revision_id, content, content_text, content_hash, created_by_user_id, created_at)
@@ -399,7 +400,13 @@ async function seedMergeFlows(tx, assignments) {
       WHERE id = ${mergeRequestId} AND status <> 'merged'`;
     await markActivity(tx, mergeRequestId, maintainer, "merge_request_merged");
     await tx`UPDATE knowledge_branch SET status = 'merged', head_commit_id = ${sourceCommitId}, version = GREATEST(version, 1), updated_at = ${isoFor(projectIndex, 43)} WHERE id = ${sourceBranchId}`;
-    await tx`UPDATE knowledge_branch SET head_commit_id = ${mergedCommitId}, version = GREATEST(version, ${mainVersion + 1}), updated_at = ${isoFor(projectIndex, 43)} WHERE id = ${mainBranchId}`;
+    // 重跑时 merged Commit 已存在，不能再次递增乐观锁版本；COUNT(*) 同时覆盖
+    // “Commit 已写入但脚本在更新 branch 前中断”的恢复场景。
+    await tx`UPDATE knowledge_branch SET head_commit_id = ${mergedCommitId},
+      version = GREATEST(version, ${mainVersion + (mergedCommitInserted ? 1 : 0)},
+        (SELECT COUNT(*) FROM knowledge_commit WHERE branch_id = ${mainBranchId})),
+      updated_at = CASE WHEN ${mergedCommitInserted} THEN ${isoFor(projectIndex, 43)} ELSE updated_at END
+      WHERE id = ${mainBranchId}`;
     await createNotification(tx, `${mergeRequestId}:merged`, contributor, maintainer, "merge_request_merged", projectId, "merge_request", mergeRequestId, { mergedCommitId }, isoFor(projectIndex, 43));
   }
 }
