@@ -51,6 +51,7 @@
 - [~] 来源刷新与变更检测服务已实现安全 URL、DNS、超时、大小和哈希边界，并对变化生成 `needs_review` 新来源；HTTP 路由和定时任务仍待接入
 - [~] 首页列表式卡片展示 owner、published_at、main 最新合并、去重阅读、已合并贡献者、来源与 open MR；去重阅读已由真实 PostgreSQL 统计提供，作者主页、关注、项目级评论与段落锚点评论已完成，评论点赞仍待实现
 - [~] 项目 Star 已完成真实用户唯一关系、GET/POST/DELETE API 和详情页反馈；作者主页、关注关系与 GET/POST/DELETE API 已完成，项目评论已完成，段落评论/评论点赞等社交功能仍待实现
+- [ ] 站内消息提醒：铃铛未读数、通知列表、全部已读，以及评论回复、MR 审核/合并、被关注作者更新等通知的项目/评论/申请深链；第一版不接短信、邮箱或企微推送
 - [~] 匿名 AI 已接入签名 Cookie、访客/IP 双桶限流和明确 429；Redis 共享限流、额度计费和跨实例滥用防护仍待接入
 - [~] 私有 OSS 文件上传、头像魔数/EXIF 校验和资产隔离已实现；许可证、举报、下架审计和头像派生仍待接入
 - [~] 私有 Bucket `reaserch` 已创建，ECS 已绑定 `research-oss` 且 IMDSv2 临时凭据状态为 `Success`；OSS SDK、预签名读写、隔离对象删除、所有者边界和 ECS 临时对象 Put/Head/Delete 已验证，目标 Bucket CORS、浏览器直传权限 E2E 仍待接入；解析 Worker 已实现租约、重试、明确待校对降级和 ready 文本的 source/source_chunk 索引接口
