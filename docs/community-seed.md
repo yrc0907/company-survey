@@ -5,7 +5,7 @@
 ## 写入内容
 
 - 49 个跨城市、行业和角色的 `platform_user`/`platform_profile`。邮箱使用 `.invalid` 保留域名，不具备外部投递能力；头像留空，读取端显示稳定的首字母默认头像。
-- 12 个已有公开企业项目分配不同的场景 owner，并补充 maintainer/contributor 成员；原始 `u-yu` owner 会降为 maintainer，分配关系保存于 `community_seed_record`。
+- 13 个已有公开企业项目统一由 Yu 维护，并补充跨城市 maintainer/contributor 成员；社区用户只参与互动和贡献，分配关系保存于 `community_seed_record`。
 - 作者关注、项目 Star、按用户/日期去重阅读、项目级和锚点评论、两级回复、Commit、分支、Merge Request、Review、Merge、段落归因、站内通知。
 - `activity_daily` 由 `activity_event` 与 `project_view_daily` 重建，供作者/项目热力图读取；脚本不向前端写静态统计数字。
 
@@ -48,7 +48,7 @@ pnpm community-seed -- --clean
 
 验收至少检查：
 
-1. active 场景用户数量在 40-60 之间，12 个项目均为公开发布状态；
+1. active 场景用户数量在 40-60 之间，13 个项目均为公开发布状态；
 2. `project_reader`/`project_view_daily` 与 `project_stats.unique_readers` 一致；
 3. Star/关注的 `(user, target)` 唯一，评论父子关系和锚点项目一致；
 4. 每个 Merge Request 都能回跳 source branch、Commit、Review、merged Commit 与 attribution；

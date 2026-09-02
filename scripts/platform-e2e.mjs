@@ -204,8 +204,8 @@ try {
   });
 
   await check("E2E-AUTHOR-001", async () => {
-    await page.goto(`${baseUrl}/u/lin-zhixing`, { waitUntil: "domcontentloaded" });
-    await page.getByRole("heading", { name: "林知行" }).waitFor();
+    await page.goto(`${baseUrl}/u/yu-research`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Yu" }).waitFor();
     await page.getByRole("heading", { name: "公开项目" }).waitFor();
     await page.getByRole("button", { name: "关注" }).click();
     await page.getByRole("heading", { name: "登录开放知识平台" }).waitFor();
