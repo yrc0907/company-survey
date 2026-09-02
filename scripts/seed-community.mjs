@@ -125,6 +125,7 @@ function documentContent(text) {
   };
 }
 
+/** 建立跨城市/行业/角色的场景身份；不创建密码凭据，也不触发外部邮件。 */
 async function seedUsers(tx) {
   const createdAt = "2026-08-01T08:00:00.000Z";
   for (let index = 0; index < users.length; index += 1) {
@@ -142,6 +143,7 @@ async function seedUsers(tx) {
   }
 }
 
+/** 为公开项目分配场景 owner/maintainer/contributor；仅接管首发 u-yu，避免覆盖真实转移。 */
 async function seedProjectMembersAndOwners(tx) {
   const assignments = [];
   for (let projectIndex = 0; projectIndex < projects.length; projectIndex += 1) {
@@ -184,6 +186,7 @@ async function seedProjectMembersAndOwners(tx) {
   return assignments;
 }
 
+/** 为每个场景身份建立三条作者关注关系；主键保证重跑不重复。 */
 async function seedFollows(tx) {
   for (let index = 0; index < users.length; index += 1) {
     const follower = userId(index);
@@ -200,6 +203,7 @@ async function seedFollows(tx) {
   }
 }
 
+/** 写入每个公开项目的收藏关系；触发器会追加 project_starred 活动。 */
 async function seedStars(tx, assignments) {
   for (const { projectId, projectIndex, owner } of assignments) {
     let added = 0;
@@ -219,6 +223,7 @@ async function seedStars(tx, assignments) {
   }
 }
 
+/** 写入登录场景用户的按日阅读事实，并按 project_reader 重算去重统计。 */
 async function seedViews(tx, assignments) {
   for (const { projectId, projectIndex } of assignments) {
     await tx`INSERT INTO project_stats (project_id, unique_readers, updated_at)
@@ -247,6 +252,7 @@ async function seedViews(tx, assignments) {
   }
 }
 
+/** 写入项目级/锚点评论与两级回复，父子关系均指向同一项目。 */
 async function seedComments(tx, assignments) {
   for (const { projectId, projectIndex, owner } of assignments) {
     const nodeRows = await tx`SELECT id FROM knowledge_node WHERE project_id = ${projectId} AND kind IN ('document', 'markdown') ORDER BY id LIMIT 1`;
@@ -285,6 +291,7 @@ async function seedComments(tx, assignments) {
   }
 }
 
+/** 创建可深链的站内通知；recipient 永远来自服务端场景关系。 */
 async function createNotification(tx, id, recipient, actor, kind, projectId, targetType, targetId, payload, createdAt) {
   await tx`INSERT INTO platform_notification (id, recipient_user_id, actor_user_id, kind, project_id, target_type, target_id, payload, read_at, created_at)
     VALUES (${id}, ${recipient}, ${actor}, ${kind}, ${projectId}, ${targetType}, ${targetId}, ${JSON.stringify(payload)}::jsonb,
@@ -292,6 +299,7 @@ async function createNotification(tx, id, recipient, actor, kind, projectId, tar
   await markSeed(tx, "platform_notification", id, "community_notification", { recipient, actor, kind, targetType, targetId });
 }
 
+/** 模拟一次贡献分支 -> MR -> Review -> Merge，并写入不可变归因。 */
 async function seedMergeFlows(tx, assignments) {
   for (const { projectId, projectIndex, owner, maintainer, contributor } of assignments) {
     const branchRows = await tx`SELECT id, head_commit_id, version FROM knowledge_branch
@@ -383,6 +391,7 @@ async function seedMergeFlows(tx, assignments) {
   }
 }
 
+/** 从 append-only 活动和阅读事实重建作者/项目热力图日聚合。 */
 async function rebuildActivityDaily(tx) {
   await tx.unsafe(`
     WITH event_daily AS (
@@ -429,6 +438,7 @@ async function rebuildActivityDaily(tx) {
   for (const row of rows) await markSeed(tx, "activity_daily", String(row.id), "community_activity_daily", { actorUserId: row.actor_user_id, projectId: row.project_id, day: row.day, totalCount: row.total_count });
 }
 
+/** 退役可变场景关系；Commit/Review/activity_event 按 append-only 规则保留。 */
 async function cleanBatch(tx) {
   const records = await tx`SELECT entity_type, entity_id, payload FROM community_seed_record WHERE seed_batch = ${batch} AND retired_at IS NULL ORDER BY entity_type, entity_id`;
   const comments = records.filter((row) => String(row.entity_type) === "project_comment").map((row) => String(row.entity_id));
@@ -452,6 +462,7 @@ async function cleanBatch(tx) {
   await rebuildActivityDaily(tx);
 }
 
+/** 检查用户规模、项目数、关系唯一性和最低互动覆盖，失败即回滚事务。 */
 async function verifyBatch(tx) {
   const result = {};
   const rows = await tx`SELECT entity_type, COUNT(*)::int AS count FROM community_seed_record WHERE seed_batch = ${batch} AND retired_at IS NULL GROUP BY entity_type ORDER BY entity_type`;
