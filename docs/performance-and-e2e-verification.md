@@ -72,6 +72,9 @@ pnpm exec node scripts/platform-e2e.mjs
 | 2026-09-02 | 本地开发服务 `http://127.0.0.1:3141` | `pnpm test:e2e:platform`：11/11 通过；包含首页搜索/全站搜索 API、排序、快捷键、项目详情、文件筛选、分享成功/失败反馈、讨论区、历史活动时间线、助手 `@`/拖放/历史、作者主页/关注入口和 390px 无溢出 |
 | 2026-09-02 | 香港 ECS `47.57.138.55` | 发布 `2eb919e` 后通过公网域名 `https://research.webyrc.com` 运行 `pnpm test:e2e:platform`：12/12 通过；包含全站搜索 API、段落锚点入口、历史活动时间线、公开 Markdown 导出、讨论区加载/匿名登录门槛、作者主页、Star、移动端和迁移后研究文件树。迁移 `017_comment_anchors.sql`、`018_activity_events.sql`、`019_auth_governance.sql`、`020_comment_attachments.sql`、`025_public_research_file_tree.sql` 已应用。评论附件真实上传需登录并依赖 Bucket CORS，未在 E2E 中污染生产对象。公网 `/healthz` 与首页均返回 200 |
 | 2026-09-02 | 香港 ECS `47.57.138.55` | 迁移 `011/012/013/014/015` 成功；匿名阅读 API 200 + Cookie、匿名 Star GET 200、作者主页/关注 API 200、评论 GET 200、pgvector `available=false` 降级均已验证；`app/postgres/caddy` 健康 |
+| 2026-09-02 | 香港 ECS `47.57.138.55` | `028_community_seed_support.sql` 已应用；社区 seed 首次写入 49 个场景用户、12 个项目、72 评论、72 Star、147 关注、96 去重读者、768 日阅读、12 MR/Review/Merge、108 通知和 351 活动事件；第二次 `--check` 输出 `statsMismatch=0`、`mergedMergeRequests=12` |
+| 2026-09-02 | 香港 ECS `47.57.138.55` | 官方企业资料富化器成功追加 12 个项目的官网快照、内容哈希、source/source_chunk 和研究章节（首轮 11 个，Lark 备用公开入口重试成功）；旧 Revision 未覆盖，Commit/Revision/Change 可回滚 |
+| 2026-09-02 | 香港 ECS `47.57.138.55` | seed + 富化后公网 `pnpm test:e2e:platform`：12/12 通过；新增 GitHub 风格首页/搜索/作者页/项目统计/通知菜单的构建与公开导航验收 |
 
 本地 E2E 的剪贴板场景在无头浏览器中会触发权限错误，页面正确显示可读的 Alert；测试将“成功复制”或“权限错误提示”都视为该场景的可验证终态，避免把浏览器能力差异误判为无反馈。
 
