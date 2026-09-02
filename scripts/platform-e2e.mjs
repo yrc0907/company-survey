@@ -151,6 +151,11 @@ try {
   });
 
   await check("E2E-PROJECT-004", async () => {
+    await page.getByRole("button", { name: "关系图", exact: true }).click();
+    await page.getByRole("heading", { name: "研究关系图" }).waitFor();
+    await page.getByRole("textbox", { name: "搜索图中实体或来源" }).fill("慧策");
+    await page.getByText(/个实体/).first().waitFor();
+    await page.getByRole("button", { name: "内容", exact: true }).click();
     await page.getByRole("button", { name: "历史", exact: true }).click();
     await page.getByRole("heading", { name: "活动时间线" }).waitFor();
     await page.getByRole("button", { name: "刷新活动时间线" }).click();
