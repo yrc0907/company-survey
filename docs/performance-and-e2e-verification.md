@@ -57,6 +57,7 @@ pnpm exec node scripts/platform-e2e.mjs
 | `E2E-PROJECT-005` | 公开导出 | 导出按钮加载/下载与错误状态 |
 | `E2E-ASSISTANT-001` | 助手输入交互 | `@` 文件候选、附件拖放/移除、新对话反馈 |
 | `E2E-ASSISTANT-002` | 历史会话入口 | 历史 Sheet 打开，匿名登录提示可见 |
+| `EDITOR-KEYBOARD-001` | 报告编辑器保存快捷键 | 契约验证 `Ctrl/Cmd+S` 只在允许组合键命中；公开平台正文编辑器尚未挂载，暂不声称浏览器 E2E |
 | `E2E-AUTHOR-001` | 作者主页与关注入口 | 项目卡作者跳转、主页项目回链、匿名关注状态和登录门槛 |
 | `E2E-MOBILE-001` | 移动端 | 390px 视口无横向溢出 |
 | `E2E-OSS-001` | 香港 ECS 私有对象 | ECS RAM Role 签发临时 PUT URL；PUT 必须发送 `Content-Type` 与 `x-oss-meta-sha256`；服务端 `HeadObject` 读取 `result.meta.sha256`/原始 header、校验长度和哈希后执行 GET/DELETE；最后确认对象不可再读，日志不记录签名 URL 或凭据 |

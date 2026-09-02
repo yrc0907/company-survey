@@ -1,8 +1,9 @@
 "use client";
 
 import { Check, ChevronRight, CircleAlert, Clock3, Copy, FileDown, FilePlus2, History, Link2, Pencil, Plus, Save, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Citation, Report, ReportSection, SelectionContext, Source } from "./research-types";
+import { isReportSaveShortcut } from "@/lib/ui/report-editor-shortcuts";
 
 interface ReportEditorProps {
   report: Report | undefined;
@@ -91,7 +92,7 @@ export function ReportEditor({ report, sections, citations, sources, activeSecti
     setDraftSections((current) => current.map((section) => section.id === id ? { ...section, ...patch } : section));
   }
 
-  async function save() {
+  const save = useCallback(async () => {
     if (!report || !dirty || saving || !canPersist) return;
     setSaving(true);
     setSaveError("");
@@ -116,7 +117,18 @@ export function ReportEditor({ report, sections, citations, sources, activeSecti
     } finally {
       setSaving(false);
     }
-  }
+  }, [canPersist, dirty, draftSections, draftTitle, onSave, report, saving]);
+
+  useEffect(() => {
+    /** 只有真实 PostgreSQL 报告且存在人工修改时才阻止浏览器默认保存并调用 onSave。 */
+    function onKeyDown(event: KeyboardEvent): void {
+      if (!isReportSaveShortcut(event) || !report || !canPersist) return;
+      event.preventDefault();
+      if (dirty && !saving) void save();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [canPersist, dirty, report, save, saving]);
 
   if (loading) {
     return <main className="report-empty-state" aria-busy="true"><div className="empty-icon"><Clock3 size={22} aria-hidden="true" /></div><h1>正在加载研究工作区</h1><p>正在读取报告、来源和版本信息。</p></main>;
@@ -142,7 +154,7 @@ export function ReportEditor({ report, sections, citations, sources, activeSecti
           <button type="button" className="button button--quiet" onClick={onAddTextSource} disabled={!canPersist} title={canPersist ? "添加手动文本资料" : "连接 PostgreSQL 后可添加资料"}><FilePlus2 size={15} aria-hidden="true" />添加资料</button>
           <button type="button" className="button button--quiet" disabled title="导出将在后续版本提供"><FileDown size={15} aria-hidden="true" />导出</button>
           {!editing ? <button type="button" className="button button--quiet" onClick={() => setEditing(true)} disabled={!canPersist} title={canPersist ? "编辑报告" : "连接 PostgreSQL 后可编辑报告"}><Pencil size={15} aria-hidden="true" />编辑</button> : null}
-          <button type="button" className="button button--primary" onClick={save} disabled={!dirty || saving || !canPersist} title={canPersist ? "保存人工确认的版本" : "连接 PostgreSQL 后可保存版本"}><Save size={15} aria-hidden="true" />{saving ? "保存中…" : "保存版本"}</button>
+          <button type="button" className="button button--primary" onClick={save} disabled={!dirty || saving || !canPersist} aria-keyshortcuts="Control+S Meta+S" title={canPersist ? "保存人工确认的版本（Ctrl/Cmd+S）" : "连接 PostgreSQL 后可保存版本"}><Save size={15} aria-hidden="true" />{saving ? "保存中…" : "保存版本"}</button>
         </div>
       </header>
 

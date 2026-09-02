@@ -229,3 +229,12 @@
 - **方案**：附件必须先走既有上传意图、私有 OSS PUT、Head/大小/SHA-256 完成校验；评论服务只接受当前 Session 用户拥有、`verified`、图片/GIF MIME 且项目范围匹配的资产，关系落在 `project_comment_attachment`。读取时只对公开已发布项目签发短期 GET URL，数据库和 API 不暴露 `objectKey`；软删除评论同时隐藏附件。
 - **复验**：`project-comments.contract.ts` 覆盖登录绑定、匿名重新签名和无附件兼容；`pnpm typecheck`、`pnpm lint`、`pnpm test` 全部通过。生产还需用真实私有 Bucket 验证 CORS `ExposeHeader: ETag` 和过期 URL 返回 403。
 - **性能影响**：评论读取增加一次按评论 ID 的附件索引查询，并按附件数量（最多 4）签名；图片使用浏览器懒加载，避免把二进制内容经过应用服务器中转。
+
+## EDITOR-KEYBOARD-001：保存快捷键误触发浏览器保存或静默丢失修改
+
+- **场景**：用户在持久化报告编辑器中修改标题/章节后按 `Ctrl+S`（Windows/Linux）或 `Cmd+S`（macOS）；组合键带 `Shift`、`Alt` 或其他字母时不应保存。
+- **现象**：若没有统一判断，浏览器可能打开“保存网页”，或把带修饰键的其他快捷键误当成保存；若编辑器处于内存演示模式，也不能显示“已保存”的假状态。
+- **方案**：`isReportSaveShortcut` 只接受大小写不敏感的 `S` 加单一 `Ctrl/Cmd` 修饰键；`ReportEditor` 仅在存在真实报告且 `persistence=postgres` 时阻止浏览器默认行为，并复用按钮同一个 `onSave` 回调。无修改时只阻止浏览器默认保存，不产生版本；保存中的重复按键由既有 `saving` 门闩忽略。
+- **实现**：`lib/ui/report-editor-shortcuts.ts`、`components/report-editor.tsx`；保存按钮声明 `aria-keyshortcuts="Control+S Meta+S"`，不新增第二套写入路径。
+- **复验**：`lib/ui/report-editor-shortcuts.contract.ts` 覆盖 Windows/macOS、大小写、Shift/Alt/其他按键和无修饰键；`pnpm typecheck`、`pnpm lint`、`pnpm test` 全部通过。当前公开平台正文面板尚未挂载该编辑器，因此未把按键动作冒充为公开平台 E2E；待正文编辑 UI 接入后新增浏览器场景并验证版本递增/冲突反馈。
+- **性能影响**：仅在编辑器挂载期间注册一个 `keydown` 监听器，依赖状态变化时清理重建；快捷键直接复用已有保存事务，不增加 API 请求或正文扫描。

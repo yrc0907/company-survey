@@ -72,7 +72,7 @@
 - [x] 当前报告可打开“添加文本资料”对话框，粘贴标题和正文后刷新来源列表；内存演示模式明确禁用
 - [~] 保存会生成不可变 revision 且乐观锁拒绝冲突；没有 Diff、版本浏览、回滚 UI 或 API
 - [~] 设置、来源刷新；Markdown 导出已通过公开投影完成，PDF 导出仍待实现
-- [~] `Ctrl/Cmd+K`、窄屏 CSS 和 reduced-motion 已有；`Ctrl/Cmd+S`、键盘全流程和多视口验收尚未完成
+- [~] `Ctrl/Cmd+K`、窄屏 CSS 和 reduced-motion 已有；旧报告编辑器已接入真实 `Ctrl/Cmd+S -> onSave` 并有契约覆盖；公开平台正文仍是只读投影，键盘全流程和公开编辑器 E2E 待正文编辑 UI 挂载后验收
 
 ## 2. 数据与 API V1
 
