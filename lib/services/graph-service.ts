@@ -5,6 +5,9 @@ import { ValidationError } from "@/lib/domain/errors";
 /** GraphRAG-lite 的硬限制，防止“关系查询”变成无边界图遍历。 */
 const MAX_DEPTH = 2;
 const MAX_NODES = 12;
+/** 公开关系图的响应上限，避免用户可编辑关系增长后造成无界 JSON/布局压力。 */
+const MAX_PUBLIC_GRAPH_NODES = 200;
+const MAX_PUBLIC_GRAPH_EDGES = 400;
 
 /** 公开关系图中的节点投影；不返回 attributes，避免把未审核字段直接暴露到客户端。 */
 export interface PublicGraphNode {
@@ -71,9 +74,11 @@ export class GraphService {
   public projectPublicGraph(snapshot: WorkbenchSnapshot, reportId: string): PublicGraph {
     const normalizedReportId = reportId.trim();
     const sourceMap = new Map(snapshot.sources.filter((source) => source.reportId === normalizedReportId).map((source) => [source.id, source]));
-    const entities = snapshot.entities.filter((entity) => entity.reportId === normalizedReportId);
+    const allEntities = snapshot.entities.filter((entity) => entity.reportId === normalizedReportId);
+    const entities = allEntities.slice(0, MAX_PUBLIC_GRAPH_NODES);
     const entityMap = new Map(entities.map((entity) => [entity.id, entity]));
-    const edges = snapshot.edges.filter((edge) => edge.reportId === normalizedReportId && entityMap.has(edge.fromEntityId) && entityMap.has(edge.toEntityId));
+    const allEdges = snapshot.edges.filter((edge) => edge.reportId === normalizedReportId && entityMap.has(edge.fromEntityId) && entityMap.has(edge.toEntityId));
+    const edges = allEdges.slice(0, MAX_PUBLIC_GRAPH_EDGES);
     const toPublicEdge = (edge: RelationEdge): PublicGraphEdge => {
       const source = edge.sourceId ? sourceMap.get(edge.sourceId) : undefined;
       return {
@@ -90,6 +95,14 @@ export class GraphService {
         sourceId: entity.sourceId, sourceTitle: source?.title ?? null, sourceUrl: source?.url ?? null, sourceState: source?.state ?? null,
       };
     });
+    const baseNote = entities.length === 0
+      ? "该公开项目暂时没有可展示的关系实体；系统不会用模型猜测补齐关系。"
+      : publicEdges.length === 0
+        ? "当前关系边没有 active 来源；待核验候选已单独列出，不能作为正式事实引用。"
+        : "关系边仅来自当前报告的 active 来源；待核验候选不会参与事实连线。";
+    const note = allEntities.length > entities.length || allEdges.length > edges.length
+      ? `${baseNote} 关系图按公开展示上限截取（实体 ${MAX_PUBLIC_GRAPH_NODES}、关系 ${MAX_PUBLIC_GRAPH_EDGES}）；完整内容仍在报告数据中。`
+      : baseNote;
     return {
       reportId: normalizedReportId,
       nodes,
@@ -97,11 +110,7 @@ export class GraphService {
       pendingEdges,
       generatedAt: new Date().toISOString(),
       available: entities.length > 0,
-      note: entities.length === 0
-        ? "该公开项目暂时没有可展示的关系实体；系统不会用模型猜测补齐关系。"
-        : publicEdges.length === 0
-          ? "当前关系边没有 active 来源；待核验候选已单独列出，不能作为正式事实引用。"
-          : "关系边仅来自当前报告的 active 来源；待核验候选不会参与事实连线。",
+      note,
     };
   }
 
