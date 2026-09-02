@@ -3,7 +3,7 @@ import postgres, { type Sql, type TransactionSql } from "postgres";
 import { AccountConflictError } from "@/lib/domain/platform/errors";
 import { ValidationError } from "@/lib/domain/errors";
 import type { AuthorFollowState, IdentityAuditRecord, KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PlatformRole, PublicAuthorRecord } from "@/lib/domain/platform";
-import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, ListPublicProjectActivityInput, PlatformRepository, PublicAuthorInput, PublicProjectActivityEvent, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, PublicSearchResult, RecordIdentityAuditInput, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput } from "@/lib/repositories/platform/platform-repository";
+import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, ListPublicProjectActivityInput, PlatformRepository, PublicAuthorInput, PublicProjectActivityEvent, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, PublicSearchResult, RecordIdentityAuditInput, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput, PublicContributionRecord } from "@/lib/repositories/platform/platform-repository";
 
 type DatabaseRow = Record<string, unknown>;
 type Queryable = Sql | TransactionSql;
@@ -506,12 +506,21 @@ export class PostgresPlatformRepository implements PlatformRepository {
     const projects = await this.sql.unsafe<DatabaseRow[]>(`${PUBLIC_PROJECT_SELECT}
       WHERE p.owner_user_id = $1 AND p.visibility = 'public' AND p.status = 'published'
       ORDER BY p.updated_at DESC LIMIT 100`, [String(row.id)]);
+    const contributionRows = await this.sql<DatabaseRow[]>`SELECT ca.id, ca.node_id, ca.block_id, ca.origin_commit_id, ca.last_touch_commit_id,
+        ca.reviewer_user_id, ca.merge_request_id, ca.created_at, p.id AS project_id, p.slug, p.title
+      FROM content_attribution ca
+      JOIN knowledge_project p ON p.id = ca.project_id AND p.visibility = 'public' AND p.status = 'published'
+      JOIN platform_user contributor ON contributor.id = ca.contributor_user_id AND contributor.status = 'active'
+      JOIN platform_profile profile ON profile.user_id = contributor.id
+      WHERE LOWER(profile.username) = LOWER(${input.username}) AND ca.active = TRUE
+      ORDER BY ca.created_at DESC, ca.id DESC LIMIT 100`;
     return {
       id: String(row.id), username: String(row.username), displayName: String(row.display_name), bio: String(row.bio ?? ""),
       avatarAssetId: row.avatar_asset_id ? String(row.avatar_asset_id) : null, createdAt: iso(row.created_at),
       projectCount: Number(row.project_count ?? 0), followerCount: Number(row.follower_count ?? 0),
       followingCount: Number(row.following_count ?? 0), followedByCurrentUser: Boolean(row.followed_by_current_user),
       projects: projects.map(mapPublicProject),
+      contributions: contributionRows.map((item): PublicContributionRecord => ({ id: String(item.id), project: { id: String(item.project_id), slug: String(item.slug), title: String(item.title) }, nodeId: String(item.node_id), blockId: String(item.block_id), originCommitId: String(item.origin_commit_id), lastTouchCommitId: String(item.last_touch_commit_id), reviewerUserId: item.reviewer_user_id ? String(item.reviewer_user_id) : null, mergeRequestId: item.merge_request_id ? String(item.merge_request_id) : null, createdAt: iso(item.created_at) })),
     };
   }
 

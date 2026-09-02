@@ -23,6 +23,7 @@ interface AuthorProfileData {
   followingCount: number;
   followedByCurrentUser: boolean;
   projects: SeedProject[];
+  contributions: Array<{ id: string; project: { id: string; title: string }; blockId: string; nodeId: string; createdAt: string; mergeRequestId: string | null }>;
 }
 
 type RequestState = "loading" | "ready" | "error";
@@ -55,6 +56,13 @@ function adaptAuthor(value: unknown): AuthorProfileData | null {
     followingCount: number(source.followingCount),
     followedByCurrentUser: source.followedByCurrentUser === true,
     projects: adaptPublicProjects(source.projects),
+    contributions: Array.isArray(source.contributions) ? source.contributions.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const row = item as Record<string, unknown>; const project = row.project;
+      if (!project || typeof project !== "object") return [];
+      const p = project as Record<string, unknown>; if (typeof row.id !== "string" || typeof row.blockId !== "string" || typeof row.nodeId !== "string" || typeof p.id !== "string" || typeof p.title !== "string") return [];
+      return [{ id: row.id, blockId: row.blockId, nodeId: row.nodeId, createdAt: text(row.createdAt), mergeRequestId: typeof row.mergeRequestId === "string" ? row.mergeRequestId : null, project: { id: p.id, title: p.title } }];
+    }) : [],
   };
 }
 
@@ -164,6 +172,7 @@ export function AuthorProfile({ username }: { username: string }) {
             {feedback ? <p className={followState === "error" ? "author-feedback author-feedback--error" : "author-feedback"} role={followState === "error" ? "alert" : "status"}>{feedback}{followState === "error" ? <button type="button" onClick={() => void toggleFollow()}>重试</button> : null}</p> : null}
           </section>
           <section className="author-projects" aria-labelledby="author-projects-title"><div className="author-projects__heading"><div><h2 id="author-projects-title">公开项目</h2><p>作者维护或发布的公开研究，可直接进入项目详情。</p></div><span>{author.projects.length}</span></div>{author.projects.length ? <div className="author-projects__list">{author.projects.map((project) => <ProjectCard key={project.id} project={project} onOpen={openProject} />)}</div> : <div className="author-projects__empty"><FolderGit2 size={22} /><p>还没有公开项目。</p></div>}</section>
+          <section className="author-projects" aria-labelledby="author-contributions-title"><div className="author-projects__heading"><div><h2 id="author-contributions-title">段落贡献历史</h2><p>仅展示已合并到公开项目、仍处于 active 的真实归因。</p></div><span>{author.contributions.length}</span></div>{author.contributions.length ? <ol className="author-contribution-list">{author.contributions.map((item) => <li key={item.id}><strong>{item.project.title}</strong><span>Block {item.blockId}</span><time dateTime={item.createdAt}>{dateLabel(item.createdAt)}</time></li>)}</ol> : <div className="author-projects__empty"><BookOpen size={22} /><p>暂无公开段落贡献。</p></div>}</section>
         </main> : null}
       </div>
       <LoginGateDialog open={loginOpen} intent="login" onOpenChange={setLoginOpen} />

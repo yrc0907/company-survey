@@ -119,6 +119,19 @@ export interface PublicProjectActivityEvent {
   occurredAt: string;
 }
 
+/** 已合并公开版本中的段落归因；只返回可公开回溯的稳定 block。 */
+export interface PublicContributionRecord {
+  id: string;
+  project: { id: string; slug: string; title: string };
+  nodeId: string;
+  blockId: string;
+  originCommitId: string;
+  lastTouchCommitId: string;
+  reviewerUserId: string | null;
+  mergeRequestId: string | null;
+  createdAt: string;
+}
+
 export interface ListPublicProjectActivityInput {
   projectIdOrSlug: string;
   limit: number;

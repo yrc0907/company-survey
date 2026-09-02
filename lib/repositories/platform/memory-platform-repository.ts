@@ -245,9 +245,10 @@ export class MemoryPlatformRepository implements PlatformRepository {
     return {
       id: account.id, username: account.username, displayName: account.displayName, bio: "", avatarAssetId: account.avatarAssetId,
       createdAt: account.createdAt, projectCount: projects.length, followerCount, followingCount, followedByCurrentUser,
-      projects: structuredClone(projects.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))),
+      projects: structuredClone(projects.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))), contributions: [],
     };
   }
+
 
   /** 内存仓储复刻匿名可读、登录可识别的关注状态。 */
   public async getAuthorFollowState(input: PublicAuthorInput): Promise<AuthorFollowState | null> {
