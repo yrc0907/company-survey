@@ -60,6 +60,14 @@ pnpm exec tsx lib/services/platform/public-seed.contract.ts
 docker compose run --rm migrate
 ```
 
+本地 manifest 只读校验可运行：
+
+```bash
+pnpm public-seed:validate
+# 需要检查官网当前可达性时再运行（重定向或非 2xx 会标记 needs_review）
+pnpm public-seed:validate -- --check-network
+```
+
 部署 `025` 后可用以下只读查询复核结构数量（不会改写内容）：
 
 ```sql
