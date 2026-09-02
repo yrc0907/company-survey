@@ -16,7 +16,7 @@
 - 有界 GraphRAG-lite 查询：关系边必须来自 active 来源，深度与返回路径数受限；
 - Context Projection：选区只传选区，检索问题只传当前报告的精简证据和规则；
 - 模型未配置或请求失败时显式降级，不伪造回答；
-- Docker Compose、Caddy Basic Auth、HTTPS 配置和 2C2G 资源限制。
+- Docker Compose、Caddy Basic Auth、HTTPS 配置和香港 ECS 4C8G 资源限制。
 
 尚未实现或未验证：
 
@@ -32,7 +32,7 @@
 - 外部网页、PDF、图片和模型输出均是不可信输入，不能变成系统指令。
 - AI 不会直接写报告。用户确认的保存请求才会创建一个新的 `report_revision`。
 - `source_chunk_contextual_fts_idx` 为正文和上下文前缀建立 GIN 索引；迁移 `011_pgvector_optional.sql` 以动态 DDL 尝试安装 pgvector/向量列，标准镜像缺扩展时仍可完成。PostgreSQL 模式由仓储执行参数化 FTS 与向量查询，向量只接受 active 来源、报告/source 范围、模型/维度/版本和逐 Chunk 文本哈希匹配；能力缺失时 SearchService 保留确定性降级。`PGVECTOR_WRITE_ENABLED=true` 才允许受控批处理写入。
-- BGE-M3 是本机 GPU 的可选离线 embedding worker。线上 2C2G 服务器不运行任何本地模型，只存向量、查询数据库并调用外部 API。
+- BGE-M3 是本机 GPU 的可选离线 embedding worker。线上 4C8G 服务器不运行任何本地模型，只存向量、查询数据库并调用外部 API。
 
 ## 远程模型与检索配置
 

@@ -1,6 +1,6 @@
 # 个人服务器部署
 
-> 目标实例：Ubuntu 22.04、2 vCPU、2 GiB 内存、20 GiB SSD、100 Mbps 峰值带宽。本文只覆盖个人调研工作台，不部署本地大模型、OCR、Neo4j、Redis、RabbitMQ、Temporal、Kubernetes 或多 Agent。
+> 当前实例：Ubuntu 22.04、4 vCPU、8 GiB 内存、40 GiB SSD、100 Mbps 峰值带宽。本文只覆盖个人调研工作台，不部署本地大模型、OCR、Neo4j、Redis、RabbitMQ、Temporal、Kubernetes 或多 Agent。
 
 ## 1. 部署结构与资源边界
 
@@ -13,7 +13,7 @@ Internet
   -> 外部模型 / 搜索 Provider
 ```
 
-容器内存上限约为 Caddy `128 MiB`、应用 `640 MiB`、PostgreSQL `512 MiB`。这是给 2 GiB 实例留出的保守运行预算，不适合在服务器构建 Next 镜像、批量解析大文件或运行本地模型。
+容器内存上限约为 Caddy `128 MiB`、应用 `640 MiB`、PostgreSQL `512 MiB`。这是给 8 GiB 实例留出的保守运行预算；服务器仍不运行本地模型，批量解析应使用按需 Worker。
 
 `BGE-M3` 如需启用，只在有 GPU 的本地开发机离线生成 embedding；服务器只存储向量、执行过滤和查询。详细检索架构见 [retrieval-architecture.md](retrieval-architecture.md)。
 
@@ -24,7 +24,7 @@ Internet
 | 项目 | 实际结果 |
 | --- | --- |
 | 运行环境 | Ubuntu Linux、Docker `29.7.2`、Docker Compose `v5.5.0` |
-| 资源 | 约 `1.6 GiB` 内存、已启用 `1 GiB` swap；应用构建后根盘约 `31 GiB` 可用 |
+| 资源 | 扩容后 `4 vCPU / 8 GiB`（系统可见约 `7.1 GiB`）、已启用 `4 GiB` swap；根盘 `40 GiB`、约 `7.6 GiB` 可用 |
 | 构建 | 香港 ECS 上 `docker compose build app migrate` 成功完成 Next.js 生产构建 |
 | 容器 | `postgres`、`app`、`caddy` 三个容器均为 `healthy` |
 | 数据库 | 容器内 `/api/healthz` 返回 `200` 和 `persistence: "postgres"`；旧服务器备份已恢复，`project-huice` 存在，迁移表包含 `015_project_comments.sql` |
@@ -127,7 +127,7 @@ docker run --rm caddy:2.8.4-alpine caddy hash-password --plaintext 'choose-a-lon
 
 ### 4.1 优先本地或 CI 构建
 
-2 GiB 服务器上执行 `docker compose build` 容易在 Next.js 构建阶段耗尽内存。优先在本地或 CI 构建：
+即使当前扩容到 8 GiB，生产发布仍优先使用本地或 CI 构建；这样能缩短停机窗口并避免构建高峰与业务容器争抢资源：
 
 ```bash
 # 在已验证的本地工作区构建
@@ -200,7 +200,7 @@ docker compose logs --tail=100 app postgres caddy
 
 ### 5.1 磁盘、内存、流量
 
-20 GiB 磁盘是首要限制。每周至少检查：
+当前 40 GiB 磁盘仍是首要限制（已用约 80%）。每周至少检查：
 
 ```bash
 df -h /
@@ -212,7 +212,7 @@ docker compose ps
 - 为系统、容器、数据库和附件保留至少 `5 GiB` 可用磁盘；空间不足时先备份，再清理无用镜像与旧日志，**绝不执行会删除 named volume 的清理命令**。
 - 限制单文件上传大小，避免长期保存无关网页资源与重复附件；资料增多后优先扩容磁盘或单独挂载数据盘。
 - 在阿里云设置余额、月流量和带宽异常告警。`100 Mbps` 是峰值，不代表超额流量免费。
-- 观察 swap 持续使用、容器重启和 PostgreSQL 健康失败；持续 swap 表示应扩容到至少 2 vCPU / 4 GiB / 50 GiB，而不是增加本地模型。
+- 观察 swap 持续使用、容器重启和 PostgreSQL 健康失败；持续 swap 或磁盘超过 85% 时，应优先扩容到至少 80 GiB 磁盘，而不是增加本地模型。
 
 ### 5.2 更新
 
@@ -252,7 +252,7 @@ bash scripts/health-check.sh --env-file .env --url https://research.webyrc.com
 bash scripts/backup.sh --env-file .env --output-dir data/backups
 ```
 
-标准发布入口会在迁移前备份，迁移失败时停止，不会让新应用跑在旧 schema 上。2 GiB
+标准发布入口会在迁移前备份，迁移失败时停止，不会让新应用跑在旧 schema 上。当前 8 GiB
 实例默认使用本地/CI 预构建的不可变 `APP_IMAGE`；只有明确知道内存余量时才传 `--build`：
 
 ```bash

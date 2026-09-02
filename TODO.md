@@ -123,7 +123,7 @@
 - [x] 当前内存快照可执行关键词 + Dense RRF；PostgreSQL FTS 与可选 pgvector Dense 并行召回，向量 SQL 在报告/source/active/hash 范围内过滤，缺能力时确定性降级
 - [x] 接入 `qwen3-rerank`：`429`、超时或 `5xx` 时依次尝试 `Pro/BAAI/bge-reranker-v2-m3`、`BAAI/bge-reranker-v2-m3`；均失败时确定性跳过重排
 - [x] 检测本机 GPU、CUDA、显存和 BGE-M3 权重，创建 `device=auto`、CUDA fp16、CPU 离线回退、仅 loopback 的 Embedding Worker；当前缓存仅有 refs 指针，未加载权重
-- [ ] BGE-M3 只在本机 GPU 作为可选离线 Worker 运行；线上 2C2G 服务器绝不加载模型权重，只保存向量、查询 PostgreSQL/pgvector 并调用外部 API
+- [ ] BGE-M3 只在本机 GPU 作为可选离线 Worker 运行；线上 4C8G 服务器绝不加载模型权重，只保存向量、查询 PostgreSQL/pgvector 并调用外部 API
 - [ ] Golden Set：精确、中文政策、语义、多语言、关系、冲突、过期和无证据拒答案例
 - [ ] 记录 Recall@K、MRR/nDCG、Citation Coverage、Citation Correctness、Abstention、Embedding/Rerank/模型延迟和成本
 - [ ] 根据评测决定是否启用 BGE-M3 Sparse/Multi-Vector、Late Chunking、RAPTOR 或 ColBERT
@@ -131,7 +131,7 @@
 ## 5. 部署与运维
 
 - [x] Dockerfile、Compose、Caddy、PostgreSQL、命名卷、健康检查和部署预检脚本
-- [x] Compose 中为 2C2G 设置 Caddy/App/PostgreSQL 内存与 CPU 上限；文档提供 1 GiB swap 建议
+- [x] Compose 中为 4C8G 设置 Caddy/App/PostgreSQL 内存与 CPU 上限；服务器实测已启用 4 GiB swap
 - [~] 香港源站已解析并放行 `80/443`，Caddy 容器健康；ESA 代理当前返回 ICP 合规拦截，源站证书尚未完成，公网 `/healthz`、首页和 Basic Auth 入口需在 ESA 切换后复跑
 - [x] 服务器 `.env` 权限 `600`、轮换密码/Key 的运行时配置、模型/Embedding/Rerank 连通性、PostgreSQL seed 与 named-volume 持久化已验收
 - [~] 已加入 `scripts/backup.sh`（PostgreSQL + uploads 成对备份、SHA-256 清单）、`scripts/health-check.sh`（容器/私有端口/公网 HTTPS）和 `scripts/release.sh`（备份→迁移→发布→验收）；首次异机复制、恢复演练与告警仍需在香港 ECS 人工执行
