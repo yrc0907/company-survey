@@ -13,7 +13,7 @@ DECLARE
   structure_commit TEXT;
   research_folder TEXT;
   chapter RECORD;
-  node_id TEXT;
+  document_node_id TEXT;
   revision_id TEXT;
   previous_revision TEXT;
   chapter_position INTEGER;
@@ -94,25 +94,25 @@ BEGIN
       chapter_position := chapter_position + 1;
       -- 每个新文档没有同节点的历史版本；不要把前一个章节误当作 previous_revision。
       previous_revision := NULL;
-      node_id := project_row.id || '-doc-' || chapter.anchor;
-      revision_id := node_id || '-revision-v1';
+      document_node_id := project_row.id || '-doc-' || chapter.anchor;
+      revision_id := document_node_id || '-revision-v1';
       chapter_text := '状态：needs_verification。' || E'\n' || chapter.template_text || E'\n\n'
         || '本页由平台结构迁移创建；在真实来源导入并通过审核前，不构成事实或结论。';
 
       INSERT INTO knowledge_node (id, project_id, kind, created_by_user_id, created_at)
-      VALUES (node_id, project_row.id, 'document', 'u-yu', CURRENT_TIMESTAMP)
+      VALUES (document_node_id, project_row.id, 'document', 'u-yu', CURRENT_TIMESTAMP)
       ON CONFLICT (id) DO NOTHING;
 
       INSERT INTO knowledge_node_state
         (project_id, branch_id, node_id, parent_node_id, name, position, deleted_at, updated_at)
-      VALUES (project_row.id, branch_row.id, node_id, research_folder, chapter.name,
+      VALUES (project_row.id, branch_row.id, document_node_id, research_folder, chapter.name,
               chapter_position, NULL, CURRENT_TIMESTAMP)
       ON CONFLICT (branch_id, node_id) DO NOTHING;
 
       INSERT INTO document_revision
         (id, project_id, node_id, branch_id, commit_id, previous_revision_id,
          content, content_text, content_hash, created_by_user_id, created_at)
-      VALUES (revision_id, project_row.id, node_id, branch_row.id, structure_commit, previous_revision,
+      VALUES (revision_id, project_row.id, document_node_id, branch_row.id, structure_commit, previous_revision,
               jsonb_build_object(
                 'type', 'doc',
                 'content', jsonb_build_array(jsonb_build_object(
@@ -127,7 +127,7 @@ BEGIN
 
       INSERT INTO commit_change
         (id, commit_id, node_id, operation, before_revision_id, after_revision_id, metadata, position)
-      VALUES (structure_commit || ':create:' || node_id, structure_commit, node_id,
+      VALUES (structure_commit || ':create:' || document_node_id, structure_commit, document_node_id,
               'create_node', NULL, revision_id,
               jsonb_build_object('kind', 'document', 'name', chapter.name,
                 'evidenceState', 'needs_verification'), chapter_position)
@@ -136,8 +136,8 @@ BEGIN
       INSERT INTO content_attribution
         (id, project_id, node_id, block_id, origin_commit_id, last_touch_commit_id,
          contributor_user_id, reviewer_user_id, merge_request_id, active, created_at, updated_at)
-      VALUES (structure_commit || ':attribution:' || node_id, project_row.id, node_id,
-              node_id || ':block:1', structure_commit, structure_commit, 'u-yu', NULL, NULL,
+      VALUES (structure_commit || ':attribution:' || document_node_id, project_row.id, document_node_id,
+              document_node_id || ':block:1', structure_commit, structure_commit, 'u-yu', NULL, NULL,
               TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT DO NOTHING;
     END LOOP;
