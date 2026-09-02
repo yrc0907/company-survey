@@ -10,6 +10,7 @@
 - Object Key 固定在 `quarantine/{owner}/{uploadId}/{sha256}{extension}`，用户不能控制目录。
 - 扩展名和 MIME 必须同时命中白名单：Markdown、文本、PDF、DOCX、PNG、JPEG、WebP；单文件上限 25 MiB。
 - 默认头像由前端用户名首字符生成，不创建 OSS 对象。
+- 头像 Asset 在转正前执行 2 MiB 上限、MIME/文件签名一致性和 EXIF 拒绝校验；当前不做原地重写，带 EXIF 的对象进入失败并清理隔离对象。契约：`pnpm exec tsx lib/services/assets/avatar-validation.contract.ts`。
 
 ## API
 

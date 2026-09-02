@@ -9,6 +9,7 @@ import type { OssObjectStorageProvider } from "@/lib/providers/oss";
 import type { PlatformRepository } from "@/lib/repositories/platform/platform-repository";
 import { AuthorizationService } from "@/lib/services/platform/authorization-service";
 import type { AssetRepository } from "@/lib/repositories/assets/assets-repository";
+import { assertSafeAvatarBuffer } from "@/lib/services/assets/avatar-validation";
 
 const DEFAULT_QUOTA_BYTES = 500 * 1024 * 1024;
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -86,6 +87,15 @@ export class AssetService {
       // 校验失败的隔离对象没有证据价值，立即尝试回收；若 OSS 暂时不可用，DELETE 接口仍可安全重试。
       try { await this.oss.deleteObject(asset.objectKey); } catch (cleanupError) { console.error("OSS quarantine cleanup failed", { assetId, cleanupError }); }
       throw new AssetVerificationError();
+    }
+    if (asset.assetKind === "avatar") {
+      try {
+        assertSafeAvatarBuffer(await this.oss.readObject(asset.objectKey, 2 * 1024 * 1024), asset.mimeType, asset.expectedSize);
+      } catch (error) {
+        await this.assets.failAsset(assetId, ownerUserId, "AVATAR_METADATA_REJECTED", error instanceof ValidationError ? error.message : "头像内容无法安全校验");
+        try { await this.oss.deleteObject(asset.objectKey); } catch (cleanupError) { console.error("OSS avatar cleanup failed", { assetId, cleanupError }); }
+        throw error instanceof ValidationError ? error : new AssetVerificationError("头像内容无法安全校验");
+      }
     }
     return this.assets.completeVerification({ assetId, ownerUserId, etag: actualEtag, actualSize: head.contentLength, actualSha256 });
   }
