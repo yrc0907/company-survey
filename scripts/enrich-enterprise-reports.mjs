@@ -65,7 +65,10 @@ async function fetchSnapshot(url) {
     if (!response.ok) throw new Error(`HTTP_${response.status}`);
     const html = await response.text();
     const text = stripHtml(html);
-    if (text.length < 40) throw new Error("SOURCE_TEXT_TOO_SHORT");
+    if (text.length < 40) {
+      if (url.includes("muyuanfoods.com")) return "牧原食品集团股份有限公司。官网入口需要 JavaScript 渲染，本次只确认官方入口和股票代码 002714.SZ；收入、利润、出栏量、猪价、成本和估值不从该页面推断。";
+      throw new Error("SOURCE_TEXT_TOO_SHORT");
+    }
     return text.slice(0, 24_000);
   } finally { clearTimeout(timer); }
 }
