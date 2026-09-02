@@ -8,6 +8,7 @@ const listed = [
   ["project-sangfor", "深信服", "300454.SZ", "0.300454"],
   ["project-muyuan", "牧原食品", "002714.SZ", "0.002714"],
 ];
+const MARKET_VERSION = "v2";
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("DATABASE_URL 未配置");
@@ -76,17 +77,21 @@ async function refreshOne(tx, [projectId, company, code, secid]) {
   const financial = finance?.result?.data ?? [];
   const snapshot = JSON.stringify({ capturedAt, code, quote, trend, financial, source: { quoteUrl, klineUrl, financeUrl } });
   const hash = sha256(snapshot);
-  const commitId = `${projectId}-market-data-v1`;
+  const commitId = `${projectId}-market-data-${MARKET_VERSION}`;
   if ((await tx`SELECT id FROM knowledge_commit WHERE id=${commitId} LIMIT 1`).length) return { projectId, status: "skipped", reason: "already_imported" };
   const reportRows = await tx`SELECT r.id AS report_id FROM report r JOIN company c ON c.id=r.company_id WHERE c.name IN (${company}, ${company === "金蝶国际" ? "金蝶" : company}) LIMIT 1`;
   const reportId = reportRows[0]?.report_id ? String(reportRows[0].report_id) : null;
-  const sourceId = `${projectId}-market-data-v1`;
-  const sourceNodeId = `${projectId}-node-market-data-v1`;
-  const nodeId = `${projectId}-node-market-data-doc-v1`;
+  const sourceId = `${projectId}-market-data-${MARKET_VERSION}`;
+  const existingSourceNodes = await tx`SELECT ns.node_id FROM knowledge_node_state ns JOIN knowledge_node n ON n.id=ns.node_id
+    WHERE ns.project_id=${projectId} AND ns.branch_id=${String(project.branch_id)} AND n.kind='source' AND ns.name LIKE ${`${company}财报与行情快照%`} AND ns.deleted_at IS NULL ORDER BY ns.position DESC LIMIT 1`;
+  const sourceNodeId = existingSourceNodes[0]?.node_id ? String(existingSourceNodes[0].node_id) : `${projectId}-node-market-data-${MARKET_VERSION}`;
+  const existingDocNodes = await tx`SELECT ns.node_id FROM knowledge_node_state ns JOIN knowledge_node n ON n.id=ns.node_id
+    WHERE ns.project_id=${projectId} AND ns.branch_id=${String(project.branch_id)} AND n.kind='document' AND ns.name='财报与股价趋势' AND ns.deleted_at IS NULL LIMIT 1`;
+  const nodeId = existingDocNodes[0]?.node_id ? String(existingDocNodes[0].node_id) : `${projectId}-node-market-data-doc-${MARKET_VERSION}`;
   await tx`INSERT INTO knowledge_commit (id, project_id, branch_id, parent_commit_id, author_user_id, message, ai_assisted, idempotency_key, idempotency_fingerprint, change_summary, created_at)
-    VALUES (${commitId},${projectId},${String(project.branch_id)},${project.head_commit_id ? String(project.head_commit_id) : null},${String(project.owner_user_id)},${`导入${company}公开财报与行情快照`},FALSE,${`market-data:${projectId}:v1`},${hash},${JSON.stringify({ code, source: "eastmoney", evidenceState: "needs_verification" })}::jsonb,${capturedAt})`;
+    VALUES (${commitId},${projectId},${String(project.branch_id)},${project.head_commit_id ? String(project.head_commit_id) : null},${String(project.owner_user_id)},${`更新${company}公开财报与行情${MARKET_VERSION}`},FALSE,${`market-data:${projectId}:${MARKET_VERSION}`},${hash},${JSON.stringify({ code, source: "eastmoney", evidenceState: "needs_verification", marketVersion: MARKET_VERSION })}::jsonb,${capturedAt})`;
   await tx`INSERT INTO knowledge_node (id,project_id,kind,created_by_user_id,created_at) VALUES (${sourceNodeId},${projectId},'source',${String(project.owner_user_id)},${capturedAt}) ON CONFLICT (id) DO NOTHING`;
-  await tx`INSERT INTO knowledge_node_state (project_id,branch_id,node_id,parent_node_id,name,position,deleted_at,updated_at) VALUES (${projectId},${String(project.branch_id)},${sourceNodeId},NULL,${`${company}财报与行情快照`},50,NULL,${capturedAt}) ON CONFLICT (branch_id,node_id) DO NOTHING`;
+  await tx`INSERT INTO knowledge_node_state (project_id,branch_id,node_id,parent_node_id,name,position,deleted_at,updated_at) VALUES (${projectId},${String(project.branch_id)},${sourceNodeId},NULL,${`${company}财报与行情快照（${MARKET_VERSION}）`},50,NULL,${capturedAt}) ON CONFLICT (branch_id,node_id) DO NOTHING`;
   await tx`INSERT INTO knowledge_node (id,project_id,kind,created_by_user_id,created_at) VALUES (${nodeId},${projectId},'document',${String(project.owner_user_id)},${capturedAt}) ON CONFLICT (id) DO NOTHING`;
   await tx`INSERT INTO knowledge_node_state (project_id,branch_id,node_id,parent_node_id,name,position,deleted_at,updated_at) VALUES (${projectId},${String(project.branch_id)},${nodeId},NULL,'财报与股价趋势',51,NULL,${capturedAt}) ON CONFLICT (branch_id,node_id) DO NOTHING`;
   if (reportId) {
@@ -94,11 +99,14 @@ async function refreshOne(tx, [projectId, company, code, secid]) {
     await tx`INSERT INTO source_chunk (id,source_id,parent_section_id,heading_path,position,page,start_offset,end_offset,text,contextual_prefix,content_hash) VALUES (${`${sourceId}-chunk-1`},${sourceId},NULL,${["公开行情与财报",company]},1,NULL,0,${snapshot.length},${snapshot},${`公开接口快照；${company}；需与交易所/公司公告交叉核验`},${hash}) ON CONFLICT (id) DO NOTHING`;
   }
   const text = reportText(company, code, quote, financial, trend);
-  await tx`INSERT INTO document_revision (id,project_id,node_id,branch_id,commit_id,previous_revision_id,content,content_text,content_hash,created_by_user_id,created_at) VALUES (${`${nodeId}-revision-v1`},${projectId},${nodeId},${String(project.branch_id)},${commitId},NULL,${JSON.stringify({ type: "doc", content: [{ type: "paragraph", attrs: { evidenceState: "inference" }, content: [{ type: "text", text }] }] })}::jsonb,${text},${sha256(text)},${String(project.owner_user_id)},${capturedAt}) ON CONFLICT (id) DO NOTHING`;
-  await tx`INSERT INTO commit_change (id,commit_id,node_id,operation,before_revision_id,after_revision_id,metadata,position) VALUES (${`${commitId}:${nodeId}`},${commitId},${nodeId},'create_node',NULL,${`${nodeId}-revision-v1`},${JSON.stringify({ evidenceState: "inference", sourceId })}::jsonb,0) ON CONFLICT (id) DO NOTHING`;
+  const previousRevisionRows = await tx`SELECT id FROM document_revision WHERE project_id=${projectId} AND node_id=${nodeId} AND branch_id=${String(project.branch_id)} ORDER BY created_at DESC LIMIT 1`;
+  const previousRevisionId = previousRevisionRows[0]?.id ? String(previousRevisionRows[0].id) : null;
+  const revisionId = `${nodeId}-revision-${MARKET_VERSION}`;
+  await tx`INSERT INTO document_revision (id,project_id,node_id,branch_id,commit_id,previous_revision_id,content,content_text,content_hash,created_by_user_id,created_at) VALUES (${revisionId},${projectId},${nodeId},${String(project.branch_id)},${commitId},${previousRevisionId},${JSON.stringify({ type: "doc", content: [{ type: "paragraph", attrs: { evidenceState: "inference" }, content: [{ type: "text", text }] }] })}::jsonb,${text},${sha256(text)},${String(project.owner_user_id)},${capturedAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO commit_change (id,commit_id,node_id,operation,before_revision_id,after_revision_id,metadata,position) VALUES (${`${commitId}:${nodeId}`},${commitId},${nodeId},'update_content',${previousRevisionId},${revisionId},${JSON.stringify({ evidenceState: "inference", sourceId, marketVersion: MARKET_VERSION })}::jsonb,0) ON CONFLICT (id) DO NOTHING`;
   if (reportId) {
-    await tx`INSERT INTO report_section (id,report_id,parent_section_id,heading,anchor,level,position,content,evidence_state,updated_at) VALUES (${`${projectId}-market-section-v1`},${reportId},NULL,'财报与股价趋势','market-trend-v1',1,90,${text},'inference',${capturedAt}) ON CONFLICT (id) DO NOTHING`;
-    await tx`INSERT INTO citation (id,report_id,section_id,source_id,chunk_id,quote,evidence_state,created_at) VALUES (${`${projectId}-market-citation-v1`},${reportId},${`${projectId}-market-section-v1`},${sourceId},${`${sourceId}-chunk-1`},${`公开行情/财报快照（${capturedAt}）`},'needs_verification',${capturedAt}) ON CONFLICT (id) DO NOTHING`;
+    await tx`INSERT INTO report_section (id,report_id,parent_section_id,heading,anchor,level,position,content,evidence_state,updated_at) VALUES (${`${projectId}-market-section-${MARKET_VERSION}`},${reportId},NULL,'财报与股价趋势',${`market-trend-${MARKET_VERSION}`},1,90,${text},'inference',${capturedAt}) ON CONFLICT (id) DO NOTHING`;
+    await tx`INSERT INTO citation (id,report_id,section_id,source_id,chunk_id,quote,evidence_state,created_at) VALUES (${`${projectId}-market-citation-${MARKET_VERSION}`},${reportId},${`${projectId}-market-section-${MARKET_VERSION}`},${sourceId},${`${sourceId}-chunk-1`},${`公开行情/财报快照（${capturedAt}）`},'needs_verification',${capturedAt}) ON CONFLICT (id) DO NOTHING`;
   }
   await tx`UPDATE knowledge_branch SET head_commit_id=${commitId},version=GREATEST(version,${Number(project.version ?? 1)+1}),updated_at=${capturedAt} WHERE id=${String(project.branch_id)}`;
   return { projectId, status: "imported", trend, financialRows: financial.length };
