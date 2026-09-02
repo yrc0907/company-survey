@@ -6,6 +6,7 @@ import { DenseRetrievalService } from "@/lib/services/dense-retrieval-service";
 import {
   embeddingInputHash,
   getPgVectorConfig,
+  planEmbeddingRebuild,
   toPgVectorLiteral,
   type ChunkEmbeddingInput,
   type PgVectorStore,
@@ -26,6 +27,14 @@ async function run(): Promise<void> {
   assert.equal(embeddingInputHash("上下文\n正文").length, 64);
   assert.equal(toPgVectorLiteral([0.1, -2, 3]), "[0.1,-2,3]");
   assert.throws(() => toPgVectorLiteral([Number.NaN]), /维度或数值无效/);
+  const rebuildCandidate = {
+    chunkId: "chunk-a", sourceId: "source-a", text: "正文", contextualPrefix: "文档上下文", headingPath: ["章节"],
+    status: "ready" as const, embeddingModel: "test-model", embeddingDimensions: 2, embeddingVersion: "v1",
+    embeddingTextHash: embeddingInputHash("文档上下文\n章节\n正文"),
+  };
+  assert.equal(planEmbeddingRebuild([rebuildCandidate], { model: "test-model", version: "v1", dimensions: 2 }).length, 0);
+  assert.equal(planEmbeddingRebuild([{ ...rebuildCandidate, text: "正文已变更" }], { model: "test-model", version: "v1", dimensions: 2 }).length, 1,
+    "来源正文变化必须使 ready 向量进入重建计划");
 
   const noExtensionSql = Object.assign(
     async (_strings: TemplateStringsArray) => [{ extension_version: null, embedding_type: null, index_kind: null }],

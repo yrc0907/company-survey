@@ -18,6 +18,7 @@ import {
   getPgVectorConfig,
   toPgVectorLiteral,
   type ChunkEmbeddingInput,
+  type EmbeddingRebuildCandidate,
   type PgVectorCapability,
   type PgVectorStore,
   type PersistedVectorSearchResult,
@@ -46,6 +47,8 @@ export interface ResearchRepository {
   upsertChunkEmbeddings?(input: ChunkEmbeddingInput[]): Promise<VectorWriteResult>;
   /** 带 active/source/report/hash 过滤的向量召回；正文仍由快照映射。 */
   searchSimilarChunks?(vector: number[], options: VectorSearchOptions): Promise<PersistedVectorSearchResult[]>;
+  /** 受限列出 active 来源中待重建的向量候选；仅 Worker 使用。 */
+  listEmbeddingRebuildCandidates?(options: { reportId?: string; limit: number }): Promise<EmbeddingRebuildCandidate[]>;
   health(): Promise<{ ok: boolean; persistence: "memory_demo" | "postgres" }>;
 }
 
@@ -407,6 +410,38 @@ export class PostgresResearchRepository implements ResearchRepository, PgVectorS
     } catch (error) {
       return { status: "degraded", written: 0, reason: error instanceof Error ? error.message : "向量写入失败，保留确定性检索。" };
     }
+  }
+
+  /**
+   * 只读取 active 来源和必要正文列；Worker 会再次按模型/版本/文本哈希计划重建，
+   * 因此不会把 archived/stale 来源重新写回可检索状态。
+   */
+  public async listEmbeddingRebuildCandidates(options: { reportId?: string; limit: number }): Promise<EmbeddingRebuildCandidate[]> {
+    const limit = Math.min(Math.max(Math.trunc(options.limit), 1), 500);
+    const rows = options.reportId
+      ? await this.sql<DatabaseRow[]>`SELECT chunk.id AS chunk_id, chunk.source_id, chunk.text, chunk.contextual_prefix,
+          chunk.heading_path, chunk.embedding_status, chunk.embedding_model, chunk.embedding_dimensions,
+          chunk.embedding_version, chunk.embedding_text_hash
+        FROM source_chunk AS chunk JOIN source AS source_record ON source_record.id = chunk.source_id
+        WHERE source_record.state = 'active' AND source_record.report_id = ${options.reportId}
+        ORDER BY CASE WHEN chunk.embedding_status = 'stale' THEN 0 WHEN chunk.embedding_status = 'missing' THEN 1 ELSE 2 END,
+          chunk.position ASC, chunk.id ASC LIMIT ${limit}`
+      : await this.sql<DatabaseRow[]>`SELECT chunk.id AS chunk_id, chunk.source_id, chunk.text, chunk.contextual_prefix,
+          chunk.heading_path, chunk.embedding_status, chunk.embedding_model, chunk.embedding_dimensions,
+          chunk.embedding_version, chunk.embedding_text_hash
+        FROM source_chunk AS chunk JOIN source AS source_record ON source_record.id = chunk.source_id
+        WHERE source_record.state = 'active'
+        ORDER BY CASE WHEN chunk.embedding_status = 'stale' THEN 0 WHEN chunk.embedding_status = 'missing' THEN 1 ELSE 2 END,
+          chunk.position ASC, chunk.id ASC LIMIT ${limit}`;
+    return rows.map((row) => ({
+      chunkId: String(row.chunk_id), sourceId: String(row.source_id), text: String(row.text),
+      contextualPrefix: String(row.contextual_prefix ?? ""), headingPath: (row.heading_path as string[]) ?? [],
+      status: (row.embedding_status as EmbeddingRebuildCandidate["status"]) ?? "missing",
+      embeddingModel: row.embedding_model ? String(row.embedding_model) : null,
+      embeddingDimensions: row.embedding_dimensions === null || row.embedding_dimensions === undefined ? null : Number(row.embedding_dimensions),
+      embeddingVersion: row.embedding_version ? String(row.embedding_version) : null,
+      embeddingTextHash: row.embedding_text_hash ? String(row.embedding_text_hash) : null,
+    }));
   }
 
   /**

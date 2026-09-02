@@ -56,6 +56,39 @@ export interface VectorWriteResult {
   reason: string | null;
 }
 
+/** 向量重建 Worker 需要的最小候选；正文哈希由调用方按同一 Contextual 文本规则计算。 */
+export interface EmbeddingRebuildCandidate {
+  chunkId: string;
+  sourceId: string;
+  text: string;
+  contextualPrefix: string;
+  headingPath: string[];
+  status: "missing" | "queued" | "ready" | "stale" | "failed";
+  embeddingModel: string | null;
+  embeddingDimensions: number | null;
+  embeddingVersion: string | null;
+  embeddingTextHash: string | null;
+}
+
+/**
+ * 只把缺失、失败、过期或指纹/模型/版本不匹配的 Chunk 交给重建 Worker。
+ * 这是纯函数，便于在没有 PostgreSQL/模型凭据的环境验证来源变更检测。
+ */
+export function planEmbeddingRebuild(
+  candidates: EmbeddingRebuildCandidate[],
+  expected: { model: string; version: string; dimensions?: number },
+): EmbeddingRebuildCandidate[] {
+  return candidates.filter((candidate) => {
+    const text = `${candidate.contextualPrefix}\n${candidate.headingPath.join(" / ")}\n${candidate.text}`.trim();
+    const hash = embeddingInputHash(text);
+    return candidate.status !== "ready"
+      || candidate.embeddingModel !== expected.model
+      || candidate.embeddingVersion !== expected.version
+      || (expected.dimensions !== undefined && candidate.embeddingDimensions !== expected.dimensions)
+      || candidate.embeddingTextHash !== hash;
+  });
+}
+
 /** 查询必须携带 scope 与期望文本哈希，防止跨报告或过期向量穿透。 */
 export interface VectorSearchOptions {
   reportId?: string;

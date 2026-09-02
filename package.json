@@ -11,6 +11,7 @@
     "db:migrate": "node scripts/run-migrations.mjs",
     "db:check:pgvector": "node scripts/check-pgvector.mjs",
     "asset:ingestion": "tsx scripts/run-asset-ingestion-worker.ts",
+    "vector:rebuild": "tsx scripts/rebuild-vectors.ts",
     "public-seed:validate": "node scripts/validate-public-seed.mjs",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",

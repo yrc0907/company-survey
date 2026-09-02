@@ -30,7 +30,7 @@
 - 命中会带 Parent Section 与相邻 Chunk；`contextual_prefix` 参与 PostgreSQL FTS 表达式，`heading_path` 继续由应用层关键词层补充，没有导入流水线自动生成它们；
 - `GraphService` 只做报告内、有来源边、深度 2、最多 12 条路径的 BFS；没有图谱写入 API 或图谱 UI；
 - `ContextProjectionService` 在每次助手请求重组当前报告、规则、选区或检索证据；无命中时返回拒答原因；
-- pgvector、远程 embedding、RRF、远程 rerank、索引重建和 Golden Set 尚未接入应用。已独立验证的 Cloudmist API 只能说明 Provider 协议可用，不能说明工作台已有语义检索。
+- pgvector、远程 embedding、RRF 与远程 rerank 已接入；`scripts/rebuild-vectors.ts` 提供受限的一次性向量重建。Cloudmist 连通性仍只说明 Provider 协议可用，不代表线上召回率或企业事实已验收。
 
 ## 2. 公开参考方向
 
@@ -108,7 +108,7 @@ workspace
 | 路径 | 解决的问题 | 初版实现 |
 | --- | --- | --- |
 | PostgreSQL FTS / BM25 | 企业名、产品名、政策章节、日期、原句、价格等精确检索 | `source_chunk_contextual_fts_idx`（正文+上下文前缀）+ 参数化 `to_tsvector`/`plainto_tsquery` 已接入；标题路径由关键词层补充，BM25 扩展按评测决定 |
-| Dense Vector | 同义表达、跨语言概念、自然语言研究问题 | 已有 `gemini-embedding-2-preview` 的有界运行时召回；pgvector 持久化待实现，本机 BGE-M3 是可选离线 Worker |
+| Dense Vector | 同义表达、跨语言概念、自然语言研究问题 | `gemini-embedding-2-preview` 有界运行时召回 + 可选 pgvector 持久化；本机 BGE-M3 是可选离线 Worker |
 | GraphRAG-lite | 企业—产品—行业—竞品—政策—来源的多跳关系 | schema 与有界内存 BFS 已实现；写入、API 和 UI 待实现 |
 | Parent Retrieval | 命中小段后补足其所属章节上下文 | 已实现：返回父章节与相邻 Chunk |
 
@@ -234,6 +234,8 @@ BGE-M3 是适合本项目的多语言检索模型候选，可提供 Dense、Spar
 | 扩展刚被卸载或列被回滚 | 探测失败/`degraded` | 捕获 SQL 错误，保留 FTS，不把空结果当成语义无关 |
 
 `source_chunk.embedding_text_hash` 覆盖 contextual prefix、标题路径和正文；任何这些输入变化都必须产生新版本或将状态置为 `stale`。向量写入契约不会删除历史正文，也不会跨 `report_id`、`source_id` 或权限 Scope 查询。
+
+运行 `pnpm vector:rebuild` 可按 active 来源扫描 `missing`/`stale` 或哈希、模型、版本不匹配的 Chunk，并分批调用 Embedding Provider 写回；默认不超过 64 个 Chunk。未同时开启 `PGVECTOR_ENABLED` 与 `PGVECTOR_WRITE_ENABLED` 时 Worker 明确跳过，不改变 FTS/RRF 降级路径。
 
 本地 worker 的运行、离线约束和切换配置见 [local-bge-m3-worker.md](local-bge-m3-worker.md)。
 
