@@ -4,6 +4,7 @@ import { Activity, BookOpenText, ChevronDown, FileText, Filter, FolderGit2, Load
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ProjectCard } from "@/components/platform/project-card";
+import { NotificationMenu } from "@/components/platform/notification-menu";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -175,6 +176,7 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
               <div className="px-2 py-1.5 text-xs text-muted-foreground">创建与上传需要登录</div>
             </DropdownMenuContent>
           </DropdownMenu>
+          <NotificationMenu />
           <Button variant="ghost" onClick={() => onRequireLogin("login")}><LogIn size={15} />登录</Button>
         </nav>
       </header>
