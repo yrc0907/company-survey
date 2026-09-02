@@ -492,15 +492,28 @@ async function verifyBatch(tx) {
     WHERE id LIKE 'project-%' AND visibility = 'public' AND status = 'published'`;
   const [duplicateStars] = await tx`SELECT COUNT(*)::int AS count FROM (SELECT project_id, user_id, COUNT(*) FROM project_star WHERE active = TRUE GROUP BY project_id, user_id HAVING COUNT(*) > 1) d`;
   const [duplicateFollows] = await tx`SELECT COUNT(*)::int AS count FROM (SELECT follower_user_id, followed_user_id, COUNT(*) FROM author_follow WHERE active = TRUE GROUP BY follower_user_id, followed_user_id HAVING COUNT(*) > 1) d`;
+  const [statsMismatch] = await tx`SELECT COUNT(*)::int AS count FROM (
+    SELECT ps.project_id FROM project_stats ps
+    LEFT JOIN project_reader pr ON pr.project_id = ps.project_id
+    WHERE ps.project_id LIKE 'project-%'
+    GROUP BY ps.project_id, ps.unique_readers
+    HAVING ps.unique_readers <> COUNT(pr.viewer_key_hash)
+  ) mismatch`;
+  const [mergedCount] = await tx`SELECT COUNT(*)::int AS count FROM merge_request
+    WHERE id IN (SELECT entity_id FROM community_seed_record WHERE seed_batch = ${batch} AND entity_type = 'merge_request')
+      AND status = 'merged'`;
   result.activeUsers = Number(userCount.count); result.publicProjects = Number(projectCount.count);
   result.duplicateStars = Number(duplicateStars.count); result.duplicateFollows = Number(duplicateFollows.count);
+  result.statsMismatch = Number(statsMismatch.count); result.mergedMergeRequests = Number(mergedCount.count);
   if (result.activeUsers < 40 || result.activeUsers > 60) throw new Error(`社区用户数不在 40-60 范围：${result.activeUsers}`);
   if (result.publicProjects < 12) throw new Error(`首发公开项目不足 12 个：${result.publicProjects}`);
   if (result.duplicateStars !== 0 || result.duplicateFollows !== 0) throw new Error("关系唯一性校验失败");
+  if (result.statsMismatch !== 0) throw new Error(`project_stats 与 project_reader 不一致：${result.statsMismatch}`);
   if ((result.project_comment ?? 0) < 48) throw new Error(`项目评论/回复不足：${result.project_comment ?? 0}`);
   if ((result.project_star ?? 0) < 72) throw new Error(`项目 Star 不足：${result.project_star ?? 0}`);
   if ((result.author_follow ?? 0) < 100) throw new Error(`作者关注关系不足：${result.author_follow ?? 0}`);
   if ((result.merge_request ?? 0) < 12 || (result.merge_review ?? 0) < 12) throw new Error("协作审核记录不足 12 项");
+  if (result.mergedMergeRequests < 12) throw new Error(`已合并 MR 不足 12 项：${result.mergedMergeRequests}`);
   return result;
 }
 
