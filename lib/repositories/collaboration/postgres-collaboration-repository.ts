@@ -44,6 +44,7 @@ function mapProjectComment(row: Row): ProjectCommentSummary {
   const deleted = row.deleted_at != null;
   return {
     id: text(row.id), projectId: text(row.project_id), parentId: nullable(row.parent_id),
+    nodeId: nullable(row.node_id), blockId: nullable(row.block_id), quote: nullable(row.quote),
     authorUserId: text(row.author_user_id), authorUsername: text(row.author_username),
     authorDisplayName: text(row.author_display_name), authorAvatarAssetId: nullable(row.author_avatar_asset_id),
     body: deleted ? null : text(row.body), deleted, canDelete: false,
@@ -55,7 +56,7 @@ const PROJECT_SELECT = `SELECT p.id, p.owner_user_id, p.slug, p.title, p.summary
   pr.username AS owner_username, pr.display_name AS owner_display_name, pr.avatar_asset_id AS owner_avatar_asset_id
   FROM knowledge_project p JOIN platform_profile pr ON pr.user_id = p.owner_user_id`;
 const MERGE_SELECT = `SELECT id, project_id, source_branch_id, target_branch_id, author_user_id, title, description, status, base_commit_id, head_commit_id, merged_commit_id, merged_by_user_id, target_version, conflict_status, conflict_details, idempotency_fingerprint, created_at, updated_at, merged_at FROM merge_request`;
-const COMMENT_SELECT = `SELECT c.id, c.project_id, c.parent_id, c.author_user_id, c.body, c.deleted_at, c.idempotency_key, c.idempotency_fingerprint, c.created_at, c.updated_at,
+const COMMENT_SELECT = `SELECT c.id, c.project_id, c.parent_id, c.node_id, c.block_id, c.quote, c.author_user_id, c.body, c.deleted_at, c.idempotency_key, c.idempotency_fingerprint, c.created_at, c.updated_at,
   pr.username AS author_username, pr.display_name AS author_display_name, pr.avatar_asset_id AS author_avatar_asset_id
   FROM project_comment c JOIN platform_user u ON u.id = c.author_user_id
   JOIN platform_profile pr ON pr.user_id = u.id`;
@@ -110,8 +111,12 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
           const parent = await tx<Row[]>`SELECT id FROM project_comment WHERE id = ${input.parentId} AND project_id = ${input.projectId} FOR SHARE`;
           if (!parent[0]) throw new CollaborationNotFoundError("父评论不存在");
         }
-        await tx`INSERT INTO project_comment (id, project_id, parent_id, author_user_id, body, idempotency_key, idempotency_fingerprint)
-          VALUES (${id}, ${input.projectId}, ${input.parentId ?? null}, ${actor.userId}, ${input.body}, ${input.idempotencyKey ?? null}, ${fingerprint ?? null})`;
+        if (input.nodeId) {
+          const node = await tx<Row[]>`SELECT id FROM knowledge_node WHERE id = ${input.nodeId} AND project_id = ${input.projectId} FOR SHARE`;
+          if (!node[0]) throw new CollaborationNotFoundError("评论锚点文件不存在");
+        }
+        await tx`INSERT INTO project_comment (id, project_id, parent_id, node_id, block_id, quote, author_user_id, body, idempotency_key, idempotency_fingerprint)
+          VALUES (${id}, ${input.projectId}, ${input.parentId ?? null}, ${input.nodeId ?? null}, ${input.blockId ?? null}, ${input.quote ?? null}, ${actor.userId}, ${input.body}, ${input.idempotencyKey ?? null}, ${fingerprint ?? null})`;
       });
     } catch (error) {
       if (isUniqueViolation(error) && input.idempotencyKey) {

@@ -14,8 +14,14 @@ export const dynamic = "force-dynamic";
 
 const createSchema = z.object({
   parentId: z.string().trim().min(1).max(128).nullable().optional(),
+  nodeId: z.string().trim().min(1).max(128).nullable().optional(),
+  blockId: z.string().trim().min(1).max(128).nullable().optional(),
+  quote: z.string().trim().min(1).max(2000).nullable().optional(),
   body: z.string().trim().min(1).max(10000),
-}).strict();
+}).strict().superRefine((input, context) => {
+  const anchored = [input.nodeId, input.blockId, input.quote].filter((value) => value != null).length;
+  if (anchored !== 0 && anchored !== 3) context.addIssue({ code: z.ZodIssueCode.custom, path: ["quote"], message: "段落评论必须同时提供文件、段落和引用片段" });
+});
 
 function service(): ProjectCommentService {
   return new ProjectCommentService(getCollaborationRepository(), getPlatformRepository());
@@ -38,7 +44,7 @@ export async function POST(request: Request, context: { params: { id: string } }
     assertTrustedJsonRequest(request);
     const actor = await requireAuthenticatedActor();
     const input = createSchema.parse(await request.json());
-    const comment = await service().create({ projectId: context.params.id, parentId: input.parentId ?? null, body: input.body, idempotencyKey: readIdempotencyKey(request) }, actor);
+    const comment = await service().create({ projectId: context.params.id, parentId: input.parentId ?? null, nodeId: input.nodeId ?? null, blockId: input.blockId ?? null, quote: input.quote ?? null, body: input.body, idempotencyKey: readIdempotencyKey(request) }, actor);
     return json({ comment, source: "postgres" }, { status: 201, headers: { "cache-control": "no-store" } });
   } catch (error) {
     return collaborationErrorResponse(error) ?? authErrorResponse(error);

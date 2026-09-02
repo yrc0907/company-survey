@@ -17,6 +17,8 @@ export interface SeedFileNode {
 
 export interface SeedSection {
   id: string;
+  /** 真实知识节点 ID；没有持久化节点的首发 seed 不提供段落锚点写入。 */
+  nodeId?: string;
   heading: string;
   paragraphs: string[];
   state: "fact" | "inference" | "needs_verification" | "conflict";
@@ -107,6 +109,7 @@ export const seedProjects: SeedProject[] = [
     sections: [
       {
         id: "section-overview",
+        nodeId: "doc-huice-overview",
         heading: "研究结论",
         paragraphs: [
           "慧策的公开产品信息覆盖订单、仓储与履约协同。当前材料能够证明其产品覆盖范围，但不能单凭官网描述推出续费率或客户满意度。",
@@ -120,6 +123,7 @@ export const seedProjects: SeedProject[] = [
       },
       {
         id: "section-evidence",
+        nodeId: "doc-huice-evidence",
         heading: "证据范围与边界",
         paragraphs: [
           "本节使用企业官网、公开政策文本与可公开引用的行业资料。价格、实施成本和续费情况仍需要来自合同、客户访谈或权威统计的独立证据。",
@@ -132,6 +136,7 @@ export const seedProjects: SeedProject[] = [
       },
       {
         id: "section-risk",
+        nodeId: "doc-huice-risk",
         heading: "仍待核验的问题",
         paragraphs: [
           "FDE 式定制交付是否压缩标准化 SaaS 的生存空间，取决于交付成本、客户复杂度与标准产品覆盖率，目前公开数据不足。",

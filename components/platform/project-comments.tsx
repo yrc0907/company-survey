@@ -13,9 +13,11 @@ interface ProjectCommentsProps {
   authenticated: boolean;
   onRequireLogin: () => void;
   onCountChange?: (count: number) => void;
+  initialAnchor?: CommentAnchor | null;
 }
 
 interface CommentResponse { comments?: ProjectCommentSummary[]; comment?: ProjectCommentSummary; error?: string; }
+export interface CommentAnchor { nodeId: string; blockId: string; quote: string; label: string; }
 
 /** 将仓储返回的平铺评论按 parentId 组织为树；非法孤儿节点降级到根层而不丢内容。 */
 type OrderedComment = ProjectCommentSummary & { depth: number };
@@ -50,12 +52,13 @@ function relativeDate(value: string): string {
 }
 
 /** 项目级楼中楼评论：读取可匿名，写入与删除由服务端 Session/权限决定。 */
-export function ProjectComments({ projectId, authenticated, onRequireLogin, onCountChange }: ProjectCommentsProps) {
+export function ProjectComments({ projectId, authenticated, onRequireLogin, onCountChange, initialAnchor = null }: ProjectCommentsProps) {
   const [comments, setComments] = useState<ProjectCommentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [body, setBody] = useState("");
   const [replyTo, setReplyTo] = useState<ProjectCommentSummary | null>(null);
+  const [anchor, setAnchor] = useState<CommentAnchor | null>(initialAnchor);
   const [submitState, setSubmitState] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [submitError, setSubmitError] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -80,6 +83,8 @@ export function ProjectComments({ projectId, authenticated, onRequireLogin, onCo
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => { setAnchor(initialAnchor); }, [initialAnchor]);
+
   const orderedComments = useMemo(() => commentTree(comments), [comments]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>): Promise<void> {
@@ -94,7 +99,7 @@ export function ProjectComments({ projectId, authenticated, onRequireLogin, onCo
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json", "Idempotency-Key": crypto.randomUUID() },
         credentials: "same-origin",
-        body: JSON.stringify({ parentId: replyTo?.id ?? null, body: value }),
+        body: JSON.stringify({ parentId: replyTo?.id ?? null, nodeId: anchor?.nodeId ?? null, blockId: anchor?.blockId ?? null, quote: anchor?.quote ?? null, body: value }),
       });
       const payload = await response.json().catch(() => ({})) as CommentResponse;
       if (!response.ok || !payload.comment) throw new Error(payload.error ?? "评论发布失败");
@@ -102,6 +107,7 @@ export function ProjectComments({ projectId, authenticated, onRequireLogin, onCo
       onCountChange?.(comments.filter((comment) => !comment.deleted).length + (payload.comment.deleted ? 0 : 1));
       setBody("");
       setReplyTo(null);
+      setAnchor(null);
       setSubmitState("success");
     } catch (requestError) {
       setSubmitState("error");
@@ -147,6 +153,7 @@ export function ProjectComments({ projectId, authenticated, onRequireLogin, onCo
       {deleteError ? <p className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="alert">{deleteError}</p> : null}
 
       <form className="mt-6 rounded-md border bg-muted/20 p-4" onSubmit={(event) => void submit(event)}>
+        {anchor ? <div className="mb-3 flex items-start justify-between gap-3 border-l-2 border-foreground pl-3 text-xs text-muted-foreground"><span><strong className="text-foreground">评论此段</strong><br />{anchor.label}：{anchor.quote}</span><Button type="button" size="icon" variant="ghost" aria-label="取消段落引用" title="取消段落引用" onClick={() => setAnchor(null)}><X size={14} /></Button></div> : null}
         {replyTo ? <div className="mb-3 flex items-center justify-between gap-2 border-l-2 border-foreground pl-3 text-xs text-muted-foreground"><span className="flex items-center gap-1"><CornerDownRight size={13} />回复 @{replyTo.authorUsername}</span><Button type="button" size="icon" variant="ghost" aria-label="取消回复" title="取消回复" onClick={() => setReplyTo(null)}><X size={14} /></Button></div> : null}
         <textarea value={body} onChange={(event) => { setBody(event.target.value); if (submitState !== "idle") setSubmitState("idle"); }} placeholder={authenticated ? "写下你的看法…" : "登录后参与讨论"} rows={3} maxLength={10000} disabled={submitState === "saving"} className="min-h-24 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring" aria-label="评论内容" />
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-muted-foreground">{body.length}/10000 · {authenticated ? "评论会显示你的真实用户资料" : "匿名仅可阅读"}</span><Button type="submit" size="sm" disabled={!body.trim() || submitState === "saving"}>{submitState === "saving" ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}发布评论</Button></div>

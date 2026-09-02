@@ -21,6 +21,12 @@
 
 项目公开摘要现在从 PostgreSQL 聚合 `commentCount`（只统计 `deleted_at IS NULL`），首页卡片和详情元信息仅在真实数据库投影提供该字段时显示；typed seed 不填虚构数字。详情页在评论加载、发布和软删除后用服务端返回列表同步更新元信息，不做客户端猜测自增。
 
+## 段落锚点
+
+评论可选携带 `nodeId`、`blockId` 和不超过 2000 字的 `quote`。三者必须成组出现，服务层和迁移 `017_comment_anchors.sql` 会确认节点属于当前项目；不满足条件的请求返回 `400` 或“评论锚点文件不存在”，不会写入跨项目定位。项目级评论仍使用空锚点，楼中楼 `parentId` 语义不变。
+
+项目正文中有真实 `nodeId` 的章节显示“评论此段”，点击后滚动到评论区并带入引用片段；Seed 或无稳定节点的占位章节不显示该按钮，避免产生无法落库的假锚点。
+
 ## 验证记录
 
 契约测试：`lib/services/collaboration/project-comments.contract.ts`

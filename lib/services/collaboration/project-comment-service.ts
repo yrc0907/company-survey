@@ -27,9 +27,16 @@ export class ProjectCommentService {
     const body = input.body.trim();
     if (!body) throw new CollaborationInvalidStateError("评论内容不能为空");
     if (body.length > 10000) throw new CollaborationInvalidStateError("评论内容不能超过 10000 个字符");
-    const normalized: CreateProjectCommentInput = { ...input, body, parentId: input.parentId ?? null };
+    const nodeId = input.nodeId?.trim() || null;
+    const blockId = input.blockId?.trim() || null;
+    const quote = input.quote?.trim() || null;
+    if (Boolean(nodeId) !== Boolean(blockId) || Boolean(nodeId) !== Boolean(quote)) throw new CollaborationInvalidStateError("段落评论必须同时提供文件、段落和引用片段");
+    if (nodeId && nodeId.length > 128) throw new CollaborationInvalidStateError("评论锚点文件无效");
+    if (blockId && blockId.length > 128) throw new CollaborationInvalidStateError("评论锚点段落无效");
+    if (quote && quote.length > 2000) throw new CollaborationInvalidStateError("评论引用片段不能超过 2000 个字符");
+    const normalized: CreateProjectCommentInput = { ...input, body, parentId: input.parentId ?? null, nodeId, blockId, quote };
     const fingerprint = input.idempotencyKey
-      ? collaborationIdempotencyFingerprint("project-comment", { actorId: actor.userId, projectId: input.projectId, parentId: normalized.parentId, body })
+      ? collaborationIdempotencyFingerprint("project-comment", { actorId: actor.userId, projectId: input.projectId, parentId: normalized.parentId, nodeId, blockId, quote, body })
       : undefined;
     if (input.idempotencyKey) {
       const prior = await this.repository.getProjectCommentByIdempotency(input.projectId, actor.userId, input.idempotencyKey, fingerprint);

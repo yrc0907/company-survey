@@ -5,6 +5,10 @@ export interface ProjectCommentSummary {
   id: string;
   projectId: string;
   parentId: string | null;
+  /** 可选的文件/段落锚点；为空表示项目级评论。 */
+  nodeId?: string | null;
+  blockId?: string | null;
+  quote?: string | null;
   authorUserId: string;
   authorUsername: string;
   authorDisplayName: string;
@@ -20,6 +24,9 @@ export interface ProjectCommentSummary {
 export interface CreateProjectCommentInput {
   projectId: string;
   parentId?: string | null;
+  nodeId?: string | null;
+  blockId?: string | null;
+  quote?: string | null;
   body: string;
   idempotencyKey?: string;
 }

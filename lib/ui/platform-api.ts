@@ -67,7 +67,7 @@ function sections(value: unknown, owner: SeedUser, updatedAt: string): SeedSecti
     const heading = text(source?.heading, `研究章节 ${index + 1}`);
     const content = text(source?.content);
     const state = source?.evidenceState === "fact" || source?.evidenceState === "inference" || source?.evidenceState === "conflict" ? source.evidenceState : "needs_verification";
-    return [{ id: text(source?.id, `section-${index + 1}`), heading, paragraphs: content ? content.split(/\n\s*\n/) : ["该章节暂无公开正文。"], state, contributor: user(source?.contributor, owner.id, owner.displayName), mergeRequest: number(source?.mergeRequest), reviewer: text(source?.reviewer, "待审核"), citations: number(source?.citations) }];
+    return [{ id: text(source?.id, `section-${index + 1}`), nodeId: text(source?.nodeId) || undefined, heading, paragraphs: content ? content.split(/\n\s*\n/) : ["该章节暂无公开正文。"], state, contributor: user(source?.contributor, owner.id, owner.displayName), mergeRequest: number(source?.mergeRequest), reviewer: text(source?.reviewer, "待审核"), citations: number(source?.citations) }];
   });
 }
 

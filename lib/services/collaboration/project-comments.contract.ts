@@ -58,6 +58,8 @@ async function run(): Promise<void> {
     const anonymous = await getComments(new Request("http://localhost/api/platform/projects/project-1/comments"), { params: { id: project.id } });
     assert.equal(anonymous.status, 200, "匿名读取评论必须成功");
     setAuthenticatedActorResolverForTest(async () => actor);
+    const incompleteAnchor = await postComment(new Request("http://localhost/api/platform/projects/project-1/comments", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ nodeId: "node-1", body: "缺少段落锚点" }) }), { params: { id: project.id } });
+    assert.equal(incompleteAnchor.status, 400, "段落评论必须同时提交文件、段落和引用片段");
     const first = await postComment(new Request("http://localhost/api/platform/projects/project-1/comments", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": "comment-key" }, body: JSON.stringify({ body: "第一条评论" }) }), { params: { id: project.id } });
     assert.equal(first.status, 201, "登录用户发布评论必须成功");
     const firstPayload = await first.json() as { comment: ProjectCommentSummary };
