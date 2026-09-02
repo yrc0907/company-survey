@@ -65,7 +65,7 @@ function ProjectDocument({ project, activeNodeId, viewCount, starCount, commentC
     citations: activeFile.citations,
   }] : project.sections.length ? project.sections : [{
     id: "seed-boundary",
-    heading: "Seed 展示边界",
+    heading: "研究边界与证据状态",
     paragraphs: ["该项目已进入首发内容目录，但正文与引用仍在迁移核验中。当前页面只展示信息架构，不生成未核验事实。"],
     state: "needs_verification" as const,
     contributor: project.owner,
@@ -77,7 +77,7 @@ function ProjectDocument({ project, activeNodeId, viewCount, starCount, commentC
   return (
     <article className="knowledge-document">
       <header className="document-heading">
-        <div className="document-status-line"><span className={project.verification === "verified" ? "verification verification--verified" : "verification verification--pending"}>{project.verification === "verified" ? "Seed 已核验" : "Seed 待核验"}</span><span>公开 · main@v{project.version}</span></div>
+        <div className="document-status-line"><span className={project.verification === "verified" ? "verification verification--verified" : "verification verification--pending"}>{project.verification === "verified" ? "来源已核验" : "来源待核验"}</span><span>公开 · main@v{project.version}</span></div>
         <h1>{activeFile ? activeFile.heading : project.title}</h1>
         <p>{activeFile && activeFile.node.id !== "" ? activeFile.body.join(" ") : project.summary}</p>
         <div className="document-byline"><UserAvatar name={project.owner.displayName} size="sm" /><span>由 <strong>{project.owner.displayName}</strong> 维护</span><span>·</span><span>{project.contributorCount ?? project.contributors.length} 位贡献者</span><span>·</span><span>{project.sourceCount} 个来源</span><span>·</span><span><Eye size={13} aria-hidden="true" /> {viewCount} 位读者</span><span>·</span><span><Star size={13} aria-hidden="true" /> {starCount} Star</span>{commentCount !== undefined ? <><span>·</span><span><MessageCircle size={13} aria-hidden="true" /> {commentCount} 评论</span></> : null}</div>

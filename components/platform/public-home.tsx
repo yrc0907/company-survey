@@ -247,7 +247,7 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
             <div className="rail-heading"><span>最近合并</span></div>
             <p className="rail-empty">暂无已核验的合并活动</p>
           </section>
-          <section className="rail-clarification"><strong>首发内容说明</strong><p>当前页面使用明确标记的 Seed 内容验证信息架构。正式公开前会重新导入有权发布的原始材料并核验引用。</p></section>
+          <section className="rail-clarification"><strong>资料核验说明</strong><p>每个项目都保留来源、抓取时间和证据状态；待核验内容不会被展示为已确认事实，点击来源可继续回溯原文。</p></section>
         </aside>
       </main>
     </div>

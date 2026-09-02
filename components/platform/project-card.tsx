@@ -19,10 +19,10 @@ function dateLabel(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric" }).format(new Date(value));
 }
 
-/** 首页列表项只展示可解释统计，Seed 核验状态不冒充实时生产数据。 */
+/** 首页列表项只展示可解释统计，核验状态对应当前公开来源。 */
 export function ProjectCard({ project, onOpen, onSearch, onOpenOwner }: ProjectCardProps) {
   const [contributorQuery, setContributorQuery] = useState("");
-  const verificationLabel = project.verification === "verified" ? "Seed 已核验" : "Seed 待核验";
+  const verificationLabel = project.verification === "verified" ? "已核验" : "待核验";
   const visibleContributors = useMemo(() => {
     const normalized = contributorQuery.trim().toLocaleLowerCase("zh-CN");
     if (!normalized) return project.contributors;
