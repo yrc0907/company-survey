@@ -49,7 +49,7 @@ export class ProjectCommentService {
     }
     const normalized: CreateProjectCommentInput = { ...input, body, parentId: input.parentId ?? null, nodeId, blockId, quote, attachmentAssetIds };
     const fingerprint = input.idempotencyKey
-      ? collaborationIdempotencyFingerprint("project-comment", { actorId: actor.userId, projectId: input.projectId, parentId: normalized.parentId, nodeId, blockId, quote, body })
+      ? collaborationIdempotencyFingerprint("project-comment", { actorId: actor.userId, projectId: input.projectId, parentId: normalized.parentId, nodeId, blockId, quote, body, attachmentAssetIds })
       : undefined;
     if (input.idempotencyKey) {
       const prior = await this.repository.getProjectCommentByIdempotency(input.projectId, actor.userId, input.idempotencyKey, fingerprint);
