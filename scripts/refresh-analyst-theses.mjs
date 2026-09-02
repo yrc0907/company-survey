@@ -37,15 +37,16 @@ async function main() {
         const nodeRows = await tx`SELECT ns.node_id FROM knowledge_node_state ns JOIN knowledge_node n ON n.id = ns.node_id WHERE ns.project_id = ${String(project.id)} AND ns.branch_id = ${String(project.branch_id)} AND n.kind = 'document' AND ns.name = '研究者分析与战略判断' LIMIT 1`;
         const nodeId = nodeRows[0]?.node_id ? String(nodeRows[0].node_id) : null;
         if (!nodeId) { result.skipped += 1; result.details.push({ company, status: "analysis_node_missing" }); continue; }
-        const commitId = `${String(project.id)}-analyst-thesis-v1`;
-        if ((await tx`SELECT id FROM knowledge_commit WHERE id = ${commitId} LIMIT 1`).length) { result.skipped += 1; result.details.push({ company, status: "already_imported" }); continue; }
         const previousRows = await tx`SELECT id, content_text FROM document_revision WHERE project_id = ${String(project.id)} AND node_id = ${nodeId} AND branch_id = ${String(project.branch_id)} ORDER BY created_at DESC LIMIT 1`;
         const previousId = previousRows[0]?.id ? String(previousRows[0].id) : null;
+        if (String(previousRows[0]?.content_text ?? "").includes(`针对${company}的独立判断`)) { result.skipped += 1; result.details.push({ company, status: "already_imported" }); continue; }
+        const commitId = `${String(project.id)}-analyst-thesis-v2`;
+        if ((await tx`SELECT id FROM knowledge_commit WHERE id = ${commitId} LIMIT 1`).length) { result.skipped += 1; result.details.push({ company, status: "already_imported" }); continue; }
         const text = `${String(previousRows[0]?.content_text ?? "")}\n\n九、针对${company}的独立判断（inference）\n${thesis}\n\n本节同时覆盖产品、财报、股价、收益、利润、最高收益产品、竞争、政策、合作与资源整合；这些判断需要通过对应财报、公告、客户案例、竞品资料和行业统计持续验证，并对没有证据的字段保持 needs_verification。`;
         const contentHash = sha256(text);
         await tx`INSERT INTO knowledge_commit (id, project_id, branch_id, parent_commit_id, author_user_id, message, ai_assisted, idempotency_key, idempotency_fingerprint, change_summary, created_at)
-          VALUES (${commitId}, ${String(project.id)}, ${String(project.branch_id)}, ${project.head_commit_id ? String(project.head_commit_id) : null}, ${String(project.owner_user_id)}, ${`追加${company}独立战略判断`}, FALSE, ${`analyst-thesis:${String(project.id)}:v1`}, ${contentHash}, ${JSON.stringify({ evidenceState: "inference", author: "Yu" })}::jsonb, ${capturedAt})`;
-        const revisionId = `${nodeId}-analyst-thesis-v1`;
+          VALUES (${commitId}, ${String(project.id)}, ${String(project.branch_id)}, ${project.head_commit_id ? String(project.head_commit_id) : null}, ${String(project.owner_user_id)}, ${`追加${company}独立战略判断`}, FALSE, ${`analyst-thesis:${String(project.id)}:v2`}, ${contentHash}, ${JSON.stringify({ evidenceState: "inference", author: "Yu" })}::jsonb, ${capturedAt})`;
+        const revisionId = `${nodeId}-analyst-thesis-v2`;
         await tx`INSERT INTO document_revision (id, project_id, node_id, branch_id, commit_id, previous_revision_id, content, content_text, content_hash, created_by_user_id, created_at)
           VALUES (${revisionId}, ${String(project.id)}, ${nodeId}, ${String(project.branch_id)}, ${commitId}, ${previousId}, ${JSON.stringify(docContent(text))}::jsonb, ${text}, ${contentHash}, ${String(project.owner_user_id)}, ${capturedAt})`;
         await tx`INSERT INTO commit_change (id, commit_id, node_id, operation, before_revision_id, after_revision_id, metadata, position)
