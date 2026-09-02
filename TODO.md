@@ -52,7 +52,7 @@ Yu 的判断和证据台账；不做默认总排名，也不把五家公司强�
  - [x] 服务器 `.env` 只读 readiness 检查和发布流程已完成；邮箱/短信/图形验证运行时配置已写入香港 ECS 并重建 app，认证能力状态路由已强制运行时读取，避免构建期静态化
 - [~] Caddy 已只保护旧版 `/api/research/*`，公开读与平台写接口由应用会话/权限处理；完整公网身份治理仍待补齐
 - [x] 建立用户、项目、成员、文件树、Branch、Commit、Revision、MR、Review、Attribution schema 与迁移（002/025 已在香港数据库执行并复核）
-- [~] 建立 `uploaded_asset`、`ingestion_job`、`project_view_daily`、`project_stats` schema 与聚合任务；公开阅读统计已通过 `project_reader` + `project_view_daily` + `project_stats` 同步幂等聚合，项目评论数已由 `project_comment` 实时聚合，点赞/关注统计仍待实现
+- [~] 建立 `uploaded_asset`、`ingestion_job`、`project_view_daily`、`project_stats` schema 与聚合任务；公开阅读统计已通过 `project_reader` + `project_view_daily` + `project_stats` 同步幂等聚合，项目评论数实时聚合，项目/作者/评论点赞与关注均有唯一关系，异步热度聚合仍待补齐
 - [x] 接入 TipTap，正文 Block 使用稳定 ID，支持 Markdown 导入导出（`components/report-editor.tsx` 与 `tiptap-document` 契约已通过）
 - [~] 登录后创建空白项目、创建私有草稿分支和 OSS 隔离上传入口已实现；真实账号上传正向 E2E 与解析后自动进入工作台仍待联调
 - [~] Markdown/TXT/PDF/DOCX/PNG/JPEG 白名单、MIME magic、大小、哈希、重复检测、解析状态和幂等重试；解析 Worker 已支持文本/原生 PDF/DOCX，图片与扫描 PDF 进入 `needs_review`；ready 文本可通过受权限约束的索引接口写入 source/source_chunk
@@ -71,8 +71,8 @@ Yu 的判断和证据台账；不做默认总排名，也不把五家公司强�
 - [~] 公开首发 manifest 校验脚本已加入（重复 ID/slug、HTTPS、来源类型、哈希格式、待核验边界和社区统计污染检查）；网络可达性、许可证人工确认与生产导入审批仍待补齐
 - [x] 首页展示真实数据库项目和真实聚合统计；公网 E2E 已验证公开项目、来源和真实统计投影，空统计保持明确空状态
 - [~] 来源刷新与变更检测服务已实现安全 URL、DNS、超时、大小和哈希边界，并对变化生成 `needs_review` 新来源；HTTP 路由和定时任务仍待接入
-- [~] 首页列表式卡片展示 owner、published_at、main 最新合并、去重阅读、已合并贡献者、来源与 open MR；去重阅读、作者主页、关注、项目级评论与段落锚点评论已接入真实数据库，评论点赞仍待实现
-- [~] 项目 Star 已完成真实用户唯一关系、GET/POST/DELETE API 和详情页反馈；作者主页、关注关系、项目评论和 GitHub 风格搜索/项目导航已完成，段落评论/评论点赞仍待实现
+- [~] 首页列表式卡片展示 owner、published_at、main 最新合并、去重阅读、已合并贡献者、来源与 open MR；去重阅读、作者主页、关注、项目级评论、段落锚点评论和评论点赞已接入真实数据库，部分通知深链仍待补齐
+- [~] 项目 Star 已完成真实用户唯一关系、GET/POST/DELETE API 和详情页反馈；作者主页、关注关系、项目评论、评论点赞和 GitHub 风格搜索/项目导航已完成，完整 Session 角色回放仍待补齐
 - [~] 历史社区 seed batch 曾写入场景账号与互动；当前 seed 已禁止创建 synthetic 用户，只允许已有真实 active 账号参与，旧 `community-user-*` 账号需在备份后用显式退役参数处理，香港生产批次需按五家范围重新执行和验收
 - [x] 历史企业项目已写入可追溯社区活动；清理迁移必须保留社区账户和非项目专属互动，项目专属活动按外键和审计规则处理，统计由同一事实聚合
 - [x] seed batch 重建/清理脚本、唯一约束校验和跨表一致性验收已通过；`--check` 输出 `statsMismatch=0`、`mergedMergeRequests=12`
@@ -114,7 +114,7 @@ Yu 的判断和证据台账；不做默认总排名，也不把五家公司强�
 - [~] 已展示已有引用、来源 URL、页码和摘要；没有来源范围、刷新状态或引用编辑 UI
 - [x] 当前报告可打开“添加文本资料”对话框，粘贴标题和正文后刷新来源列表；内存演示模式明确禁用
 - [~] 保存会生成不可变 revision 且乐观锁拒绝冲突；没有 Diff、版本浏览、回滚 UI 或 API
-- [~] 设置、来源刷新；Markdown 导出已通过公开投影完成，PDF 导出仍待实现
+- [~] 设置、来源刷新；Markdown 导出已通过公开投影完成，PDF 导出仍待实现；公开文件预览已支持 Markdown/TXT/PDF/图片/CSV/XLSX 的安全投影
 - [~] `Ctrl/Cmd+K`、窄屏 CSS 和 reduced-motion 已有；旧报告编辑器已接入真实 `Ctrl/Cmd+S -> onSave` 并有契约覆盖；公开平台正文仍是只读投影，键盘全流程和公开编辑器 E2E 待正文编辑 UI 挂载后验收
 
 ## 2. 数据与 API V1
