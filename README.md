@@ -23,7 +23,7 @@
 
 - URL/PDF/图片来源刷新和变化检测仍未实现；私有文件上传与解析 Worker 已支持 Markdown/TXT、原生文字 PDF、DOCX，扫描 PDF/图片会安全降级为 `needs_review`，视觉 OCR 尚未接入；
 - pgvector 持久化已提供可选迁移、能力探测、版本/哈希校验、权限过滤和确定性降级；大规模 ANN 索引重建、后台 Worker 与 Golden Set 检索评测仍未完成；
-- 企业 CRUD、图谱写入/API/UI、版本 Diff/回滚、Markdown/PDF 导出；
+- 企业 CRUD、图谱写入（公开关系图 API/UI 已实现）、版本 Diff/回滚、Markdown/PDF 导出；
 - 应用内会话认证已实现；旧版 Research API 仍依赖 Caddy Basic Auth，公开平台写操作依赖 Auth.js/RBAC；
 - 备份/发布/健康检查脚本和安全组只读计划已加入；公网 HTTPS 已验收。异机恢复、磁盘/流量告警以及 SSH/RDP 安全组收紧仍待人工变更和演练。
 
@@ -81,6 +81,7 @@ Internet
 - [开放知识协作平台产品与架构规格](docs/open-knowledge-platform-spec.md)
 - [开放知识平台 shadcn/ui 前端与动效规范](docs/open-knowledge-ui-motion.md)
 - [公开企业首发数据包与证据边界](docs/public-company-seed.md)
+- [公开项目 GraphRAG-lite 关系图](docs/public-project-graph.md)
 - [五家企业研究范围冻结](docs/enterprise-scope-freeze.md)
 - [内测认证关闭模式](docs/public-auth-closed-mode.md)
 - [真实身份认证 Provider 与验收边界](docs/authentication-providers.md)
