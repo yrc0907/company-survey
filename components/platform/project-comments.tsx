@@ -3,7 +3,7 @@
 /* 私有 OSS 的短期签名 URL 动态生成，不能安全加入 Next Image 的固定远程域名白名单。 */
 /* eslint-disable @next/next/no-img-element */
 
-import { AlertCircle, CheckCircle2, CornerDownRight, FileImage, Loader2, MessageCircle, RefreshCw, Reply, Send, Trash2, UploadCloud, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, CornerDownRight, FileImage, Heart, Loader2, MessageCircle, RefreshCw, Reply, Send, Trash2, UploadCloud, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { UserAvatar } from "@/components/ui/avatar";
@@ -17,6 +17,8 @@ interface ProjectCommentsProps {
   onRequireLogin: () => void;
   onCountChange?: (count: number) => void;
   initialAnchor?: CommentAnchor | null;
+  /** 通知深链定位到具体评论；评论加载后自动滚动并高亮。 */
+  initialCommentId?: string | null;
 }
 
 interface CommentResponse { comments?: ProjectCommentSummary[]; comment?: ProjectCommentSummary; error?: string; }
@@ -101,7 +103,7 @@ function relativeDate(value: string): string {
 }
 
 /** 项目级楼中楼评论：读取可匿名，写入与删除由服务端 Session/权限决定。 */
-export function ProjectComments({ projectId, authenticated, onRequireLogin, onCountChange, initialAnchor = null }: ProjectCommentsProps) {
+export function ProjectComments({ projectId, authenticated, onRequireLogin, onCountChange, initialAnchor = null, initialCommentId = null }: ProjectCommentsProps) {
   const [comments, setComments] = useState<ProjectCommentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -114,6 +116,8 @@ export function ProjectComments({ projectId, authenticated, onRequireLogin, onCo
   const [deleteError, setDeleteError] = useState("");
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
+  const [likingId, setLikingId] = useState<string | null>(null);
+  const [likeError, setLikeError] = useState("");
   const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -126,12 +130,13 @@ export function ProjectComments({ projectId, authenticated, onRequireLogin, onCo
       const nextComments = payload.comments ?? [];
       setComments(nextComments);
       onCountChange?.(nextComments.filter((comment) => !comment.deleted).length);
+      if (initialCommentId) window.setTimeout(() => document.getElementById(`project-comment-${initialCommentId}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "评论暂时无法加载");
     } finally {
       setLoading(false);
     }
-  }, [onCountChange, projectId]);
+  }, [initialCommentId, onCountChange, projectId]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -204,6 +209,25 @@ export function ProjectComments({ projectId, authenticated, onRequireLogin, onCo
     setPendingAttachments((current) => current.filter((item) => item.id !== id));
   }
 
+  /** 点赞按钮只提交目标状态，响应中的计数作为唯一事实回写，避免并发点击产生本地漂移。 */
+  async function toggleLike(comment: ProjectCommentSummary): Promise<void> {
+    if (comment.deleted || likingId) return;
+    if (!authenticated) { onRequireLogin(); return; }
+    const liked = comment.liked !== true;
+    setLikingId(comment.id);
+    setLikeError("");
+    try {
+      const response = await fetch(`/api/platform/projects/${encodeURIComponent(projectId)}/comments/${encodeURIComponent(comment.id)}/like`, {
+        method: "POST", headers: { "content-type": "application/json", accept: "application/json" }, credentials: "same-origin", body: JSON.stringify({ liked }),
+      });
+      const payload = await response.json().catch(() => ({})) as { liked?: boolean; likeCount?: number; error?: string };
+      if (!response.ok || typeof payload.likeCount !== "number") throw new Error(payload.error ?? "点赞操作失败");
+      setComments((current) => current.map((item) => item.id === comment.id ? { ...item, liked: payload.liked === true, likeCount: Math.max(0, Math.trunc(payload.likeCount!)) } : item));
+    } catch (requestError) {
+      setLikeError(requestError instanceof Error ? requestError.message : "点赞操作失败");
+    } finally { setLikingId(null); }
+  }
+
   async function remove(comment: ProjectCommentSummary): Promise<void> {
     if (!comment.canDelete || deletingId) return;
     setDeletingId(comment.id);
@@ -235,11 +259,12 @@ export function ProjectComments({ projectId, authenticated, onRequireLogin, onCo
       {!loading && !error && orderedComments.length === 0 ? <p className="mt-5 text-sm text-muted-foreground">还没有讨论，成为第一个发言的人。</p> : null}
 
       {!loading && !error && orderedComments.length ? <div className="mt-5 divide-y divide-border rounded-md border">{orderedComments.map((comment) => {
-        return <article key={comment.id} className="p-4" style={{ marginLeft: comment.depth ? `${Math.min(comment.depth, 4) * 16}px` : undefined }}>
-          <div className="flex items-start gap-3"><UserAvatar name={comment.authorDisplayName || comment.authorUsername} size="sm" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"><strong>{comment.authorDisplayName || comment.authorUsername}</strong><span className="text-muted-foreground">@{comment.authorUsername}</span><time className="text-muted-foreground" dateTime={comment.createdAt}>{relativeDate(comment.createdAt)}</time></div><p className={comment.deleted ? "mt-2 text-sm italic text-muted-foreground" : "mt-2 whitespace-pre-wrap text-sm leading-6"}>{comment.deleted ? "该评论已删除" : comment.body}</p>{comment.attachments?.length && !comment.deleted ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">{comment.attachments.map((attachment) => attachment.downloadUrl ? <a key={attachment.id} href={attachment.downloadUrl} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-md border bg-muted/20" title={`查看 ${attachment.filename}`}><img src={attachment.downloadUrl} alt={attachment.filename} loading="lazy" className="aspect-square w-full object-cover transition-transform group-hover:scale-[1.02]" /></a> : <span key={attachment.id} className="grid aspect-square place-items-center rounded-md border bg-muted/20 p-2 text-center text-[11px] text-muted-foreground"><FileImage size={16} /><span className="mt-1 break-all">{attachment.filename}<br />暂时无法读取</span></span>)}</div> : null}<div className="mt-3 flex flex-wrap items-center gap-2"><Button size="sm" variant="ghost" onClick={() => { setReplyTo(comment); setSubmitState("idle"); setSubmitError(""); }}><Reply size={13} />回复</Button>{comment.canDelete && !comment.deleted ? <Button size="sm" variant="ghost" className="text-destructive" onClick={() => void remove(comment)} disabled={deletingId === comment.id}>{deletingId === comment.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}删除</Button> : null}</div></div></div>
+        return <article key={comment.id} id={`project-comment-${comment.id}`} className={`p-4 transition-colors ${initialCommentId === comment.id ? "bg-muted/60" : ""}`} style={{ marginLeft: comment.depth ? `${Math.min(comment.depth, 4) * 16}px` : undefined }}>
+          <div className="flex items-start gap-3"><UserAvatar name={comment.authorDisplayName || comment.authorUsername} size="sm" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"><strong>{comment.authorDisplayName || comment.authorUsername}</strong><span className="text-muted-foreground">@{comment.authorUsername}</span><time className="text-muted-foreground" dateTime={comment.createdAt}>{relativeDate(comment.createdAt)}</time></div><p className={comment.deleted ? "mt-2 text-sm italic text-muted-foreground" : "mt-2 whitespace-pre-wrap text-sm leading-6"}>{comment.deleted ? "该评论已删除" : comment.body}</p>{comment.attachments?.length && !comment.deleted ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">{comment.attachments.map((attachment) => attachment.downloadUrl ? <a key={attachment.id} href={attachment.downloadUrl} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-md border bg-muted/20" title={`查看 ${attachment.filename}`}><img src={attachment.downloadUrl} alt={attachment.filename} loading="lazy" className="aspect-square w-full object-cover transition-transform group-hover:scale-[1.02]" /></a> : <span key={attachment.id} className="grid aspect-square place-items-center rounded-md border bg-muted/20 p-2 text-center text-[11px] text-muted-foreground"><FileImage size={16} /><span className="mt-1 break-all">{attachment.filename}<br />暂时无法读取</span></span>)}</div> : null}<div className="mt-3 flex flex-wrap items-center gap-2"><Button size="sm" variant="ghost" onClick={() => void toggleLike(comment)} disabled={comment.deleted || likingId === comment.id} aria-pressed={comment.liked === true} title={authenticated ? "点赞评论" : "登录后点赞评论"} className={comment.liked ? "text-foreground" : undefined}>{likingId === comment.id ? <Loader2 size={13} className="animate-spin" /> : <Heart size={13} fill={comment.liked ? "currentColor" : "none"} />}<span>{comment.likeCount ?? 0}</span></Button><Button size="sm" variant="ghost" onClick={() => { setReplyTo(comment); setSubmitState("idle"); setSubmitError(""); }}><Reply size={13} />回复</Button>{comment.canDelete && !comment.deleted ? <Button size="sm" variant="ghost" className="text-destructive" onClick={() => void remove(comment)} disabled={deletingId === comment.id}>{deletingId === comment.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}删除</Button> : null}</div></div></div>
         </article>;
       })}</div> : null}
       {deleteError ? <p className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="alert">{deleteError}</p> : null}
+      {likeError ? <p className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="alert">{likeError}</p> : null}
 
       <form className="mt-6 rounded-md border bg-muted/20 p-4" onSubmit={(event) => void submit(event)}>
         {anchor ? <div className="mb-3 flex items-start justify-between gap-3 border-l-2 border-foreground pl-3 text-xs text-muted-foreground"><span><strong className="text-foreground">评论此段</strong><br />{anchor.label}：{anchor.quote}</span><Button type="button" size="icon" variant="ghost" aria-label="取消段落引用" title="取消段落引用" onClick={() => setAnchor(null)}><X size={14} /></Button></div> : null}

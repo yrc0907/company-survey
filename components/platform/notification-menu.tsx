@@ -19,7 +19,7 @@ interface NotificationItem {
 interface NotificationPayload { items?: NotificationItem[]; unreadCount?: number; }
 
 const labels: Record<string, string> = {
-  comment_reply: "回复了你的评论", comment_mention: "在评论中提到了你", project_starred: "收藏了你的项目",
+  comment_reply: "回复了你的评论", comment_mention: "在评论中提到了你", comment_liked: "赞了你的评论", project_starred: "收藏了你的项目",
   author_followed: "关注了你", merge_request_opened: "提交了修改申请", merge_request_reviewed: "审核了修改申请",
   merge_request_merged: "合并了修改申请", system: "系统通知",
 };
@@ -70,7 +70,13 @@ export function NotificationMenu(): JSX.Element | null {
   async function openTarget(item: NotificationItem): Promise<void> {
     if (!item.readAt) await fetch(`/api/platform/notifications/${encodeURIComponent(item.id)}/read`, { method: "POST", headers: { "content-type": "application/json" } });
     setOpen(false);
-    if (item.project?.id) window.location.assign(`/?project=${encodeURIComponent(item.project.id)}`);
+    if (item.project?.id) {
+      const url = new URL(window.location.origin);
+      url.pathname = "/";
+      url.searchParams.set("project", item.project.id);
+      if (item.targetType === "comment") url.searchParams.set("comment", item.targetId);
+      window.location.assign(`${url.pathname}${url.search}`);
+    }
   }
 
   return <div className="relative">

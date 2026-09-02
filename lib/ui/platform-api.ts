@@ -1,6 +1,6 @@
 import type { PublicProjectRecord } from "@/lib/repositories/platform/platform-repository";
 
-import type { SeedFileNode, SeedProject, SeedSection, SeedUser } from "@/lib/ui/platform-seed";
+import type { SeedFileNode, SeedFilePreview, SeedProject, SeedSection, SeedUser } from "@/lib/ui/platform-seed";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -33,6 +33,27 @@ interface FlatFile {
   kind: SeedFileNode["kind"];
   parentId: string | null;
   position: number;
+  preview?: SeedFilePreview;
+}
+
+function preview(value: unknown): SeedFilePreview | undefined {
+  const source = record(value);
+  if (!source) return undefined;
+  const kind = source.kind === "markdown" || source.kind === "text" || source.kind === "pdf" || source.kind === "image" || source.kind === "spreadsheet" || source.kind === "unknown" ? source.kind : "unknown";
+  const rows = Array.isArray(source.rows) ? source.rows.flatMap((row) => Array.isArray(row) ? [row.filter((cell): cell is string => typeof cell === "string").slice(0, 40)] : []).slice(0, 200) : undefined;
+  const columns = Array.isArray(source.columns) ? source.columns.filter((item): item is string => typeof item === "string").slice(0, 40) : undefined;
+  const textValue = text(source.text).slice(0, 40_000);
+  return {
+    kind,
+    ...(text(source.mimeType) ? { mimeType: text(source.mimeType) } : {}),
+    ...(text(source.sourceUrl) ? { sourceUrl: text(source.sourceUrl) } : {}),
+    ...(text(source.capturedAt) ? { capturedAt: text(source.capturedAt) } : {}),
+    ...(text(source.contentHash) ? { contentHash: text(source.contentHash) } : {}),
+    ...(textValue ? { text: textValue } : {}),
+    ...(columns?.length ? { columns } : {}),
+    ...(rows?.length ? { rows } : {}),
+    ...(text(source.note) ? { note: text(source.note) } : {}),
+  };
 }
 
 function files(value: unknown): SeedFileNode[] {
@@ -42,7 +63,7 @@ function files(value: unknown): SeedFileNode[] {
     const id = text(source?.id);
     const name = text(source?.name);
     if (!id || !name) return [];
-    return [{ id, name, kind: kind(source?.kind), parentId: typeof source?.parentId === "string" ? source.parentId : null, position: number(source?.position) }];
+    return [{ id, name, kind: kind(source?.kind), parentId: typeof source?.parentId === "string" ? source.parentId : null, position: number(source?.position), preview: preview(source?.preview) }];
   });
   const byParent = new Map<string | null, FlatFile[]>();
   for (const item of flat) byParent.set(item.parentId, [...(byParent.get(item.parentId) ?? []), item]);
@@ -51,7 +72,7 @@ function files(value: unknown): SeedFileNode[] {
     return (byParent.get(parentId) ?? []).sort((left, right) => left.position - right.position || left.name.localeCompare(right.name, "zh-CN")).flatMap((item) => {
       if (visiting.has(item.id)) return [];
       visiting.add(item.id);
-      const node: SeedFileNode = { id: item.id, name: item.name, kind: item.kind };
+      const node: SeedFileNode = { id: item.id, name: item.name, kind: item.kind, ...(item.preview ? { preview: item.preview } : {}) };
       const children = build(item.id);
       if (children.length) node.children = children;
       return [node];

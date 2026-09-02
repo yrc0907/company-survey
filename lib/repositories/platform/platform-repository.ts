@@ -10,12 +10,26 @@ import type {
   IdentityAuditRecord,
 } from "@/lib/domain/platform";
 
+
 /** 公开项目所有者的最小资料；不包含邮箱、权限或任何私有字段。 */
 export interface PublicProjectOwnerRecord {
   id: string;
   username: string;
   displayName: string;
   avatarAssetId: string | null;
+}
+
+/** 公开文件预览的 API 契约；只允许来源快照/解析产物提供字段。 */
+export interface PublicFilePreview {
+  kind: "markdown" | "text" | "pdf" | "image" | "spreadsheet" | "unknown";
+  mimeType?: string;
+  sourceUrl?: string;
+  capturedAt?: string;
+  contentHash?: string;
+  text?: string;
+  columns?: string[];
+  rows?: string[][];
+  note?: string;
 }
 
 /** 公开文件树节点；内容仍由项目详情按需返回，列表不会携带正文。 */
@@ -25,6 +39,8 @@ export interface PublicProjectFileRecord {
   kind: "folder" | "document" | "markdown" | "source" | "data";
   parentId: string | null;
   position: number;
+  /** 公开来源快照或解析产物的最小预览；不存在时不返回内容。 */
+  preview?: PublicFilePreview;
 }
 
 /** 公开项目摘要与统计投影，所有计数均由数据库或 typed seed adapter 提供。 */

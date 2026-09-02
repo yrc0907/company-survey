@@ -3,7 +3,7 @@ import postgres, { type Sql, type TransactionSql } from "postgres";
 
 import { KnowledgeCommandRegistry } from "@/lib/commands/knowledge";
 import type { KnowledgeBranchContext, KnowledgeCommandStore, KnowledgeNodeRecord, KnowledgeTreeChange } from "@/lib/commands/knowledge/types";
-import { calculateDiff, CollaborationConflictError, CollaborationInvalidStateError, CollaborationNotFoundError, type BranchSummary, type CollaborationNodeSnapshot, type CollaborationSnapshot, type CommitSummary, type CreateBranchInput, type CreateMergeRequestInput, type CreateProjectCommentInput, type CreateProjectInput, type CreateReviewInput, type MergeRequestSummary, type ProjectCommentSummary, type ProjectSummary, type ReviewSummary, type CommentAttachmentRecord, applyDiff } from "@/lib/domain/collaboration";
+import { calculateDiff, CollaborationConflictError, CollaborationInvalidStateError, CollaborationNotFoundError, type BranchSummary, type CollaborationNodeSnapshot, type CollaborationSnapshot, type CommitSummary, type CreateBranchInput, type CreateMergeRequestInput, type CreateProjectCommentInput, type CreateProjectInput, type CreateReviewInput, type MergeRequestSummary, type ProjectCommentLikeState, type ProjectCommentSummary, type ProjectSummary, type ReviewSummary, type CommentAttachmentRecord, type SetProjectCommentLikeInput, applyDiff } from "@/lib/domain/collaboration";
 import type { AuthenticatedActor, KnowledgeNodeKind } from "@/lib/domain/platform";
 import type { CollaborationRepository, CollaborationQueryable } from "@/lib/repositories/collaboration/collaboration-repository";
 import { collaborationIdempotencyFingerprint } from "@/lib/services/collaboration/idempotency";
@@ -49,6 +49,8 @@ function mapProjectComment(row: Row): ProjectCommentSummary {
     authorDisplayName: text(row.author_display_name), authorAvatarAssetId: nullable(row.author_avatar_asset_id),
     body: deleted ? null : text(row.body), deleted, canDelete: false,
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
+    liked: row.liked === true || row.liked === "t",
+    likeCount: Number(row.like_count ?? 0),
   };
 }
 
@@ -64,7 +66,8 @@ const PROJECT_SELECT = `SELECT p.id, p.owner_user_id, p.slug, p.title, p.summary
   FROM knowledge_project p JOIN platform_profile pr ON pr.user_id = p.owner_user_id`;
 const MERGE_SELECT = `SELECT id, project_id, source_branch_id, target_branch_id, author_user_id, title, description, status, base_commit_id, head_commit_id, merged_commit_id, merged_by_user_id, target_version, conflict_status, conflict_details, idempotency_fingerprint, created_at, updated_at, merged_at FROM merge_request`;
 const COMMENT_SELECT = `SELECT c.id, c.project_id, c.parent_id, c.node_id, c.block_id, c.quote, c.author_user_id, c.body, c.deleted_at, c.idempotency_key, c.idempotency_fingerprint, c.created_at, c.updated_at,
-  pr.username AS author_username, pr.display_name AS author_display_name, pr.avatar_asset_id AS author_avatar_asset_id
+  pr.username AS author_username, pr.display_name AS author_display_name, pr.avatar_asset_id AS author_avatar_asset_id,
+  (SELECT COUNT(*) FROM project_comment_like pcl WHERE pcl.comment_id = c.id AND pcl.active = TRUE)::bigint AS like_count
   FROM project_comment c JOIN platform_user u ON u.id = c.author_user_id
   JOIN platform_profile pr ON pr.user_id = u.id`;
 
@@ -158,6 +161,47 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
   public async getProjectComment(commentId: string): Promise<ProjectCommentSummary | null> {
     const rows = await this.sql<Row[]>`${this.sql.unsafe(COMMENT_SELECT)} WHERE c.id = ${commentId} LIMIT 1`;
     return rows[0] ? mapProjectComment(rows[0]) : null;
+  }
+
+  /** 读取评论点赞状态；匿名用户只返回数量和 liked=false，任何查询都绑定评论 ID。 */
+  public async getProjectCommentLikeState(commentId: string, userId: string | null): Promise<ProjectCommentLikeState | null> {
+    const rows = await this.sql<Row[]>`SELECT c.id AS comment_id,
+      COUNT(pcl.user_id) FILTER (WHERE pcl.active = TRUE)::int AS like_count,
+      COALESCE(BOOL_OR(pcl.user_id = ${userId} AND pcl.active = TRUE), FALSE) AS liked
+      FROM project_comment c
+      JOIN knowledge_project kp ON kp.id = c.project_id
+      LEFT JOIN project_comment_like pcl ON pcl.comment_id = c.id
+      WHERE c.id = ${commentId} AND kp.visibility = 'public' AND kp.status = 'published'
+      GROUP BY c.id`;
+    const row = rows[0];
+    return row ? { commentId: text(row.comment_id), liked: bool(row.liked), likeCount: Number(row.like_count ?? 0) } : null;
+  }
+
+  /** 点赞/取消点赞在事务内幂等切换；首次点赞给评论作者创建可回跳通知。 */
+  public async setProjectCommentLike(input: SetProjectCommentLikeInput): Promise<ProjectCommentLikeState | null> {
+    return this.sql.begin(async (tx: TransactionSql) => {
+      const comments = await tx<Row[]>`SELECT c.id, c.author_user_id
+        FROM project_comment c JOIN knowledge_project kp ON kp.id = c.project_id
+        WHERE c.id = ${input.commentId} AND c.project_id = ${input.projectId}
+          AND kp.visibility = 'public' AND kp.status = 'published' FOR SHARE`;
+      const comment = comments[0];
+      if (!comment) return null;
+      await tx`INSERT INTO project_comment_like (comment_id, user_id, active, created_at, updated_at)
+        VALUES (${input.commentId}, ${input.userId}, ${input.liked}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT (comment_id, user_id) DO UPDATE SET active = EXCLUDED.active, updated_at = CURRENT_TIMESTAMP`;
+      // 自己给自己的评论点赞不产生通知；通知唯一键保证重复切换不会堆积垃圾记录。
+      if (input.liked && text(comment.author_user_id) !== input.userId) {
+        await tx`INSERT INTO platform_notification
+          (id, recipient_user_id, actor_user_id, kind, project_id, target_type, target_id, payload, read_at, created_at)
+          VALUES (${randomUUID()}, ${text(comment.author_user_id)}, ${input.userId}, 'comment_liked', ${input.projectId}, 'comment', ${input.commentId}, ${JSON.stringify({ commentId: input.commentId })}::jsonb, NULL, CURRENT_TIMESTAMP)
+          ON CONFLICT (recipient_user_id, kind, target_type, target_id, actor_user_id)
+          WHERE actor_user_id IS NOT NULL DO UPDATE SET read_at = NULL, created_at = CURRENT_TIMESTAMP`;
+      }
+      const state = await tx<Row[]>`SELECT COUNT(*) FILTER (WHERE active = TRUE)::int AS like_count,
+        EXISTS (SELECT 1 FROM project_comment_like WHERE comment_id = ${input.commentId} AND user_id = ${input.userId} AND active = TRUE) AS liked
+        FROM project_comment_like WHERE comment_id = ${input.commentId}`;
+      return { commentId: input.commentId, liked: bool(state[0]?.liked), likeCount: Number(state[0]?.like_count ?? 0) };
+    });
   }
 
   /** 幂等读取必须绑定项目和作者，并校验请求指纹，防止复用键覆盖另一条评论。 */

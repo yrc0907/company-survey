@@ -8,11 +8,30 @@ export interface SeedUser {
   displayName: string;
 }
 
+/**
+ * 文件公开预览投影。
+ * `text`、`rows` 和 `url` 只能来自已公开的来源快照或解析产物，前端不得自行补造。
+ * 原件仍由 OSS/来源权限控制；这里仅携带详情页所需的最小公开投影。
+ */
+export interface SeedFilePreview {
+  kind: "markdown" | "text" | "pdf" | "image" | "spreadsheet" | "unknown";
+  mimeType?: string;
+  sourceUrl?: string;
+  capturedAt?: string;
+  contentHash?: string;
+  text?: string;
+  columns?: string[];
+  rows?: string[][];
+  note?: string;
+}
+
 export interface SeedFileNode {
   id: string;
   name: string;
   kind: FileNodeKind;
   children?: SeedFileNode[];
+  /** 公开主版本可见的来源/解析预览；没有内容时不设置。 */
+  preview?: SeedFilePreview;
 }
 
 export interface SeedSection {

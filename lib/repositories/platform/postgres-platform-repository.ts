@@ -3,7 +3,7 @@ import postgres, { type Sql, type TransactionSql } from "postgres";
 import { AccountConflictError } from "@/lib/domain/platform/errors";
 import { ValidationError } from "@/lib/domain/errors";
 import type { AuthorFollowState, IdentityAuditRecord, KnowledgeBranchAccess, KnowledgeNodeState, KnowledgeProjectAccess, OAuthIdentityInput, PasswordAccount, PlatformAccount, PlatformRole, PublicAuthorRecord } from "@/lib/domain/platform";
-import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, ListPublicProjectActivityInput, PlatformRepository, PublicAuthorInput, PublicProjectActivityEvent, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, PublicSearchResult, RecordIdentityAuditInput, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput, PublicContributionRecord } from "@/lib/repositories/platform/platform-repository";
+import type { CreatePasswordAccountRecord, CreatePrivateProjectRecordInput, ListPublicProjectActivityInput, PlatformRepository, PublicAuthorInput, PublicFilePreview, PublicProjectActivityEvent, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult, PublicSearchResult, RecordIdentityAuditInput, RecordPublicProjectViewInput, SetAuthorFollowInput, SetPublicProjectStarInput, PublicContributionRecord } from "@/lib/repositories/platform/platform-repository";
 
 type DatabaseRow = Record<string, unknown>;
 type Queryable = Sql | TransactionSql;
@@ -39,6 +39,34 @@ function projectStatus(value: unknown): PublicProjectRecord["status"] {
 
 function projectVisibility(value: unknown): PublicProjectRecord["visibility"] {
   return value as PublicProjectRecord["visibility"];
+}
+
+/** 只把公开来源快照转换为可展示的预览，不把私有 OSS 对象 Key 暴露给客户端。 */
+function sourcePreview(row: DatabaseRow): PublicFilePreview {
+  const title = String(row.source_title ?? "");
+  const sourceKind = String(row.source_kind ?? "").toLowerCase();
+  const mimeType = row.mime_type ? String(row.mime_type) : undefined;
+  const lower = title.toLocaleLowerCase("zh-CN");
+  const kind: PublicFilePreview["kind"] = mimeType?.startsWith("image/") || /\.(png|jpe?g|webp|gif|svg)$/.test(lower)
+    ? "image"
+    : mimeType === "application/pdf" || lower.endsWith(".pdf") ? "pdf"
+      : /\.(csv|tsv|xlsx|xls)$/.test(lower) || sourceKind.includes("spreadsheet") || sourceKind.includes("excel") ? "spreadsheet"
+        : /\.(md|markdown)$/.test(lower) || sourceKind.includes("markdown") ? "markdown"
+          : mimeType?.startsWith("text/") || sourceKind === "text" || /\.(txt|log|json|xml|html?)$/.test(lower) ? "text" : "unknown";
+  const preview: PublicFilePreview = {
+    kind,
+    ...(mimeType ? { mimeType } : {}),
+    ...(row.source_url ? { sourceUrl: String(row.source_url) } : {}),
+    ...(row.captured_at ? { capturedAt: iso(row.captured_at) } : {}),
+    ...(row.content_hash ? { contentHash: String(row.content_hash) } : {}),
+  };
+  const snapshot = typeof row.source_snapshot === "string" ? row.source_snapshot.trim() : "";
+  if (snapshot) preview.text = snapshot.slice(0, 40_000);
+  if (!preview.text && kind === "image" && preview.sourceUrl) preview.note = "图片来源地址可公开访问；原始文件仍由来源方控制。";
+  if (!preview.text && kind === "pdf") preview.note = "已识别为 PDF，但公开版本没有可展示的文本解析产物。";
+  if (!preview.text && kind === "spreadsheet") preview.note = "已识别为表格文件，但公开版本没有可展示的解析产物。";
+  if (!preview.text && kind === "unknown") preview.note = "公开版本没有可识别的文件格式或解析产物。";
+  return preview;
 }
 
 /** 将公开项目 SQL 投影映射为 API 可返回的最小资料；永远不带邮箱或草稿正文。 */
@@ -376,9 +404,29 @@ export class PostgresPlatformRepository implements PlatformRepository {
       LEFT JOIN document_revision dr ON dr.project_id = ns.project_id AND dr.node_id = ns.node_id AND dr.branch_id = ns.branch_id
       WHERE ns.project_id = $1 AND ns.branch_id = $2 AND ns.deleted_at IS NULL AND n.kind IN ('document', 'markdown')
       ORDER BY ns.node_id, dr.created_at DESC NULLS LAST`, [project.id, branchId]);
+    // source 表的历史迁移未始终保存 project_id；公开企业报告使用稳定 report-{project slug} 关联，
+    // 同时按文件名兜底匹配旧资料。只读取 active 来源，且只返回截断后的公开快照。
+    const reportId = project.id.startsWith("project-") ? `report-${project.id.slice("project-".length)}` : "";
+    const sourceRows = reportId ? await this.sql.unsafe<DatabaseRow[]>(`SELECT s.title AS source_title, s.kind AS source_kind,
+        s.url AS source_url, s.snapshot AS source_snapshot, s.content_hash, s.captured_at,
+        NULLIF(s.metadata ->> 'mimeType', '') AS mime_type
+      FROM source s
+      WHERE s.report_id = $1 AND s.state = 'active'
+      ORDER BY s.captured_at DESC, s.id ASC`, [reportId]) : [];
+    const sourceNodes = files.filter((row) => String(row.kind) === "source");
+    const previews = new Map<string, PublicFilePreview>();
+    sourceNodes.forEach((node, index) => {
+      const name = String(node.name).toLocaleLowerCase("zh-CN");
+      const matching = sourceRows.find((source) => String(source.source_title ?? "").toLocaleLowerCase("zh-CN") === name)
+        ?? sourceRows[index];
+      if (matching) previews.set(String(node.node_id), sourcePreview(matching));
+    });
     return {
       ...project,
-      files: files.map((row) => ({ id: String(row.node_id), name: String(row.name), kind: row.kind as PublicProjectFileRecord["kind"], parentId: row.parent_node_id ? String(row.parent_node_id) : null, position: Number(row.position) })),
+      files: files.map((row) => ({
+        id: String(row.node_id), name: String(row.name), kind: row.kind as PublicProjectFileRecord["kind"], parentId: row.parent_node_id ? String(row.parent_node_id) : null, position: Number(row.position),
+        ...(previews.has(String(row.node_id)) ? { preview: previews.get(String(row.node_id)) } : {}),
+      })),
       sections: revisions.map((row) => ({ id: `section-${String(row.node_id)}`, nodeId: String(row.node_id), heading: String(row.name), content: String(row.content_text ?? ""), evidenceState: "needs_verification" as const, updatedAt: row.created_at ? iso(row.created_at) : project.updatedAt })),
     };
   }

@@ -1,4 +1,4 @@
-import { CollaborationInvalidStateError, CollaborationNotFoundError, type CreateProjectCommentInput, type ProjectCommentSummary } from "@/lib/domain/collaboration";
+import { CollaborationInvalidStateError, CollaborationNotFoundError, type CreateProjectCommentInput, type ProjectCommentLikeState, type ProjectCommentSummary } from "@/lib/domain/collaboration";
 import type { CommentAttachmentRepository, CommentAttachmentSummary } from "@/lib/domain/collaboration";
 import { PermissionDeniedError, type AuthenticatedActor } from "@/lib/domain/platform";
 import type { CommentAttachmentRecord } from "@/lib/domain/collaboration";
@@ -24,7 +24,39 @@ export class ProjectCommentService {
   public async list(projectId: string, actor: AuthenticatedActor | null): Promise<ProjectCommentSummary[]> {
     await this.assertPublicProject(projectId);
     const comments = await this.repository.listProjectComments(projectId);
-    return this.decorateAttachments(await this.decorateDeletePermission(comments, actor));
+    return this.decorateLikeState(await this.decorateAttachments(await this.decorateDeletePermission(comments, actor)), actor?.userId ?? null);
+  }
+
+  /** 切换评论点赞；评论删除后不可新增点赞，数据库关系保持幂等。 */
+  public async setLike(commentId: string, projectId: string, actor: AuthenticatedActor, liked: boolean): Promise<ProjectCommentLikeState> {
+    const comment = await this.repository.getProjectComment(commentId);
+    if (!comment || comment.projectId !== projectId || comment.deleted) throw new CollaborationNotFoundError("评论不存在");
+    await this.assertPublicProject(projectId);
+    await this.authorization.assertProjectAction(actor, projectId, "read_published");
+    if (!this.repository.setProjectCommentLike) throw new CollaborationInvalidStateError("评论点赞服务暂不可用");
+    const state = await this.repository.setProjectCommentLike({ commentId, projectId, userId: actor.userId, liked });
+    if (!state) throw new CollaborationNotFoundError("评论不存在");
+    return state;
+  }
+
+  /** 读取单条评论点赞状态，供评论按钮按需刷新；匿名同样可看到真实总数。 */
+  public async getLike(commentId: string, projectId: string, userId: string | null): Promise<ProjectCommentLikeState> {
+    const comment = await this.repository.getProjectComment(commentId);
+    if (!comment || comment.projectId !== projectId) throw new CollaborationNotFoundError("评论不存在");
+    await this.assertPublicProject(projectId);
+    if (!this.repository.getProjectCommentLikeState) throw new CollaborationInvalidStateError("评论点赞服务暂不可用");
+    const state = await this.repository.getProjectCommentLikeState(commentId, userId);
+    if (!state) throw new CollaborationNotFoundError("评论不存在");
+    return state;
+  }
+
+  /** 将数据库点赞投影附加到评论列表；匿名请求不带身份条件且只读取总数。 */
+  private async decorateLikeState(comments: ProjectCommentSummary[], userId: string | null): Promise<ProjectCommentSummary[]> {
+    if (!this.repository.getProjectCommentLikeState || comments.length === 0) return comments.map((comment) => ({ ...comment, liked: false, likeCount: comment.likeCount ?? 0 }));
+    return Promise.all(comments.map(async (comment) => {
+      const state = await this.repository.getProjectCommentLikeState!(comment.id, userId);
+      return { ...comment, liked: state?.liked ?? false, likeCount: state?.likeCount ?? comment.likeCount ?? 0 };
+    }));
   }
 
   /** 登录用户创建评论；父评论必须属于同一公开项目，身份不接受客户端传入。 */

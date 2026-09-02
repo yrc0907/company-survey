@@ -2,6 +2,7 @@
 export type NotificationKind =
   | "comment_reply"
   | "comment_mention"
+  | "comment_liked"
   | "project_starred"
   | "author_followed"
   | "merge_request_opened"
