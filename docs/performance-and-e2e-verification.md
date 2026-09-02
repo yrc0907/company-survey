@@ -75,6 +75,7 @@ pnpm exec node scripts/platform-e2e.mjs
 | 2026-09-03 | 香港 ECS `47.57.138.55` | `028_community_seed_support.sql` 已应用；社区 seed 写入 49 个场景用户、13 个项目、78 评论、79 Star、147 关注、104 去重读者、832 日阅读、13 MR/Review/Merge、117 通知和 369 活动事件；重复运行校验 `statsMismatch=0`、`mergedMergeRequests=13` |
 | 2026-09-03 | 香港 ECS `47.57.138.55` | 官方企业资料富化器成功追加 13 个项目的官网快照、内容哈希、source/source_chunk 和研究者分析章节；牧原官网纯前端入口保留透明的 JS/证据边界，旧 Revision 未覆盖 |
 | 2026-09-02 | 香港 ECS `47.57.138.55` | seed + 富化后公网 `pnpm test:e2e:platform`：12/12 通过；新增 GitHub 风格首页/搜索/作者页/项目统计/通知菜单的构建与公开导航验收 |
+| 2026-09-03 | 香港 ECS `47.57.138.55` | 牧原迁移、owner 统一与研究者分析 v2 完成；公开项目 13 个均由 Yu 维护，13 个分析文档已写入，最新公网 E2E 12/12、`pnpm typecheck`/`pnpm lint`/`pnpm test` 全部通过 |
 
 本地 E2E 的剪贴板场景在无头浏览器中会触发权限错误，页面正确显示可读的 Alert；测试将“成功复制”或“权限错误提示”都视为该场景的可验证终态，避免把浏览器能力差异误判为无反馈。
 
