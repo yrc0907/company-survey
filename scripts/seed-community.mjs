@@ -125,6 +125,17 @@ function documentContent(text) {
   };
 }
 
+/** 在既有文档结构末尾追加一个段落，避免 seed 的贡献 Commit 覆盖公开正文。 */
+function appendDocumentContent(baseContent, text) {
+  if (baseContent && typeof baseContent === "object" && Array.isArray(baseContent.content)) {
+    return {
+      ...baseContent,
+      content: [...baseContent.content, { type: "paragraph", attrs: { evidenceState: "needs_verification" }, content: [{ type: "text", text }] }],
+    };
+  }
+  return documentContent(text);
+}
+
 /** 建立跨城市/行业/角色的场景身份；不创建密码凭据，也不触发外部邮件。 */
 async function seedUsers(tx) {
   const createdAt = "2026-08-01T08:00:00.000Z";
@@ -312,12 +323,14 @@ async function seedMergeFlows(tx, assignments) {
     const nodeRows = await tx`SELECT id FROM knowledge_node WHERE project_id = ${projectId} AND kind IN ('document', 'markdown') ORDER BY id LIMIT 1`;
     const nodeId = nodeRows[0] ? String(nodeRows[0].id) : null;
     if (!nodeId) continue;
-    const revisionRows = await tx`SELECT id, content_text FROM document_revision
+    const revisionRows = await tx`SELECT id, content_text, content FROM document_revision
       WHERE project_id = ${projectId} AND branch_id = ${mainBranchId} AND node_id = ${nodeId}
       ORDER BY created_at DESC LIMIT 1`;
     const previousRevision = revisionRows[0] ? String(revisionRows[0].id) : null;
-    const contributionText = "补充章节证据边界与引用定位（社区协作记录，待维护者继续核验）。";
-    const content = documentContent(contributionText);
+    const contributionNote = "补充章节证据边界与引用定位（社区协作记录，待维护者继续核验）。";
+    const baseText = revisionRows[0]?.content_text ? String(revisionRows[0].content_text) : "";
+    const contributionText = baseText ? `${baseText}\n\n${contributionNote}` : contributionNote;
+    const content = appendDocumentContent(revisionRows[0]?.content, contributionNote);
     const contentHash = sha256(contributionText);
     const sourceBranchId = `${projectId}-community-branch-v1`;
     const sourceCommitId = `${projectId}-community-contribution-v1`;
