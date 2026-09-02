@@ -2,7 +2,7 @@
 
 迁移 `022_public_company_seed.sql` 与 `024_public_company_seed_additional.sql` 曾为公开首页和个人 Research API 提供多个企业研究项目。
 2026-09-03 起首发范围冻结为五家：慧策掌上先机、泛微网络、深信服、信锐科技、牧原食品；
-其他企业项目进入清理迁移，不再出现在公开首页或首发资料包中。资料包只包含企业官网公开入口和一段保守的人工摘要，
+其他企业项目已由批次 `enterprise-scope-freeze-2026-09-03` 归档为 `private/archived`，不再出现在公开首页或首发资料包中；归档账本可回滚。资料包只包含企业官网公开入口和一段保守的人工摘要，
 不把模型生成内容、搜索结果或未公开商业信息当成事实。
 
 迁移 `025_public_research_file_tree.sql` 在上述项目中建立统一的研究目录和章节节点。它只创建可追溯的空白结构模板（每个项目 1 个“研究报告”文件夹和 8 个章节文档），
@@ -69,7 +69,7 @@ SELECT COUNT(*) AS research_documents
 
 预期数量应以五个冻结项目为准（每项目 1 个研究文件夹和 8 个章节文档，共 5 和 40）；若某项目已存在同名结构 Commit，迁移会跳过该项目，避免覆盖人工修改。
 
-迁移完成后应查询五个冻结 `knowledge_project` 的 `unique_readers=0`、`source.metadata` 非空，
+迁移完成后应查询五个冻结 `knowledge_project` 的公开状态、`source.metadata` 和最新研究 Revision；当前香港 ECS 已复核公开 API 只返回五家，
 并用公网官网重新抓取快照后再提交下一份带新哈希的修订。官网发生跳转、反爬或内容变更时，
 保留旧来源并新增版本，不能覆盖原始摘要。
 
