@@ -25,7 +25,7 @@
 - [ ] 在 ESA DNS 区核验邮箱 MX、SPF、DKIM、DMARC 与发件域名对齐；邮件主机记录保持 DNS 解析，不走 CDN 代理，并记录投递成功率与退信原因
  - [~] 接入阿里云短信真实 Provider：签名“恒创联众”、模板 `100001`、验证码哈希/过期/消费、429/5xx 重试和挑战幂等键已实现；仍需按控制台 API 端点配置服务器并做最小额度联调，`AccessKey`/`appKey` 不进入代码、文档、镜像或日志
  - [~] 接入阿里云图形验证真实服务端校验：前端票据桥接、服务端场景校验和 fail-closed 边界已实现；仍需配置真实校验端点并联调票据过期/重复/超时
-- [ ] 增加邮箱/手机号身份字段与唯一约束、验证时间、绑定/换绑审计和账号合并规则；邮箱或手机号已属于其他用户时禁止静默创建重复账户
+- [~] 邮箱/手机号字段、唯一约束、验证时间、绑定/换绑状态机和冲突拒绝已由 `021_identity_verification.sql` 与服务契约覆盖；跨账户合并和完整审计查询仍待补齐
  - [x] 建立统一 `verification_challenge` 数据模型和 API：邮箱/短信共用状态机，记录用途、哈希、过期时间、尝试次数、消费时间、请求 IP/设备哈希和供应商消息 ID，不保存验证码明文
  - [~] 增加验证码与登录风控：目标/IP/设备 HMAC 桶、60 秒重发、5 次错误上限和同响应防账号枚举已实现，PostgreSQL 迁移 `023_verification_rate_limits.sql` 提供原子兜底；异常封禁与公开规模 Redis 适配仍待接入
 - [ ] 完成真实 Provider 沙箱/生产联调与回归：注册邮箱验证、邮箱验证码登录、手机号验证码登录、密码找回、绑定/换绑、过期/重复/错误验证码、图形验证失败和供应商 429/5xx
@@ -34,7 +34,7 @@
 - [x] 建立用户、项目、成员、文件树、Branch、Commit、Revision、MR、Review、Attribution schema 与迁移（002/025 已在香港数据库执行并复核）
 - [~] 建立 `uploaded_asset`、`ingestion_job`、`project_view_daily`、`project_stats` schema 与聚合任务；公开阅读统计已通过 `project_reader` + `project_view_daily` + `project_stats` 同步幂等聚合，项目评论数已由 `project_comment` 实时聚合，点赞/关注统计仍待实现
 - [ ] 接入 TipTap，正文 Block 使用稳定 ID，支持 Markdown 导入导出
-- [ ] 登录后创建空白项目，或通过 OSS 隔离上传创建私有草稿项目并进入三栏工作台
+- [~] 登录后创建空白项目、创建私有草稿分支和 OSS 隔离上传入口已实现；真实账号上传正向 E2E 与解析后自动进入工作台仍待联调
 - [~] Markdown/TXT/PDF/DOCX/PNG/JPEG 白名单、MIME magic、大小、哈希、重复检测、解析状态和幂等重试；解析 Worker 已支持文本/原生 PDF/DOCX，图片与扫描 PDF 进入 `needs_review`；ready 文本可通过受权限约束的索引接口写入 source/source_chunk
 - [x] 原始上传文件不可变，可编辑派生正文与原始证据分离；`uploaded_asset.original_asset_id`、`ingestion_artifact` 和 source 索引契约已验证，向他人项目写入仍受个人分支/MR 权限约束
 - [ ] 游客 IndexedDB 草稿、自动保存、登录迁移和过期 base revision 恢复
@@ -54,9 +54,9 @@
 - [ ] 匿名 AI 签名 Cookie、Redis 限流、额度、成本和滥用防护
 - [ ] 阿里云 OSS 文件/头像存储、许可证、举报、下架和审计
 - [~] 私有 Bucket `reaserch` 已创建，ECS 已绑定 `research-oss` 且 IMDSv2 临时凭据状态为 `Success`；OSS SDK、预签名读写、隔离对象删除、所有者边界和 ECS 临时对象 Put/Head/Delete 已验证，目标 Bucket CORS、浏览器直传权限 E2E 仍待接入；解析 Worker 已实现租约、重试、明确待校对降级和 ready 文本的 source/source_chunk 索引接口
-- [ ] 默认头像使用用户名首字符和稳定背景色；用户头像完成 MIME/大小校验、EXIF 清理、WebP 派生和私有 OSS 受控访问
+- [~] 默认头像已使用用户名首字符和稳定背景色；用户头像的 MIME/大小校验、EXIF 清理、WebP 派生和私有 OSS 受控访问仍待实现
 - [ ] PostgreSQL FTS + pgvector + RRF + Reranker 持久化检索和后台索引 Worker
-- [ ] 权限拒绝、游客迁移、版本冲突、署名一致性、移动端、Reduced Motion 和公网 E2E
+- [~] 权限拒绝、版本冲突、署名一致性、移动端、Reduced Motion 和公网 E2E 已有契约/12 项公网 E2E；游客草稿迁移和完整署名回放仍待补齐
 - [x] 审查 Codex、Claude Code、DeepSeek Harness、Headroom 与 Billion Context 本地快照，并形成记忆/压缩/会话架构文档
 - [~] 建立 conversation/message/part/tool/checkpoint/summary/context_snapshot/ai_patch schema 和迁移；`message_part` 与完整 Resume 仍待补齐
 - [~] 新对话、自动命名、历史列表、搜索、重命名、置顶、归档、删除与匿名 IndexedDB 迁移；跨设备迁移仍待验证
