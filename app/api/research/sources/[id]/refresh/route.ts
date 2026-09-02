@@ -1,5 +1,6 @@
 import { authErrorResponse } from "@/lib/auth/api-response";
 import { requireAuthenticatedActor } from "@/lib/auth/session";
+import { assertTrustedJsonRequest } from "@/lib/auth/request-security";
 import { json } from "@/lib/api/http";
 import { NotFoundError, ValidationError } from "@/lib/domain/errors";
 import { PermissionDeniedError } from "@/lib/domain/platform";
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 /** 只刷新当前用户拥有的 URL 来源；变更永远落为 needs_review，不覆盖 active 快照。 */
 export async function POST(_request: Request, context: { params: { id: string } }) {
   try {
+    assertTrustedJsonRequest(_request);
     const sourceId = context.params.id.trim();
     if (!sourceId || sourceId.length > 160) throw new ValidationError("来源 ID 无效");
     const actor = await requireAuthenticatedActor();
