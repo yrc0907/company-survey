@@ -46,6 +46,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runner
+      args:
+        NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID: ${NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID:-}
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-.env}
@@ -93,6 +95,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runner
+      args:
+        NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID: ${NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID:-}
     restart: "no"
     env_file:
       - ${ENV_FILE:-.env}

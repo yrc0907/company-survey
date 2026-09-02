@@ -16,6 +16,10 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NEXT_STANDALONE=1
 
+# 图形验证 AppId 仅是前端公开标识；通过构建参数注入客户端，AppKey 仍只在运行时环境中。
+ARG NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID
+ENV NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID=${NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID}
+
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 RUN corepack enable && corepack prepare pnpm@10.6.2 --activate && pnpm build
