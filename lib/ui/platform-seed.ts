@@ -56,9 +56,6 @@ export interface SeedProject {
   sections: SeedSection[];
 }
 
-const platform = { id: "u-platform", username: "open-research", displayName: "开放研究计划" } satisfies SeedUser;
-const lin = { id: "u-lin", username: "lin-data", displayName: "林知远" } satisfies SeedUser;
-const chen = { id: "u-chen", username: "chen-policy", displayName: "陈栩" } satisfies SeedUser;
 const yu = { id: "u-yu", username: "yu-research", displayName: "Yu" } satisfies SeedUser;
 
 const sharedFiles: SeedFileNode[] = [
@@ -222,11 +219,11 @@ export const seedProjects: SeedProject[] = [
     tags: ["十五五", "政策原文", "产业体系"],
     verification: "verified",
     verificationNote: "目录和引用锚点已核对政府公开原文。",
-    owner: chen,
+    owner: yu,
     publishedAt: "2026-08-18T08:00:00.000Z",
     updatedAt: "2026-08-31T15:14:00.000Z",
     uniqueReaders: 0,
-    contributors: [chen],
+    contributors: [yu],
     sourceCount: 0,
     openMergeRequests: 0,
     version: 1,
@@ -242,11 +239,11 @@ export const seedProjects: SeedProject[] = [
     tags: ["跨境电商", "ERP", "竞品研究"],
     verification: "needs_verification",
     verificationNote: "产品信息已整理，市场份额与商业数据尚未完成交叉核验。",
-    owner: lin,
+    owner: yu,
     publishedAt: "2026-08-24T08:00:00.000Z",
     updatedAt: "2026-09-01T02:40:00.000Z",
     uniqueReaders: 0,
-    contributors: [lin],
+    contributors: [yu],
     sourceCount: 0,
     openMergeRequests: 0,
     version: 1,
@@ -262,11 +259,11 @@ export const seedProjects: SeedProject[] = [
     tags: ["开放知识", "AI 助手", "版本协作"],
     verification: "verified",
     verificationNote: "设计决策与当前规格文档一致，尚未实现的能力均明确标注。",
-    owner: platform,
+    owner: yu,
     publishedAt: "2026-08-29T08:00:00.000Z",
     updatedAt: "2026-09-01T10:06:00.000Z",
     uniqueReaders: 0,
-    contributors: [platform],
+    contributors: [yu],
     sourceCount: 0,
     openMergeRequests: 0,
     version: 1,
