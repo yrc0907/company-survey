@@ -18,6 +18,8 @@ export interface PublicGraphNode {
   sourceId: string | null;
   sourceTitle: string | null;
   sourceUrl: string | null;
+  sourceCapturedAt: string | null;
+  sourceContentHash: string | null;
   sourceState: SourceState | null;
 }
 
@@ -31,6 +33,8 @@ export interface PublicGraphEdge {
   sourceId: string | null;
   sourceTitle: string | null;
   sourceUrl: string | null;
+  sourceCapturedAt: string | null;
+  sourceContentHash: string | null;
   sourceState: SourceState | null;
 }
 
@@ -83,7 +87,7 @@ export class GraphService {
       const source = edge.sourceId ? sourceMap.get(edge.sourceId) : undefined;
       return {
         id: edge.id, fromEntityId: edge.fromEntityId, toEntityId: edge.toEntityId, relation: edge.relation,
-        evidenceState: edge.evidenceState, sourceId: edge.sourceId, sourceTitle: source?.title ?? null, sourceUrl: source?.url ?? null, sourceState: source?.state ?? null,
+        evidenceState: edge.evidenceState, sourceId: edge.sourceId, sourceTitle: source?.title ?? null, sourceUrl: source?.url ?? null, sourceCapturedAt: source?.capturedAt ?? null, sourceContentHash: source?.contentHash ?? null, sourceState: source?.state ?? null,
       };
     };
     const publicEdges = edges.filter((edge) => edge.sourceId !== null && sourceMap.get(edge.sourceId)?.state === "active").map(toPublicEdge);
@@ -92,7 +96,7 @@ export class GraphService {
       const source = entity.sourceId ? sourceMap.get(entity.sourceId) : undefined;
       return {
         id: entity.id, kind: entity.kind, name: entity.name, evidenceState: entity.evidenceState,
-        sourceId: entity.sourceId, sourceTitle: source?.title ?? null, sourceUrl: source?.url ?? null, sourceState: source?.state ?? null,
+        sourceId: entity.sourceId, sourceTitle: source?.title ?? null, sourceUrl: source?.url ?? null, sourceCapturedAt: source?.capturedAt ?? null, sourceContentHash: source?.contentHash ?? null, sourceState: source?.state ?? null,
       };
     });
     const baseNote = entities.length === 0
