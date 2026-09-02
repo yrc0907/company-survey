@@ -10,7 +10,7 @@ async function run(): Promise<void> {
     requests.push(new Request(input, init)); attempts += 1;
     return attempts === 1
       ? new Response(JSON.stringify({ Code: "ServiceUnavailable" }), { status: 503 })
-      : new Response(JSON.stringify({ Code: "OK", RequestId: "req-1" }), { status: 200 });
+      : new Response(JSON.stringify({ Code: "OK", Model: { VerifyCode: "654321", RequestId: "req-1" } }), { status: 200 });
   };
   const provider = new AliyunSmsProvider("https://dypnsapi.aliyuncs.com/", "ram-id", "ram-secret", "scheme", "sign", "100001", 1_000, fetcher);
   const receipt = await provider.send({ phoneE164: "+8613800138000", code: "123456", codeExpireMinutes: 10, idempotencyKey: "challenge-1" });
