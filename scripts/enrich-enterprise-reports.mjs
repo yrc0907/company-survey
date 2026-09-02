@@ -92,7 +92,7 @@ async function enrichCompany(tx, [projectId, company, url, focus]) {
   const sourceTitle = `${company}官网公开资料快照`;
 
   await tx`INSERT INTO knowledge_commit (id, project_id, branch_id, parent_commit_id, author_user_id, message, ai_assisted, idempotency_key, idempotency_fingerprint, change_summary, created_at)
-    VALUES (${commitId}, ${projectId}, ${project.branch_id}, ${project.head_commit_id ? String(project.head_commit_id) : null}, ${String(project.owner_user_id)}, ${`导入${company}官方资料快照并补齐研究章节`}, FALSE, ${`official-dossier:${projectId}:v1`}, ${contentHash}, ${JSON.stringify({ source: url, evidenceState: "needs_verification" })}::jsonb, ${now})`;
+    VALUES (${commitId}, ${projectId}, ${project.branch_id}, ${project.head_commit_id ? String(project.head_commit_id) : null}, ${String(project.owner_user_id)}, ${`导入${company}官方资料快照并补齐研究章节`}, FALSE, ${`official-dossier:${projectId}:v2`}, ${contentHash}, ${JSON.stringify({ source: url, evidenceState: "needs_verification" })}::jsonb, ${now})`;
   await tx`INSERT INTO knowledge_node (id, project_id, kind, created_by_user_id, created_at)
     VALUES (${sourceNodeId}, ${projectId}, 'source', ${String(project.owner_user_id)}, ${now}) ON CONFLICT (id) DO NOTHING`;
   await tx`INSERT INTO knowledge_node_state (project_id, branch_id, node_id, parent_node_id, name, position, deleted_at, updated_at)
