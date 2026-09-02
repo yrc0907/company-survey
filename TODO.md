@@ -36,7 +36,7 @@
 - [ ] 接入 TipTap，正文 Block 使用稳定 ID，支持 Markdown 导入导出
 - [ ] 登录后创建空白项目，或通过 OSS 隔离上传创建私有草稿项目并进入三栏工作台
 - [~] Markdown/TXT/PDF/DOCX/PNG/JPEG 白名单、MIME magic、大小、哈希、重复检测、解析状态和幂等重试；解析 Worker 已支持文本/原生 PDF/DOCX，图片与扫描 PDF 进入 `needs_review`；ready 文本可通过受权限约束的索引接口写入 source/source_chunk
-- [ ] 原始上传文件不可变，可编辑派生正文与原始证据分离；向他人项目上传只能进入个人分支/MR
+- [x] 原始上传文件不可变，可编辑派生正文与原始证据分离；`uploaded_asset.original_asset_id`、`ingestion_artifact` 和 source 索引契约已验证，向他人项目写入仍受个人分支/MR 权限约束
 - [ ] 游客 IndexedDB 草稿、自动保存、登录迁移和过期 base revision 恢复
 - [~] Diff、三方合并、冲突处理、审核和单事务合并；项目级楼中楼、段落锚点和图片/GIF 附件已完成，实时协同仍待实现
 - [ ] 段落级贡献追踪、用户贡献历史和 AI 辅助标记
