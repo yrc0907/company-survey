@@ -42,8 +42,34 @@ function projectVisibility(value: unknown): PublicProjectRecord["visibility"] {
 }
 
 /** 只把公开来源快照转换为可展示的预览，不把私有 OSS 对象 Key 暴露给客户端。 */
-function sourcePreview(row: DatabaseRow): PublicFilePreview {
-  const title = String(row.source_title ?? "");
+function parseDelimitedSnapshot(value: string, delimiter: "," | "\t"): { columns: string[]; rows: string[][] } | null {
+  const lines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 201);
+  if (lines.length < 2) return null;
+  // 仅处理公开解析产物中的常见 RFC4180 引号；异常行保留为单列而不丢弃原文。
+  const parseLine = (line: string): string[] => {
+    const cells: string[] = [];
+    let cell = "";
+    let quoted = false;
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index];
+      if (char === '"') {
+        if (quoted && line[index + 1] === '"') { cell += '"'; index += 1; }
+        else quoted = !quoted;
+      } else if (char === delimiter && !quoted) { cells.push(cell.trim()); cell = ""; }
+      else cell += char;
+    }
+    cells.push(cell.trim());
+    return cells.slice(0, 40);
+  };
+  const parsed = lines.map(parseLine);
+  const width = Math.max(...parsed.map((row) => row.length));
+  if (!Number.isFinite(width) || width < 2) return null;
+  const columns = parsed[0].map((column, index) => column || `列 ${index + 1}`).slice(0, width);
+  return { columns, rows: parsed.slice(1).map((row) => Array.from({ length: width }, (_, index) => row[index] ?? "").slice(0, 40)) };
+}
+
+function sourcePreview(row: DatabaseRow, fileName = ""): PublicFilePreview {
+  const title = `${fileName} ${String(row.source_title ?? "")}`;
   const sourceKind = String(row.source_kind ?? "").toLowerCase();
   const mimeType = row.mime_type ? String(row.mime_type) : undefined;
   const lower = title.toLocaleLowerCase("zh-CN");
@@ -61,7 +87,13 @@ function sourcePreview(row: DatabaseRow): PublicFilePreview {
     ...(row.content_hash ? { contentHash: String(row.content_hash) } : {}),
   };
   const snapshot = typeof row.source_snapshot === "string" ? row.source_snapshot.trim() : "";
-  if (snapshot) preview.text = snapshot.slice(0, 40_000);
+  if (snapshot) {
+    preview.text = snapshot.slice(0, 40_000);
+    if (kind === "spreadsheet") {
+      const table = parseDelimitedSnapshot(snapshot, /\.tsv$/i.test(fileName) ? "\t" : ",");
+      if (table) { preview.columns = table.columns; preview.rows = table.rows; }
+    }
+  }
   if (!preview.text && kind === "image" && preview.sourceUrl) preview.note = "图片来源地址可公开访问；原始文件仍由来源方控制。";
   if (!preview.text && kind === "pdf") preview.note = "已识别为 PDF，但公开版本没有可展示的文本解析产物。";
   if (!preview.text && kind === "spreadsheet") preview.note = "已识别为表格文件，但公开版本没有可展示的解析产物。";
@@ -419,7 +451,7 @@ export class PostgresPlatformRepository implements PlatformRepository {
       const name = String(node.name).toLocaleLowerCase("zh-CN");
       const matching = sourceRows.find((source) => String(source.source_title ?? "").toLocaleLowerCase("zh-CN") === name)
         ?? sourceRows[index];
-      if (matching) previews.set(String(node.node_id), sourcePreview(matching));
+      if (matching) previews.set(String(node.node_id), sourcePreview(matching, String(node.name)));
     });
     return {
       ...project,
