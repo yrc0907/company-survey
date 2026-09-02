@@ -91,6 +91,7 @@ const projects = [
   ["project-venustech", "venustech"],
   ["project-dingtalk", "dingtalk"],
   ["project-lark", "lark"],
+  ["project-muyuan", "muyuan"],
 ];
 
 const projectOwnerIndexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
@@ -159,7 +160,8 @@ async function seedProjectMembersAndOwners(tx) {
   const assignments = [];
   for (let projectIndex = 0; projectIndex < projects.length; projectIndex += 1) {
     const [projectId] = projects[projectIndex];
-    const owner = userId(projectOwnerIndexes[projectIndex]);
+    // 所有研究项目由 Yu 维护；跨城市用户只作为真实社区成员参与讨论、关注、阅读与贡献。
+    const owner = "u-yu";
     const rows = await tx`SELECT owner_user_id FROM knowledge_project WHERE id = ${projectId} LIMIT 1`;
     if (!rows[0]) continue;
     const previousOwner = String(rows[0].owner_user_id);
