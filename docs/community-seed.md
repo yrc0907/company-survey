@@ -40,7 +40,7 @@ pnpm community-seed:contract
 pnpm community-seed -- --clean
 ```
 
-清理只退役当前批次的可变关系（Star、关注、阅读、通知）并软删除评论；`knowledge_commit`、`document_revision`、`merge_review` 和 `activity_event` 是 append-only 审计事实，不能物理删除。清理后重新建立一套完整场景，建议使用新的批次名并保留旧批次历史，或在隔离数据库恢复备份。
+清理只退役当前批次的可变关系（Star、关注、阅读、通知）并软删除评论；`knowledge_commit`、`document_revision`、`merge_review` 和 `activity_event` 是 append-only 审计事实，不能物理删除。实体 ID 为稳定幂等键，因此同一数据库应继续使用同一批次重跑；要获得完全干净的新批次，请在隔离数据库恢复备份后再运行，不能只改批次名来掩盖旧历史。
 
 `community_seed_record` 只供运维重建和审计使用，公开 API 不返回 `seed_batch`/`source_kind`，页面按正常用户、项目和互动展示。场景账号没有密码凭据，不能用于外部登录；真实账户仍必须通过注册和邮箱/手机验证流程产生。
 
