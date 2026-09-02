@@ -10,6 +10,7 @@ import { ProjectComments, type CommentAnchor } from "@/components/platform/proje
 import { ProjectActivity } from "@/components/platform/project-activity";
 import { ProjectGraph } from "@/components/platform/project-graph";
 import { FinancialTrend } from "@/components/platform/financial-trend";
+import { ResearchQualitySummary } from "@/components/platform/research-quality-summary";
 import { AssistantPanel } from "@/components/platform/assistant-panel";
 import { ProjectFileTree } from "@/components/platform/file-tree";
 import { Button } from "@/components/ui/button";
@@ -98,6 +99,7 @@ function ProjectDocument({ project, activeNodeId, viewCount, starCount, commentC
       </header>
       <nav className="document-toc" aria-label="本文目录"><span>{activeFile ? "当前文件" : "本文目录"}</span>{sections.map((section) => <a key={section.id} href={`#${section.id}`}>{section.heading}</a>)}</nav>
       {activeFile && /财报与股价趋势/.test(activeFile.heading) ? <FinancialTrend text={activeFile.body.join("\n")} projectId={project.id} /> : null}
+      {activeFile && /研究结论|研究者分析与战略判断|执行摘要/.test(activeFile.heading) ? <div className="mx-auto w-full max-w-[860px] px-5 sm:px-14"><ResearchQualitySummary sections={project.sections} sourceCount={project.sourceCount} /></div> : null}
       {activeFile?.preview && activeFile.node.kind !== "document" ? <div className="mx-auto w-full max-w-[860px] px-14 pt-6 sm:px-14"><FilePreview preview={activeFile.preview} /></div> : null}
       <div className="document-body">
         {sections.map((section, index) => <section key={section.id} id={section.id} className="knowledge-section">
