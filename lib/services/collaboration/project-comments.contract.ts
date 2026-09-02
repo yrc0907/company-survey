@@ -6,7 +6,7 @@ import { setAuthenticatedActorResolverForTest } from "@/lib/auth/session";
 import { setCollaborationRepositoryForTest } from "@/lib/repositories/collaboration";
 import { setPlatformRepositoryForTest } from "@/lib/repositories/platform/platform-repository-factory";
 import type { CollaborationRepository } from "@/lib/repositories/collaboration/collaboration-repository";
-import type { CommentAttachmentRecord, CreateProjectCommentInput, ProjectCommentSummary } from "@/lib/domain/collaboration";
+import { CollaborationInvalidStateError, type CommentAttachmentRecord, type CreateProjectCommentInput, type ProjectCommentSummary } from "@/lib/domain/collaboration";
 import type { AuthenticatedActor } from "@/lib/domain/platform";
 import { getOssConfig, OssObjectStorageProvider } from "@/lib/providers/oss";
 import { setAssetsOssProviderForTest } from "@/lib/services/assets/oss-provider-factory";
@@ -48,6 +48,9 @@ function createFakeRepository(): CollaborationRepository {
       return value;
     },
     listCommentAttachments: async (commentIds: string[]) => attachments.filter((item) => commentIds.includes(item.commentId)),
+    assertCommentAttachmentAssets: async (input: { projectId: string; assetIds: string[]; ownerUserId: string }) => {
+      if (input.assetIds.some((assetId) => assetId !== "asset-image-1")) throw new CollaborationInvalidStateError("附件不存在、未完成校验或不属于当前用户");
+    },
     attachCommentAttachments: async (input: { projectId: string; commentId: string; assetIds: string[]; ownerUserId: string }) => {
       if (input.assetIds.some((assetId) => assetId !== "asset-image-1")) throw new Error("附件不存在、未完成校验或不属于当前用户");
       for (let position = 0; position < input.assetIds.length; position += 1) {
@@ -84,6 +87,8 @@ async function run(): Promise<void> {
     const attachmentPayload = await withAttachment.json() as { comment: ProjectCommentSummary };
     assert.equal(attachmentPayload.comment.attachments?.[0]?.mimeType, "image/gif", "评论响应必须返回附件元数据");
     assert.match(attachmentPayload.comment.attachments?.[0]?.downloadUrl ?? "", /^https:\/\/signed\.test\//, "附件不能返回 OSS 原始 Key，必须是短期签名地址");
+    const invalidAttachment = await postComment(new Request("http://localhost/api/platform/projects/project-1/comments", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ body: "非法附件", attachmentAssetIds: ["foreign-asset"] }) }), { params: { id: project.id } });
+    assert.equal(invalidAttachment.status, 409, "未验证/非本人附件必须在评论写入前拒绝");
     const child = await postComment(new Request("http://localhost/api/platform/projects/project-1/comments", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ parentId: firstPayload.comment.id, body: "回复评论" }) }), { params: { id: project.id } });
     assert.equal(child.status, 201, "同项目父评论回复必须成功");
     const repeated = await postComment(new Request("http://localhost/api/platform/projects/project-1/comments", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": "comment-key" }, body: JSON.stringify({ body: "第一条评论" }) }), { params: { id: project.id } });

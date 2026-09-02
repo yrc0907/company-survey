@@ -18,5 +18,7 @@ export interface CommentAttachmentRecord extends Omit<CommentAttachmentSummary, 
 /** 评论附件仓储的窄接口；绑定操作在同一事务中校验资产归属与状态。 */
 export interface CommentAttachmentRepository {
   listCommentAttachments(commentIds: string[]): Promise<CommentAttachmentRecord[]>;
+  /** 创建评论前验证资产；只读，不创建任何关系。 */
+  assertCommentAttachmentAssets(input: { projectId: string; assetIds: string[]; ownerUserId: string }): Promise<void>;
   attachCommentAttachments(input: { projectId: string; commentId: string; assetIds: string[]; ownerUserId: string }): Promise<CommentAttachmentRecord[]>;
 }

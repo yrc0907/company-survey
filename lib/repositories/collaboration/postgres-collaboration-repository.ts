@@ -103,6 +103,21 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
     return rows.map(mapCommentAttachment);
   }
 
+  /** 创建评论前只读校验资产，避免非法附件先写出一条无法完成的评论。 */
+  public async assertCommentAttachmentAssets(input: { projectId: string; assetIds: string[]; ownerUserId: string }): Promise<void> {
+    const assetIds = Array.from(new Set(input.assetIds.filter(Boolean)));
+    if (assetIds.length > 4) throw new CollaborationInvalidStateError("一条评论最多添加 4 个图片或 GIF 附件");
+    if (!assetIds.length) return;
+    const rows = await this.sql<Row[]>`SELECT id FROM uploaded_asset
+      WHERE id = ANY(${this.sql.array(assetIds)}::text[])
+        AND owner_user_id = ${input.ownerUserId}
+        AND status = 'verified'
+        AND asset_kind = 'original'
+        AND mime_type IN ('image/png', 'image/jpeg', 'image/webp', 'image/gif')
+        AND (project_id IS NULL OR project_id = ${input.projectId})`;
+    if (rows.length !== assetIds.length) throw new CollaborationInvalidStateError("附件不存在、未完成校验或不属于当前用户");
+  }
+
   /** 在单事务内确认资产所有者/状态/类型和项目范围后绑定，重复请求只返回已有关系。 */
   public async attachCommentAttachments(input: { projectId: string; commentId: string; assetIds: string[]; ownerUserId: string }): Promise<CommentAttachmentRecord[]> {
     const assetIds = Array.from(new Set(input.assetIds.filter(Boolean)));

@@ -44,13 +44,20 @@ export class ProjectCommentService {
     const attachmentAssetIds = Array.from(new Set((input.attachmentAssetIds ?? []).map((id) => id.trim()).filter(Boolean)));
     if (attachmentAssetIds.length > 4) throw new CollaborationInvalidStateError("一条评论最多添加 4 个图片或 GIF 附件");
     if (attachmentAssetIds.length && !this.attachmentRepository) throw new CollaborationInvalidStateError("评论附件服务暂不可用");
+    if (attachmentAssetIds.length && this.attachmentRepository?.assertCommentAttachmentAssets) {
+      await this.attachmentRepository.assertCommentAttachmentAssets({ projectId: input.projectId, assetIds: attachmentAssetIds, ownerUserId: actor.userId });
+    }
     const normalized: CreateProjectCommentInput = { ...input, body, parentId: input.parentId ?? null, nodeId, blockId, quote, attachmentAssetIds };
     const fingerprint = input.idempotencyKey
       ? collaborationIdempotencyFingerprint("project-comment", { actorId: actor.userId, projectId: input.projectId, parentId: normalized.parentId, nodeId, blockId, quote, body })
       : undefined;
     if (input.idempotencyKey) {
       const prior = await this.repository.getProjectCommentByIdempotency(input.projectId, actor.userId, input.idempotencyKey, fingerprint);
-      if (prior) return (await this.decorateAttachments(await this.decorateDeletePermission([prior], actor)))[0]!;
+      if (prior) {
+        // 首次请求可能在评论写入后因网络中断未完成关系绑定；幂等重试补偿绑定后再返回。
+        if (attachmentAssetIds.length && this.attachmentRepository) await this.attachmentRepository.attachCommentAttachments({ projectId: input.projectId, commentId: prior.id, assetIds: attachmentAssetIds, ownerUserId: actor.userId });
+        return (await this.decorateAttachments(await this.decorateDeletePermission([prior], actor)))[0]!;
+      }
     }
     const comment = await this.repository.createProjectComment({ ...normalized, idempotencyKey: input.idempotencyKey }, actor, fingerprint);
     if (attachmentAssetIds.length) {
