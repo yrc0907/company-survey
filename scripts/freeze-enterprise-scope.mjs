@@ -66,8 +66,8 @@ async function assertLedgerExists(sql) {
 }
 
 async function readScope(sql) {
-  const rows = await sql`SELECT p.id, p.slug, p.title, p.owner_user_id, p.visibility, p.status,
-      p.category, p.updated_at, p.verification, p.verification_note
+  // 保存完整项目行而不是只保存状态列，便于审计确认和未来扩展回滚；实际恢复仍只改安全的状态字段。
+  const rows = await sql`SELECT p.*
     FROM knowledge_project p
     WHERE p.id = ANY(${sql.array(ALL_MANAGED_PROJECT_IDS)}::text[])
     ORDER BY p.id`;
