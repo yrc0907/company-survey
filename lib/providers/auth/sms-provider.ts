@@ -32,7 +32,7 @@ export class AliyunSmsProvider implements SmsProvider {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), this.timeoutMs);
       try {
-        const response = await this.fetchImplementation(this.endpoint, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body, signal: controller.signal });
+        const response = await this.fetchImplementation(this.endpoint, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...(message.idempotencyKey ? { "x-idempotency-key": message.idempotencyKey } : {}) }, body, signal: controller.signal });
         const payload = await response.json().catch(() => ({})) as Record<string, unknown>; const code = payload.Code ?? payload.code;
         if (!response.ok || code !== "OK") { lastError = new Error(`短信 Provider 返回失败 (${response.status})`); if (attempt === 0 && (response.status === 429 || response.status >= 500)) { await new Promise((resolve) => setTimeout(resolve, 250)); continue; } throw lastError; }
         const messageId = payload.MessageId ?? payload.messageId ?? payload.RequestId ?? payload.requestId; return { providerMessageId: messageId ? String(messageId) : null };

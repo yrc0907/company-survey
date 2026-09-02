@@ -19,15 +19,16 @@ export class CaptchaProviderNotConfiguredError extends Error {
 
 /** 阿里云图形验证服务端适配器；不信任浏览器返回的通过标记，只校验服务端票据。 */
 export class AliyunCaptchaProvider implements CaptchaProvider {
-  public constructor(private readonly endpoint: string, private readonly appId: string, private readonly appKey: string, private readonly timeoutMs = 5000) {}
+  public constructor(private readonly endpoint: string, private readonly appId: string, private readonly appKey: string, private readonly sceneId: string, private readonly timeoutMs = 5000) {}
 
   public static fromEnvironment(environment: Record<string, string | undefined> = process.env): AliyunCaptchaProvider | null {
-    const endpoint = environment.ALIYUN_CAPTCHA_API_URL?.trim();
+    const endpoint = (environment.ALIYUN_CAPTCHA_API_URL?.trim() || "https://captcha.aliyuncs.com/VerifyIntelligentCaptcha");
     const appId = environment.ALIYUN_CAPTCHA_APP_ID?.trim();
     const appKey = environment.ALIYUN_CAPTCHA_APP_KEY?.trim();
-    if (!endpoint || !appId || !appKey) return null;
+    const sceneId = environment.ALIYUN_CAPTCHA_SCENE_ID?.trim();
+    if (!appId || !appKey || !sceneId || !isSafeEndpoint(endpoint)) return null;
     const timeoutMs = Number(environment.ALIYUN_CAPTCHA_TIMEOUT_MS ?? 5000);
-    return new AliyunCaptchaProvider(endpoint, appId, appKey, Number.isFinite(timeoutMs) ? timeoutMs : 5000);
+    return new AliyunCaptchaProvider(endpoint, appId, appKey, sceneId, Number.isFinite(timeoutMs) ? timeoutMs : 5000);
   }
 
   public async verify(input: CaptchaVerificationInput): Promise<boolean> {
@@ -37,8 +38,8 @@ export class AliyunCaptchaProvider implements CaptchaProvider {
     try {
       const response = await fetch(this.endpoint, {
         method: "POST",
-        headers: { "content-type": "application/json", "x-app-id": this.appId, "x-app-key": this.appKey },
-        body: JSON.stringify({ captchaVerifyParam: input.ticket, scene: input.scene, clientIp: input.clientIp, userId: input.userId }),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ CaptchaVerifyParam: input.ticket, SceneId: this.sceneId, AppId: this.appId, AppKey: this.appKey, RemoteIp: input.clientIp ?? undefined }),
         signal: controller.signal,
       });
       if (!response.ok) return false;
@@ -48,6 +49,10 @@ export class AliyunCaptchaProvider implements CaptchaProvider {
       clearTimeout(timeout);
     }
   }
+}
+
+function isSafeEndpoint(value: string): boolean {
+  try { const url = new URL(value); return url.protocol === "https:" && !["localhost", "127.0.0.1", "::1"].includes(url.hostname); } catch { return false; }
 }
 
 /** 未设置 CAPTCHA_PROVIDER 时返回 null；是否允许降级由服务层明确开关决定。 */
