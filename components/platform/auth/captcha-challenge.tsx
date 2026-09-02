@@ -5,8 +5,17 @@ import { useEffect, useRef, useState } from "react";
 
 declare global {
   interface Window {
-    initAlicom4?: (options: Record<string, unknown>) => { getValidate?: () => unknown };
+    initAlicom4?: (options: Record<string, unknown>, callback: (captcha: AlicomCaptcha) => void) => void;
   }
+}
+
+interface AlicomCaptcha {
+  appendTo?: (target: string | HTMLElement) => AlicomCaptcha;
+  getValidate?: () => unknown;
+  onSuccess?: (callback: () => void) => AlicomCaptcha;
+  onFail?: (callback: () => void) => AlicomCaptcha;
+  onError?: (callback: () => void) => AlicomCaptcha;
+  onClose?: (callback: () => void) => AlicomCaptcha;
 }
 
 interface CaptchaChallengeProps {
@@ -30,15 +39,19 @@ export function CaptchaChallenge({ scene, value, onChange, disabled = false }: C
     setLoading(true);
     const initialize = () => {
       if (cancelled || !window.initAlicom4 || !elementRef.current) return;
-      const captcha = window.initAlicom4({
+      window.initAlicom4({
         captchaId: appId,
         product: "bind",
-        element: elementRef.current,
-        success: async () => { const result = await captcha.getValidate?.(); if (result && typeof result === "object") onChange(JSON.stringify(result)); },
-        fail: () => onChange(""),
+      }, (captcha) => {
+        if (cancelled) return;
+        const mounted = captcha.appendTo?.(elementRef.current!);
+        (mounted ?? captcha).onSuccess?.(() => { const result = captcha.getValidate?.(); if (result && typeof result === "object") onChange(JSON.stringify(result)); });
+        (mounted ?? captcha).onFail?.(() => onChange(""));
+        (mounted ?? captcha).onError?.(() => onChange(""));
+        (mounted ?? captcha).onClose?.(() => onChange(""));
+        setConfigured(true);
+        setLoading(false);
       });
-      setConfigured(true);
-      setLoading(false);
     };
     if (window.initAlicom4) initialize();
     else {
