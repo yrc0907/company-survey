@@ -35,7 +35,10 @@ export function FilePreview({ preview }: { preview: SeedFilePreview }) {
   const sourceUrl = preview.sourceUrl && /^https?:\/\//i.test(preview.sourceUrl) ? preview.sourceUrl : null;
   return <aside className="mb-6 rounded-lg border bg-muted/15 p-4" aria-label={`${kindLabel[preview.kind]}预览`}>
     <div className="flex flex-wrap items-center gap-2 text-xs"><span className="inline-flex items-center gap-1 rounded border bg-background px-2 py-1 font-medium"><PreviewIcon kind={preview.kind} />{kindLabel[preview.kind]}</span>{preview.mimeType ? <span className="font-mono text-muted-foreground">{preview.mimeType}</span> : null}{preview.capturedAt ? <span className="text-muted-foreground">采集于 {new Date(preview.capturedAt).toLocaleString("zh-CN")}</span> : null}{sourceUrl ? <a className="ml-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground" href={sourceUrl} target="_blank" rel="noreferrer" referrerPolicy="no-referrer">打开来源 <ExternalLink size={13} aria-hidden="true" /></a> : null}</div>
-    {preview.kind === "image" && sourceUrl ? <div className="mt-3 overflow-hidden rounded-md border bg-background"><img src={sourceUrl} alt="公开来源图片预览" className="max-h-[420px] w-full object-contain" loading="lazy" referrerPolicy="no-referrer" /></div> : null}
+    {preview.kind === "image" && sourceUrl ? <div className="mt-3 overflow-hidden rounded-md border bg-background">
+      {/* eslint-disable-next-line @next/next/no-img-element -- 来源 URL 动态且不在 next/image 的远端白名单；使用 lazy/no-referrer 限制加载影响。 */}
+      <img src={sourceUrl} alt="公开来源图片预览" className="max-h-[420px] w-full object-contain" loading="lazy" referrerPolicy="no-referrer" />
+    </div> : null}
     {preview.kind === "image" && !sourceUrl ? <p className="mb-0 mt-3 text-xs text-muted-foreground">{preview.note ?? "图片原件没有公开预览地址。"}</p> : null}
     {preview.kind === "spreadsheet" ? <div className="mt-3"><SpreadsheetPreview preview={preview} /></div> : null}
     {preview.kind === "pdf" && !preview.text ? <p className="mb-0 mt-3 text-xs text-muted-foreground">{preview.note ?? "PDF 原件没有公开文本解析结果。"}</p> : null}
@@ -43,4 +46,3 @@ export function FilePreview({ preview }: { preview: SeedFilePreview }) {
     {preview.contentHash ? <p className="mb-0 mt-3 truncate font-mono text-[10px] text-muted-foreground" title={preview.contentHash}>内容哈希：{preview.contentHash}</p> : null}
   </aside>;
 }
-
