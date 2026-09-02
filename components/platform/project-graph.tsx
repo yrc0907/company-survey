@@ -15,6 +15,14 @@ const evidenceClass: Record<PublicGraphNode["evidenceState"], string> = { fact: 
 const kindLabel: Record<PublicGraphNode["kind"], string> = { company: "企业", product: "产品", industry: "行业", competitor: "竞品", policy: "政策", source: "来源", claim: "结论" };
 
 function isEvidenceState(value: unknown): value is PublicGraphNode["evidenceState"] { return value === "fact" || value === "inference" || value === "needs_verification" || value === "conflict"; }
+/** 外部来源地址是不可信输入；图谱详情只允许跳转到 HTTP(S)，避免把 URL 当成脚本入口。 */
+function safeSourceUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch { return null; }
+}
 function parseGraph(value: unknown): PublicGraph | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
@@ -24,13 +32,13 @@ function parseGraph(value: unknown): PublicGraph | null {
     const node = item as Record<string, unknown>;
     const kinds = ["company", "product", "industry", "competitor", "policy", "source", "claim"] as const;
     if (typeof node.id !== "string" || typeof node.name !== "string" || !kinds.includes(node.kind as typeof kinds[number]) || !isEvidenceState(node.evidenceState)) return null;
-    return { id: node.id, kind: node.kind as PublicGraphNode["kind"], name: node.name, evidenceState: node.evidenceState, sourceId: typeof node.sourceId === "string" ? node.sourceId : null, sourceTitle: typeof node.sourceTitle === "string" ? node.sourceTitle : null, sourceUrl: typeof node.sourceUrl === "string" ? node.sourceUrl : null, sourceState: typeof node.sourceState === "string" ? node.sourceState as PublicGraphNode["sourceState"] : null };
+    return { id: node.id, kind: node.kind as PublicGraphNode["kind"], name: node.name, evidenceState: node.evidenceState, sourceId: typeof node.sourceId === "string" ? node.sourceId : null, sourceTitle: typeof node.sourceTitle === "string" ? node.sourceTitle : null, sourceUrl: safeSourceUrl(node.sourceUrl), sourceState: typeof node.sourceState === "string" ? node.sourceState as PublicGraphNode["sourceState"] : null };
   };
   const parseEdge = (item: unknown): PublicGraphEdge | null => {
     if (!item || typeof item !== "object") return null;
     const edge = item as Record<string, unknown>;
     if (typeof edge.id !== "string" || typeof edge.fromEntityId !== "string" || typeof edge.toEntityId !== "string" || typeof edge.relation !== "string" || !isEvidenceState(edge.evidenceState)) return null;
-    return { id: edge.id, fromEntityId: edge.fromEntityId, toEntityId: edge.toEntityId, relation: edge.relation, evidenceState: edge.evidenceState, sourceId: typeof edge.sourceId === "string" ? edge.sourceId : null, sourceTitle: typeof edge.sourceTitle === "string" ? edge.sourceTitle : null, sourceUrl: typeof edge.sourceUrl === "string" ? edge.sourceUrl : null, sourceState: typeof edge.sourceState === "string" ? edge.sourceState as PublicGraphEdge["sourceState"] : null };
+    return { id: edge.id, fromEntityId: edge.fromEntityId, toEntityId: edge.toEntityId, relation: edge.relation, evidenceState: edge.evidenceState, sourceId: typeof edge.sourceId === "string" ? edge.sourceId : null, sourceTitle: typeof edge.sourceTitle === "string" ? edge.sourceTitle : null, sourceUrl: safeSourceUrl(edge.sourceUrl), sourceState: typeof edge.sourceState === "string" ? edge.sourceState as PublicGraphEdge["sourceState"] : null };
   };
   const nodes = record.nodes.flatMap((item) => { const parsed = parseNode(item); return parsed ? [parsed] : []; });
   const edges = record.edges.flatMap((item) => { const parsed = parseEdge(item); return parsed ? [parsed] : []; });
