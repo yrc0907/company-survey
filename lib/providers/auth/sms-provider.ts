@@ -17,8 +17,8 @@ function timeout(value: string | undefined): number { const parsed = Number(valu
 export class AliyunSmsProvider implements SmsProvider {
   public constructor(private readonly endpoint: string, private readonly accessKeyId: string, private readonly accessKeySecret: string, private readonly schemeCode: string, private readonly signName: string, private readonly templateCode: string, private readonly timeoutMs = DEFAULT_TIMEOUT_MS, private readonly fetchImplementation: typeof fetch = fetch) {}
   public static fromEnvironment(environment: Record<string, string | undefined> = process.env): AliyunSmsProvider | null {
-    const accessKeyId = environment.ALIYUN_SMS_ACCESS_KEY_ID?.trim() || environment.ALIYUN_SMS_APP_ID?.trim();
-    const accessKeySecret = environment.ALIYUN_SMS_ACCESS_KEY_SECRET?.trim() || environment.ALIYUN_SMS_APP_KEY?.trim();
+    const accessKeyId = environment.ALIYUN_SMS_ACCESS_KEY_ID?.trim();
+    const accessKeySecret = environment.ALIYUN_SMS_ACCESS_KEY_SECRET?.trim();
     const schemeCode = environment.ALIYUN_SMS_SCHEME_CODE?.trim();
     if (!accessKeyId || !accessKeySecret || !schemeCode) return null;
     const endpoint = environment.ALIYUN_SMS_API_URL?.trim() || DEFAULT_ENDPOINT;
@@ -43,6 +43,6 @@ export class AliyunSmsProvider implements SmsProvider {
 }
 export function getSmsProvider(environment: Record<string, string | undefined> = process.env): SmsProvider | null {
   const provider = environment.SMS_PROVIDER?.trim().toLowerCase(); if (!provider || provider === "disabled") return null;
-  if (provider === "aliyun" || provider === "aliyun_sms" || provider === "aliyun_dypns") return AliyunSmsProvider.fromEnvironment(environment);
+  if (provider === "aliyun_dypns") return AliyunSmsProvider.fromEnvironment(environment);
   throw new Error(`不支持的短信 Provider: ${provider}`);
 }

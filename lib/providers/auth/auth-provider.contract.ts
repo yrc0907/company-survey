@@ -23,7 +23,7 @@ async function run(): Promise<void> {
     assert.match(await requests[1]!.text(), /challenge-1/);
 
     globalThis.fetch = async () => new Response(JSON.stringify({ success: true }), { status: 200 });
-    const captcha = new AliyunCaptchaProvider("https://captcha.invalid", "captcha-id", "captcha-key");
+    const captcha = new AliyunCaptchaProvider("https://captcha.invalid", "captcha-id", "captcha-key", "research");
     assert.equal(await captcha.verify({ ticket: "ticket", scene: "email_login", clientIp: null, userId: null }), true);
     globalThis.fetch = async () => new Response(JSON.stringify({ success: false }), { status: 200 });
     assert.equal(await captcha.verify({ ticket: "ticket", scene: "email_login", clientIp: null, userId: null }), false);

@@ -15,7 +15,7 @@ async function run(): Promise<void> {
   assert.equal(missing.scenario_id, "AUTH-GOVERNANCE-001");
   assert.equal(getAuthGovernanceStatus({ GITHUB_CLIENT_ID: "id" }).oauth.github, "not_configured", "半配置 OAuth 必须 fail-closed");
   assert.equal(getAuthGovernanceStatus({ GITHUB_CLIENT_ID: "id", GITHUB_CLIENT_SECRET: "secret" }).oauth.github, "configured");
-  const configured = getAuthGovernanceStatus({ EMAIL_PROVIDER: "smtp", SMTP_HOST: "smtp.example.com", SMTP_USER: "noreply@example.com", SMTP_PASSWORD: "secret", SMS_PROVIDER: "aliyun", ALIYUN_SMS_API_URL: "https://sms.example.com", ALIYUN_SMS_APP_ID: "id", ALIYUN_SMS_APP_KEY: "key", CAPTCHA_PROVIDER: "aliyun", ALIYUN_CAPTCHA_API_URL: "https://captcha.example.com", ALIYUN_CAPTCHA_APP_ID: "id", ALIYUN_CAPTCHA_APP_KEY: "key" });
+  const configured = getAuthGovernanceStatus({ EMAIL_PROVIDER: "aliyun_enterprise_mail", SMTP_HOST: "smtp.example.com", SMTP_USER: "noreply@example.com", SMTP_PASSWORD: "secret", SMS_PROVIDER: "aliyun_dypns", ALIYUN_SMS_API_URL: "https://sms.example.com", ALIYUN_SMS_ACCESS_KEY_ID: "id", ALIYUN_SMS_ACCESS_KEY_SECRET: "secret", ALIYUN_SMS_SCHEME_CODE: "research", CAPTCHA_PROVIDER: "aliyun", ALIYUN_CAPTCHA_API_URL: "https://captcha.example.com", ALIYUN_CAPTCHA_APP_ID: "id", ALIYUN_CAPTCHA_APP_KEY: "key", ALIYUN_CAPTCHA_SCENE_ID: "research" });
   assert.equal(configured.email.loginCode, "configured");
   assert.equal(configured.email.change, "configured");
   assert.equal(configured.sms.loginCode, "configured");
