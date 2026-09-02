@@ -8,7 +8,7 @@ const listed = [
   ["project-sangfor", "深信服", "300454.SZ", "0.300454"],
   ["project-muyuan", "牧原食品", "002714.SZ", "0.002714"],
 ];
-const MARKET_VERSION = "v2";
+const MARKET_VERSION = "v3";
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("DATABASE_URL 未配置");
