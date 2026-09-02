@@ -24,7 +24,7 @@ export const entityKinds = [
 export type EntityKind = (typeof entityKinds)[number];
 
 /** 来源的可用性，失效或冲突来源不能被静默当作证据。 */
-export const sourceStates = ["active", "stale", "conflict", "archived"] as const;
+export const sourceStates = ["active", "stale", "conflict", "archived", "needs_review"] as const;
 export type SourceState = (typeof sourceStates)[number];
 
 /** 企业、行业、竞品或政策档案。 */
