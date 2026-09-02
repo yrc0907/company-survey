@@ -109,7 +109,7 @@ workspace
 | --- | --- | --- |
 | PostgreSQL FTS / BM25 | 企业名、产品名、政策章节、日期、原句、价格等精确检索 | `source_chunk_contextual_fts_idx`（正文+上下文前缀）+ 参数化 `to_tsvector`/`plainto_tsquery` 已接入；标题路径由关键词层补充，BM25 扩展按评测决定 |
 | Dense Vector | 同义表达、跨语言概念、自然语言研究问题 | `gemini-embedding-2-preview` 有界运行时召回 + 可选 pgvector 持久化；本机 BGE-M3 是可选离线 Worker |
-| GraphRAG-lite | 企业—产品—行业—竞品—政策—来源的多跳关系 | schema 与有界内存 BFS 已实现；写入、API 和 UI 待实现 |
+| GraphRAG-lite | 企业—产品—行业—竞品—政策—来源的多跳关系 | schema、有界 BFS、公开只读 API 与项目关系图 UI 已实现；关系写入仍须走草稿/审核/合并 |
 | Parent Retrieval | 命中小段后补足其所属章节上下文 | 已实现：返回父章节与相邻 Chunk |
 
 混合召回的推荐流程：
