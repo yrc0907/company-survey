@@ -23,7 +23,7 @@ const companies = [
   ["project-dbapp", "安恒信息", "https://www.dbappsecurity.com.cn/", "网络安全、数据安全、AI+安全产品与安全服务"],
   ["project-venustech", "启明星辰", "https://www.venustech.com.cn/", "网络安全防护、检测、安全运营与服务"],
   ["project-dingtalk", "钉钉", "https://www.dingtalk.com/", "企业协同、组织管理、AI 办公与数字化工作"],
-  ["project-lark", "Lark", "https://www.larksuite.com/", "全球团队协作、沟通、工作管理与原生 AI"],
+  ["project-lark", "Lark", "https://www.larksuite.com/en_us", "全球团队协作、沟通、工作管理与原生 AI"],
 ];
 
 const sha256 = (value) => createHash("sha256").update(String(value), "utf8").digest("hex");
@@ -48,7 +48,7 @@ async function fetchSnapshot(url) {
     if (!response.ok) throw new Error(`HTTP_${response.status}`);
     const html = await response.text();
     const text = stripHtml(html);
-    if (text.length < 80) throw new Error("SOURCE_TEXT_TOO_SHORT");
+    if (text.length < 40) throw new Error("SOURCE_TEXT_TOO_SHORT");
     return text.slice(0, 24_000);
   } finally { clearTimeout(timer); }
 }
