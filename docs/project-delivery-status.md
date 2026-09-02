@@ -102,7 +102,7 @@ pnpm test:e2e:platform
 - `pnpm test`（社区 seed、五家企业数据、行情、权限、评论、资产、认证 Provider、记忆、检索和 GraphRAG-lite 契约）
 - `pnpm build`
 
-这只是本地代码核验；香港 ECS 的公网 E2E、真实 Provider 投递、异机恢复和安全组变更仍按上面的剩余清单单独验收。
+这只是本地代码核验；香港 ECS 的公网 E2E 已在 2026-09-03 对提交 `88c50ef` 复跑并通过 12/12。真实 Provider 投递、异机恢复和安全组变更仍按上面的剩余清单单独验收。
 
 ## 与 TODO.md 的关系
 
