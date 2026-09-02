@@ -5,6 +5,7 @@ node_modules/
 certs/
 coverage/
 tsconfig.tsbuildinfo
+.ui-craft/*.png
 data/uploads/
 data/backups/
 data/releases/
