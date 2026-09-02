@@ -24,7 +24,7 @@ TODO 不是全部完成。按 `TODO.md` 当前逐项核对的结果：
 2. **五家独立研究项目**：慧策掌上先机、泛微网络、深信服、信锐科技、牧原食品。每家单独维护产品、客户/场景、商业模式、竞争、政策、风险、Yu 的判断和证据状态，不做默认总排名。
 3. **证据和关系图**：PostgreSQL FTS、可选 Dense RRF、Reranker 降级、Parent Retrieval、GraphRAG-lite 有界 BFS、来源回溯和 `fact/inference/needs_verification/conflict` 边界。
 4. **研究数据展示**：泛微、深信服、牧原的公开行情/财报数据卡和持久化日线曲线；缺失数据仍显示待核验，不用静态数字补齐。
-5. **协作只读投影**：公开版本历史、评论/回复、点赞、Star、关注、作者主页、活动和通知 API 的基础能力；历史社区 synthetic 账号已退役。
+5. **协作只读投影**：公开版本历史、逐 Commit Diff、owner-only HEAD 回滚、评论/回复、点赞、Star、关注、作者主页、活动热力图和通知 API 的基础能力；历史社区 synthetic 账号已退役。
 6. **文件安全投影**：Markdown、TXT、PDF、图片、CSV、XLSX 预览；私有 OSS 原件隔离，原件与可编辑派生正文分开。
 7. **内测认证关闭模式**：`PUBLIC_AUTH_ENABLED=false` 时登录、注册、上传等入口明确提示“登录功能暂未开放，仅对内测用户开放”，认证 API 返回 `403 AUTH_CLOSED`。
 8. **部署基线**：香港 ECS、Docker Compose、PostgreSQL 命名卷、Caddy HTTPS、`/healthz` 和公网平台 E2E 记录已具备。
