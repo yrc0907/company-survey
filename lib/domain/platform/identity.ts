@@ -12,6 +12,9 @@ export interface PlatformAccount {
   role: PlatformRole;
   status: AccountStatus;
   emailVerifiedAt: string | null;
+  /** 手机身份只在通过验证码校验后用于认证；未绑定时为 null。 */
+  phoneE164?: string | null;
+  phoneVerifiedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -44,4 +47,20 @@ export interface OAuthIdentityInput {
 export interface AuthenticatedActor {
   userId: string;
   role: PlatformRole;
+}
+
+/** 统一验证码通道；邮件和短信共用同一挑战状态机。 */
+export type VerificationChannel = "email" | "sms";
+
+/** 验证码业务用途，服务端会按用途限制可执行动作。 */
+export type VerificationPurpose = "email_verification" | "email_login" | "password_reset" | "phone_login" | "phone_bind" | "phone_change";
+
+/** 验证码挑战的非敏感公开投影；绝不包含验证码明文或哈希。 */
+export interface VerificationChallengeReceipt {
+  challengeId: string;
+  channel: VerificationChannel;
+  purpose: VerificationPurpose;
+  maskedDestination: string;
+  expiresAt: string;
+  resendAfter: string;
 }

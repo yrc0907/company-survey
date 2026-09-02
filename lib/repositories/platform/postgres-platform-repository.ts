@@ -18,12 +18,14 @@ function mapAccount(row: DatabaseRow): PlatformAccount {
     id: String(row.id), email: String(row.email), username: String(row.username), displayName: String(row.display_name),
     avatarAssetId: row.avatar_asset_id ? String(row.avatar_asset_id) : null, role: row.global_role as PlatformRole,
     status: row.status as PlatformAccount["status"], emailVerifiedAt: row.email_verified_at ? iso(row.email_verified_at) : null,
+    phoneE164: row.phone_e164 ? String(row.phone_e164) : null,
+    phoneVerifiedAt: row.phone_verified_at ? iso(row.phone_verified_at) : null,
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
   };
 }
 
 const ACCOUNT_SELECT = `
-  SELECT u.id, u.email, u.global_role, u.status, u.email_verified_at, u.created_at, u.updated_at,
+  SELECT u.id, u.email, u.global_role, u.status, u.email_verified_at, u.phone_e164, u.phone_verified_at, u.created_at, u.updated_at,
          p.username, p.display_name, p.avatar_asset_id
   FROM platform_user u JOIN platform_profile p ON p.user_id = u.id`;
 
@@ -52,12 +54,13 @@ function mapPublicProject(row: DatabaseRow): PublicProjectRecord {
     category: row.category === "企业" || row.category === "政策" || row.category === "行业" || row.category === "技术" ? row.category : "行业",
     tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
     verification: row.verification === "verified" ? "verified" : "needs_verification",
-    verificationNote: "数据库项目的核验状态由维护者在公开版本中维护。",
+    verificationNote: row.verification_note ? String(row.verification_note) : "数据库项目的核验状态由维护者在公开版本中维护。",
   };
 }
 
 const PUBLIC_PROJECT_SELECT = `
   SELECT p.id, p.slug, p.title, p.summary, p.visibility, p.status, p.license,
+         p.category, p.tags, p.verification, p.verification_note,
          p.published_at, p.updated_at,
          u.id AS owner_id, pr.username AS owner_username, pr.display_name AS owner_display_name,
          pr.avatar_asset_id AS owner_avatar,
@@ -114,6 +117,40 @@ export class PostgresPlatformRepository implements PlatformRepository {
       LIMIT 1`, [identifier]);
     const row = rows[0];
     return row ? { ...mapAccount(row), passwordHash: String(row.password_hash), lockedUntil: row.locked_until ? iso(row.locked_until) : null } : null;
+  }
+
+  public async findAccountByEmail(email: string): Promise<PlatformAccount | null> {
+    const rows = await this.sql<DatabaseRow[]>`${this.sql.unsafe(ACCOUNT_SELECT)} WHERE LOWER(u.email) = LOWER(${email.trim()}) LIMIT 1`;
+    return rows[0] ? mapAccount(rows[0]) : null;
+  }
+
+  public async findAccountByPhone(phoneE164: string): Promise<PlatformAccount | null> {
+    const rows = await this.sql<DatabaseRow[]>`${this.sql.unsafe(ACCOUNT_SELECT)} WHERE u.phone_e164 = ${phoneE164} AND u.phone_verified_at IS NOT NULL LIMIT 1`;
+    return rows[0] ? mapAccount(rows[0]) : null;
+  }
+
+  public async markEmailVerified(userId: string): Promise<PlatformAccount | null> {
+    const rows = await this.sql<DatabaseRow[]>`UPDATE platform_user SET email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ${userId} AND status = 'active' RETURNING id`;
+    if (!rows[0]) return null;
+    return this.findAccountById(userId);
+  }
+
+  public async bindVerifiedPhone(userId: string, phoneE164: string): Promise<PlatformAccount | null> {
+    try {
+      const rows = await this.sql<DatabaseRow[]>`UPDATE platform_user SET phone_e164 = ${phoneE164}, phone_verified_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ${userId} AND status = 'active' RETURNING id`;
+      if (!rows[0]) return null;
+      return this.findAccountById(userId);
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new AccountConflictError("email", "该手机号已绑定其他账户");
+      throw error;
+    }
+  }
+
+  public async setPasswordHash(userId: string, passwordHash: string): Promise<PlatformAccount | null> {
+    const rows = await this.sql<DatabaseRow[]>`UPDATE platform_password_credential SET password_hash = ${passwordHash}, password_changed_at = CURRENT_TIMESTAMP, failed_attempts = 0, locked_until = NULL WHERE user_id = ${userId} RETURNING user_id`;
+    if (!rows[0]) return null;
+    const account = await this.findAccountById(userId);
+    return account?.status === "active" ? account : null;
   }
 
   public async findAccountById(userId: string): Promise<PlatformAccount | null> {

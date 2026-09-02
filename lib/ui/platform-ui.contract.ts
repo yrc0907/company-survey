@@ -9,6 +9,9 @@ function runPlatformUiContract(): void {
   assert.equal(new Set(seedProjects.map((project) => project.id)).size, seedProjects.length, "项目 ID 必须唯一");
   assert.ok(seedProjects.every((project) => project.title && project.owner.username), "首页项目必须包含标题和 owner");
   assert.ok(seedProjects.every((project) => project.publishedAt && project.updatedAt), "首页必须包含发布和最新修改时间");
+  assert.ok(seedProjects.every((project) => project.uniqueReaders === 0), "typed seed 不能伪造阅读数");
+  assert.ok(seedProjects.every((project) => project.contributors.length === 1 && project.openMergeRequests === 0), "typed seed 不能伪造贡献者或 MR 统计");
+  assert.ok(["project-huice", "project-weaver", "project-sangfor", "project-sundray"].every((id) => seedProjects.some((project) => project.id === id)), "四个企业首发项目必须出现在本地首页投影");
   assert.ok(seedProjects.some((project) => project.verification === "verified"), "首发 Seed 必须包含明确已核验项目");
   assert.ok(seedProjects.some((project) => project.verification === "needs_verification"), "首发 Seed 必须包含明确待核验项目");
 

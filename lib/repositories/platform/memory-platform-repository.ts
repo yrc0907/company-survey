@@ -37,6 +37,45 @@ export class MemoryPlatformRepository implements PlatformRepository {
     return account ? structuredClone(account) : null;
   }
 
+  public async findAccountByEmail(email: string): Promise<PlatformAccount | null> {
+    const normalized = email.trim().toLowerCase();
+    const account = Array.from(this.accounts.values()).find((item) => item.email.toLowerCase() === normalized);
+    return account ? this.findAccountById(account.id) : null;
+  }
+
+  public async findAccountByPhone(phoneE164: string): Promise<PlatformAccount | null> {
+    const account = Array.from(this.accounts.values()).find((item) => item.phoneE164 === phoneE164 && item.phoneVerifiedAt);
+    return account ? this.findAccountById(account.id) : null;
+  }
+
+  public async markEmailVerified(userId: string): Promise<PlatformAccount | null> {
+    const account = this.accounts.get(userId);
+    if (!account || account.status !== "active") return null;
+    account.emailVerifiedAt ??= new Date().toISOString();
+    account.updatedAt = new Date().toISOString();
+    return this.findAccountById(userId);
+  }
+
+  public async bindVerifiedPhone(userId: string, phoneE164: string): Promise<PlatformAccount | null> {
+    const existing = Array.from(this.accounts.values()).find((item) => item.phoneE164 === phoneE164 && item.id !== userId);
+    if (existing) throw new AccountConflictError("phone", "该手机号已绑定其他账户");
+    const account = this.accounts.get(userId);
+    if (!account || account.status !== "active") return null;
+    account.phoneE164 = phoneE164;
+    account.phoneVerifiedAt = new Date().toISOString();
+    account.updatedAt = new Date().toISOString();
+    return this.findAccountById(userId);
+  }
+
+  public async setPasswordHash(userId: string, passwordHash: string): Promise<PlatformAccount | null> {
+    const account = this.accounts.get(userId);
+    if (!account || account.status !== "active") return null;
+    account.passwordHash = passwordHash;
+    account.lockedUntil = null;
+    account.updatedAt = new Date().toISOString();
+    return this.findAccountById(userId);
+  }
+
   public async findAccountById(userId: string): Promise<PlatformAccount | null> {
     const account = this.accounts.get(userId);
     if (!account) return null;

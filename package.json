@@ -13,7 +13,7 @@
     "asset:ingestion": "tsx scripts/run-asset-ingestion-worker.ts",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx lib/services/research-service.contract.ts && tsx lib/providers/embedding-provider.contract.ts && tsx lib/services/vector-persistence.contract.ts && tsx lib/providers/oss/oss-provider.contract.ts && tsx lib/commands/knowledge/command-registry.contract.ts && tsx lib/services/platform/platform-auth.contract.ts && tsx lib/services/platform/public-project.contract.ts && tsx lib/services/platform/author.contract.ts && tsx lib/services/platform/global-search.contract.ts && tsx lib/services/platform/public-activity.contract.ts && tsx lib/services/memory/memory-service.contract.ts && tsx lib/services/assets/asset-service.contract.ts && tsx lib/services/assets/asset-ingestion.contract.ts && tsx lib/services/assets/artifact-source-index.contract.ts && tsx lib/services/collaboration/collaboration.contract.ts && tsx lib/services/collaboration/project-comments.contract.ts && tsx lib/ui/platform-ui.contract.ts && tsx lib/ui/report-editor-shortcuts.contract.ts"
+    "test": "tsx lib/services/research-service.contract.ts && tsx lib/providers/embedding-provider.contract.ts && tsx lib/services/vector-persistence.contract.ts && tsx lib/providers/oss/oss-provider.contract.ts && tsx lib/commands/knowledge/command-registry.contract.ts && tsx lib/services/platform/platform-auth.contract.ts && tsx lib/services/platform/public-project.contract.ts && tsx lib/services/platform/public-seed.contract.ts && tsx lib/services/platform/author.contract.ts && tsx lib/services/platform/global-search.contract.ts && tsx lib/services/platform/public-activity.contract.ts && tsx lib/services/memory/memory-service.contract.ts && tsx lib/services/assets/asset-service.contract.ts && tsx lib/services/assets/asset-ingestion.contract.ts && tsx lib/services/assets/artifact-source-index.contract.ts && tsx lib/services/collaboration/collaboration.contract.ts && tsx lib/services/collaboration/project-comments.contract.ts && tsx lib/services/auth/verification.contract.ts && tsx lib/ui/platform-ui.contract.ts && tsx lib/ui/report-editor-shortcuts.contract.ts"
   },
   "dependencies": {
     "@alicloud/credentials": "^2.4.7",
@@ -41,6 +41,7 @@
     "next": "14.2.35",
     "next-auth": "^4.24.11",
     "node-diff3": "^3.2.1",
+    "nodemailer": "^7.0.13",
     "postgres": "^3.4.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -50,6 +51,7 @@
   "devDependencies": {
     "@types/ali-oss": "^6.23.3",
     "@types/node": "^22.10.2",
+    "@types/nodemailer": "^8.0.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "autoprefixer": "^10.5.4",

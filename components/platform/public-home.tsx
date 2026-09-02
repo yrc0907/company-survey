@@ -93,6 +93,13 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
     return filtered;
   }, [category, projects, query, sort]);
 
+  // 主题只按当前公开项目的真实标签聚合，不制造“热门”点击量或社区行为。
+  const topics = useMemo(() => {
+    const counts = new Map<string, number>();
+    projects.forEach((project) => project.tags.forEach((tag) => counts.set(tag, (counts.get(tag) ?? 0) + 1)));
+    return Array.from(counts.entries()).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], "zh-CN")).slice(0, 6);
+  }, [projects]);
+
   function resetExplore(): void {
     setQuery("");
     setCategory("全部");
@@ -196,13 +203,14 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
 
         <aside className="discovery-rail" aria-label="社区动态">
           <section>
-            <div className="rail-heading"><span>热门主题</span><button type="button" onClick={resetExplore}>查看全部</button></div>
-            <div className="topic-list"><button type="button" onClick={() => searchTopic("电商 SaaS")}># 电商 SaaS <span>18</span></button><button type="button" onClick={() => searchTopic("十五五规划")}># 十五五规划 <span>12</span></button><button type="button" onClick={() => searchTopic("AI 工作流")}># AI 工作流 <span>9</span></button><button type="button" onClick={() => searchTopic("跨境电商")}># 跨境电商 <span>8</span></button></div>
+            <div className="rail-heading"><span>项目主题</span><button type="button" onClick={resetExplore}>查看全部</button></div>
+            <div className="topic-list">
+              {topics.length > 0 ? topics.map(([topic, count]) => <button type="button" key={topic} onClick={() => searchTopic(topic)}># {topic} <span>{count} 个项目</span></button>) : <p className="rail-empty">暂无公开主题</p>}
+            </div>
           </section>
           <section>
             <div className="rail-heading"><span>最近合并</span></div>
-            <div className="merge-activity"><span className="activity-line" /><div><strong>补充政策原文引用</strong><p>陈栩合并到 十五五规划 · 18 分钟前</p></div></div>
-            <div className="merge-activity"><span className="activity-line" /><div><strong>修正产品能力边界</strong><p>Yu 合并到 慧策调研 · 2 小时前</p></div></div>
+            <p className="rail-empty">暂无已核验的合并活动</p>
           </section>
           <section className="rail-clarification"><strong>首发内容说明</strong><p>当前页面使用明确标记的 Seed 内容验证信息架构。正式公开前会重新导入有权发布的原始材料并核验引用。</p></section>
         </aside>

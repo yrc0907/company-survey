@@ -166,6 +166,11 @@ export interface CreatePasswordAccountRecord {
 export interface PlatformRepository {
   createPasswordAccount(record: CreatePasswordAccountRecord): Promise<PlatformAccount>;
   findPasswordAccountByIdentifier(identifier: string): Promise<PasswordAccount | null>;
+  findAccountByEmail(email: string): Promise<PlatformAccount | null>;
+  findAccountByPhone(phoneE164: string): Promise<PlatformAccount | null>;
+  markEmailVerified(userId: string): Promise<PlatformAccount | null>;
+  bindVerifiedPhone(userId: string, phoneE164: string): Promise<PlatformAccount | null>;
+  setPasswordHash(userId: string, passwordHash: string): Promise<PlatformAccount | null>;
   findAccountById(userId: string): Promise<PlatformAccount | null>;
   findOrCreateOAuthAccount(input: OAuthIdentityInput): Promise<PlatformAccount>;
   getProjectAccess(projectId: string, userId: string | null): Promise<KnowledgeProjectAccess | null>;

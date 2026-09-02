@@ -159,6 +159,7 @@
 .topic-list { @apply grid gap-1; }
 .topic-list button { @apply flex h-8 items-center justify-between rounded-md border-0 bg-transparent px-2 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground; }
 .topic-list span { @apply font-mono text-xs; }
+.rail-empty { @apply m-0 px-2 py-2 text-xs leading-5 text-muted-foreground; }
 .merge-activity { @apply relative flex gap-3 pb-4 text-xs; }
 .activity-line { @apply mt-1.5 size-2 shrink-0 rounded-full bg-primary ring-4 ring-secondary; }
 .merge-activity strong { @apply text-foreground; }

@@ -1,0 +1,59 @@
+import assert from "node:assert/strict";
+
+import { MemoryVerificationRepository } from "@/lib/repositories/auth/memory-verification-repository";
+import { MemoryPlatformRepository } from "@/lib/repositories/platform/memory-platform-repository";
+import { AccountService } from "@/lib/services/platform/account-service";
+import { VerificationService } from "@/lib/services/auth/verification-service";
+import { argon2idPasswordHasher } from "@/lib/auth/password";
+import type { CaptchaProvider } from "@/lib/providers/auth/captcha-provider";
+import type { EmailProvider } from "@/lib/providers/auth/email-provider";
+import type { SmsProvider } from "@/lib/providers/auth/sms-provider";
+
+class PassCaptcha implements CaptchaProvider {
+  public async verify(): Promise<boolean> { return true; }
+}
+
+class CaptureEmail implements EmailProvider {
+  public lastCode = "";
+  public async send(message: { to: string; subject: string; text: string; html: string }): Promise<{ providerMessageId: string | null }> {
+    this.lastCode = message.text.match(/验证码是 (\d{6})/)?.[1] ?? "";
+    return { providerMessageId: "email-test" };
+  }
+}
+
+class CaptureSms implements SmsProvider {
+  public lastCode = "";
+  public async send(message: { phoneE164: string; code: string; codeExpireMinutes: number }): Promise<{ providerMessageId: string | null }> {
+    this.lastCode = message.code;
+    return { providerMessageId: "sms-test" };
+  }
+}
+
+async function run(): Promise<void> {
+  const accounts = new MemoryPlatformRepository();
+  const challenges = new MemoryVerificationRepository();
+  const email = new CaptureEmail();
+  const sms = new CaptureSms();
+  const service = new VerificationService({ accounts, challenges, emailProvider: email, smsProvider: sms, captchaProvider: new PassCaptcha(), environment: { NODE_ENV: "test", NEXTAUTH_SECRET: "test-secret", CAPTCHA_REQUIRED: "true", AUTH_CODE_EXPIRE_MINUTES: "1" } });
+  const account = await new AccountService(accounts, argon2idPasswordHasher).register({ email: "member@example.com", username: "member", password: "securePass123" });
+  const actor = { userId: account.id, role: "user" as const };
+
+  const emailReceipt = await service.requestCode({ channel: "email", purpose: "email_verification", destination: account.email, actor, captchaTicket: "ticket", clientIp: "127.0.0.1", deviceId: "device-1" });
+  assert.ok(emailReceipt.challengeId, "邮件验证必须返回挑战 ID");
+  await assert.rejects(service.verifyChallenge({ challengeId: emailReceipt.challengeId, destination: account.email, code: "000000" }), /验证码无效/);
+  const verifiedEmail = await service.verifyChallenge({ challengeId: emailReceipt.challengeId, destination: account.email, code: email.lastCode });
+  assert.equal(verifiedEmail.account.emailVerifiedAt !== null, true, "正确验证码应标记邮箱已验证");
+  await assert.rejects(service.verifyChallenge({ challengeId: emailReceipt.challengeId, destination: account.email, code: email.lastCode }), /验证码无效/, "挑战必须只能消费一次");
+
+  const phoneReceipt = await service.requestCode({ channel: "sms", purpose: "phone_bind", destination: "13800138000", actor, captchaTicket: "ticket", clientIp: "127.0.0.1", deviceId: "device-1" });
+  await service.verifyChallenge({ challengeId: phoneReceipt.challengeId, destination: "13800138000", code: sms.lastCode });
+  const phoneAccount = await accounts.findAccountByPhone("+8613800138000");
+  assert.equal(phoneAccount?.id, account.id, "手机号绑定后应落到同一用户");
+
+  const loginReceipt = await service.requestCode({ channel: "sms", purpose: "phone_login", destination: "+8613800138000", actor: null, captchaTicket: "ticket", clientIp: "127.0.0.1", deviceId: "device-2" });
+  const logged = await service.verifyChallenge({ challengeId: loginReceipt.challengeId, destination: "+8613800138000", code: sms.lastCode });
+  assert.equal(logged.account.id, account.id, "手机号验证码登录不能创建重复账户");
+  console.log("verification contract: passed");
+}
+
+void run().catch((error: unknown) => { console.error(error); process.exitCode = 1; });

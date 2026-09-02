@@ -74,6 +74,8 @@ Internet
 - [前后端性能与交互验收记录](docs/performance-and-e2e-verification.md)
 - [开放知识协作平台产品与架构规格](docs/open-knowledge-platform-spec.md)
 - [开放知识平台 shadcn/ui 前端与动效规范](docs/open-knowledge-ui-motion.md)
+- [公开企业首发数据包与证据边界](docs/public-company-seed.md)
+- [真实身份认证 Provider 与验收边界](docs/authentication-providers.md)
 - [AI 助手记忆、上下文压缩与会话架构](docs/ai-memory-context-architecture.md)
 - [私有 OSS 上传与解析实现边界](docs/assets-upload-implementation.md)
 - [产品规格与当前范围](docs/product-spec.md)

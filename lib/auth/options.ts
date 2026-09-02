@@ -8,11 +8,14 @@ import type { OAuthIdentityInput, PlatformAccount } from "@/lib/domain/platform"
 import { argon2idPasswordHasher } from "@/lib/auth/password";
 import { getPlatformRepository } from "@/lib/repositories/platform/platform-repository-factory";
 import { AccountService } from "@/lib/services/platform/account-service";
+import { getVerificationService } from "@/lib/services/auth/verification-service-factory";
 
 const credentialsSchema = z.object({
   identifier: z.string().trim().min(3).max(320),
-  password: z.string().min(10).max(128),
-});
+  password: z.string().min(10).max(128).optional(),
+  challengeId: z.string().uuid().optional(),
+  code: z.string().regex(/^\d{6}$/).optional(),
+}).refine((value) => Boolean(value.password) || Boolean(value.challengeId && value.code), "需要密码或验证码");
 
 function toAuthUser(account: PlatformAccount) {
   return { id: account.id, email: account.email, name: account.displayName, image: null, username: account.username, role: account.role };
@@ -40,12 +43,20 @@ const providers: AuthOptions["providers"] = [
     credentials: {
       identifier: { label: "邮箱或用户名", type: "text" },
       password: { label: "密码", type: "password" },
+      challengeId: { label: "验证码挑战", type: "text" },
+      code: { label: "验证码", type: "text" },
     },
     /** Credentials 只验证密码并返回服务端角色；客户端传入的 id/role 一律忽略。 */
     async authorize(rawCredentials) {
       const parsed = credentialsSchema.safeParse(rawCredentials);
       if (!parsed.success) return null;
       try {
+        if (parsed.data.challengeId && parsed.data.code) {
+          const verified = await getVerificationService().verifyChallenge({ challengeId: parsed.data.challengeId, destination: parsed.data.identifier, code: parsed.data.code });
+          if (verified.purpose !== "email_login" && verified.purpose !== "phone_login") return null;
+          return toAuthUser(verified.account);
+        }
+        if (!parsed.data.password) return null;
         return toAuthUser(await accountService().authenticate(parsed.data.identifier, parsed.data.password));
       } catch {
         return null;
