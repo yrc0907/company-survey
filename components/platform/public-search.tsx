@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/ui/avatar";
+import { LoginGateDialog } from "@/components/platform/login-gate-dialog";
 
 type ResultKind = "project" | "author" | "document";
 
@@ -45,6 +46,7 @@ export function PublicSearch({ initialQuery = "" }: { initialQuery?: string }) {
   const [state, setState] = useState<RequestState>(initialQuery.trim() ? "loading" : "idle");
   const [error, setError] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [loginOpen, setLoginOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function search(value: string, signal?: AbortSignal): Promise<void> {
@@ -97,7 +99,7 @@ export function PublicSearch({ initialQuery = "" }: { initialQuery?: string }) {
           <form className="ml-1 flex h-9 min-w-0 max-w-2xl flex-1 items-center gap-2 rounded-md border bg-muted/45 px-3 transition-colors focus-within:border-ring focus-within:bg-background focus-within:ring-2 focus-within:ring-ring/15" onSubmit={submit}>
             <Search size={16} className="shrink-0 text-muted-foreground" aria-hidden="true" /><input ref={inputRef} value={query} onChange={(event) => setQuery(event.target.value)} aria-label="搜索公开内容" placeholder="搜索项目、作者、文档和来源" className="min-w-0 flex-1 border-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground" /><button type="button" className={query ? "text-muted-foreground hover:text-foreground" : "invisible"} onClick={() => { setQuery(""); inputRef.current?.focus(); }} aria-label="清除搜索"><X size={15} /></button><kbd className="hidden sm:inline">Enter</kbd>
           </form>
-          <Button variant="ghost" size="sm" onClick={() => window.location.assign("/login?intent=login")}>登录</Button>
+          <Button variant="ghost" size="sm" onClick={() => setLoginOpen(true)}>登录</Button>
         </div>
       </header>
 
@@ -123,7 +125,7 @@ export function PublicSearch({ initialQuery = "" }: { initialQuery?: string }) {
           <div className="rounded-xl border bg-background p-4 shadow-sm"><div className="mb-3 flex items-center gap-2 text-sm font-semibold"><Check size={15} />公开检索</div><p className="m-0 text-xs leading-5 text-muted-foreground">结果由公开内容索引提供。进入项目后可继续按文件、章节和引用定位。</p><div className="mt-4 border-t pt-3 text-[11px] leading-5 text-muted-foreground"><p className="m-0">结果类型</p><div className="mt-2 grid gap-1"><span className="flex justify-between"><span>项目</span><strong className="font-mono">{counts.project}</strong></span><span className="flex justify-between"><span>文档</span><strong className="font-mono">{counts.document}</strong></span><span className="flex justify-between"><span>作者</span><strong className="font-mono">{counts.author}</strong></span></div></div></div>
         </aside>
       </main>
+      <LoginGateDialog open={loginOpen} intent="login" onOpenChange={setLoginOpen} />
     </div>
   );
 }
-

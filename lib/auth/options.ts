@@ -9,6 +9,7 @@ import { argon2idPasswordHasher } from "@/lib/auth/password";
 import { getPlatformRepository } from "@/lib/repositories/platform/platform-repository-factory";
 import { AccountService } from "@/lib/services/platform/account-service";
 import { getVerificationService } from "@/lib/services/auth/verification-service-factory";
+import { isPublicAuthEnabled } from "@/lib/auth/public-access";
 
 const credentialsSchema = z.object({
   identifier: z.string().trim().min(3).max(320),
@@ -48,6 +49,8 @@ const providers: AuthOptions["providers"] = [
     },
     /** Credentials 只验证密码并返回服务端角色；客户端传入的 id/role 一律忽略。 */
     async authorize(rawCredentials) {
+      // 生产内测关闭时拒绝直接调用 Auth.js Credentials，避免绕过登录页开关。
+      if (!isPublicAuthEnabled()) return null;
       const parsed = credentialsSchema.safeParse(rawCredentials);
       if (!parsed.success) return null;
       try {
@@ -82,6 +85,7 @@ export const authOptions: AuthOptions = {
   pages: { signIn: "/login", error: "/login" },
   callbacks: {
     async signIn({ user, account, profile }) {
+      if (!isPublicAuthEnabled()) return false;
       if (!account || account.provider === "credentials") return true;
       if (account.provider !== "github" || !user.email) return false;
       const githubProfile = profile as { login?: string } | undefined;

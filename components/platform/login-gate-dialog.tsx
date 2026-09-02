@@ -4,6 +4,7 @@ import { Github, LockKeyhole, Mail } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { isPublicAuthEnabled, PUBLIC_AUTH_CLOSED_MESSAGE } from "@/lib/auth/public-access";
 
 type LoginIntent = "login" | "create" | "upload" | "contribute";
 
@@ -29,17 +30,24 @@ function openLogin(intent: LoginIntent): void {
 /** 登录门槛保留用户原动作，跳转真实 Auth.js 页面；不在弹窗内伪造会话。 */
 export function LoginGateDialog({ open, intent, onOpenChange }: LoginGateDialogProps) {
   const copy = intentCopy[intent];
+  const authEnabled = isPublicAuthEnabled();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="login-dialog">
         <div className="login-dialog__icon"><LockKeyhole size={20} /></div>
-        <DialogTitle>{copy.title}</DialogTitle>
-        <DialogDescription>{copy.description}</DialogDescription>
-        <div className="login-options">
-          <Button onClick={() => openLogin(intent)}><Github size={17} />登录或注册</Button>
-          <Button variant="outline" onClick={() => openLogin(intent)}><Mail size={17} />使用邮箱和密码</Button>
-        </div>
-        <p className="login-status">登录后会返回你刚才的操作；游客的公开阅读和 AI 体验不受影响。</p>
+        {authEnabled ? <>
+          <DialogTitle>{copy.title}</DialogTitle>
+          <DialogDescription>{copy.description}</DialogDescription>
+          <div className="login-options">
+            <Button onClick={() => openLogin(intent)}><Github size={17} />登录或注册</Button>
+            <Button variant="outline" onClick={() => openLogin(intent)}><Mail size={17} />使用邮箱和密码</Button>
+          </div>
+          <p className="login-status">登录后会返回你刚才的操作；游客的公开阅读和 AI 体验不受影响。</p>
+        </> : <>
+          <DialogTitle>{PUBLIC_AUTH_CLOSED_MESSAGE}</DialogTitle>
+          <DialogDescription>当前不接受登录、注册、上传、创建项目或提交贡献申请。公开研究、搜索和 AI 助手仍可使用。</DialogDescription>
+          <div className="login-options"><Button onClick={() => onOpenChange(false)}>知道了</Button></div>
+        </>}
       </DialogContent>
     </Dialog>
   );

@@ -144,24 +144,34 @@ const publicCompanySeeds: SeedProject[] = [
     files: sharedFiles,
     sections: [{ id: "section-sundray-public", heading: "公开摘要与证据边界", paragraphs: ["信锐科技官网公开展示企业无线、交换与物联网相关网络产品。该句只记录企业自述，不推断覆盖规模、性能或价格。"], state: "needs_verification", contributor: yu, mergeRequest: 0, reviewer: "待核验", citations: 1 }],
   },
+  {
+    id: "project-muyuan",
+    slug: "muyuan-foods-livestock",
+    title: "牧原食品：生猪养殖、成本曲线与产业链研究",
+    summary: "围绕出栏、猪价、完全成本、生物安全、现金流和产业链协同建立独立研究档案；农牧指标不套用 SaaS 模板。",
+    category: "企业",
+    tags: ["生猪养殖", "农牧食品", "周期研究", "上市公司"],
+    verification: "needs_verification",
+    verificationNote: "收入、利润、出栏、成本、猪价与股价结论必须逐期引用公告或权威统计。",
+    owner: yu,
+    publishedAt: "2026-09-02T16:00:00.000Z",
+    updatedAt: "2026-09-02T16:00:00.000Z",
+    uniqueReaders: 0,
+    contributors: [yu],
+    sourceCount: 1,
+    openMergeRequests: 0,
+    version: 1,
+    files: sharedFiles,
+    sections: [
+      { id: "section-muyuan-conclusion", heading: "研究结论", paragraphs: ["牧原的经营质量不能只看出栏规模，首先要看单位成本、生物安全和现金流韧性。猪价周期会放大经营杠杆，扩张是否创造价值取决于成本曲线和负债安全边界。"], state: "inference", contributor: yu, mergeRequest: 0, reviewer: "待核验", citations: 1 },
+      { id: "section-muyuan-business", heading: "产品与产业链", paragraphs: ["研究对象按育种、饲料、养殖、生物安全、屠宰和食品渠道拆分；这些环节的协同关系需要用年报、销售简报和行业数据逐项验证。"], state: "needs_verification", contributor: yu, mergeRequest: 0, reviewer: "待核验", citations: 1 },
+      { id: "section-muyuan-risk", heading: "风险与待核验", paragraphs: ["猪价下行、疫病、饲料价格、资本开支、负债期限、环保和食品安全是核心风险。完全成本、现金安全边界和屠宰业务盈利仍需逐期核验。"], state: "needs_verification", contributor: yu, mergeRequest: 0, reviewer: "待核验", citations: 2 },
+    ],
+  },
 ];
 
-/** 第二批本地回退投影；只展示可核验官网入口，统计与社区行为均保持为真实零值。 */
-const additionalCompanySeeds: SeedProject[] = ([
-  ["project-youzan", "youzan-retail-commerce", "有赞：零售电商经营与私域产品公开研究", "有赞官网公开展示面向商家的零售、电商经营与私域运营相关产品。", ["零售电商", "商家经营", "私域运营", "公开资料"]],
-  ["project-fxiaoke", "fxiaoke-crm", "纷享销客：CRM 与销售管理产品公开研究", "纷享销客官网公开展示企业级 CRM、销售管理与客户关系相关产品。", ["CRM", "销售管理", "客户关系", "公开资料"]],
-  ["project-kingdee", "kingdee-enterprise-cloud", "金蝶：企业管理云与 ERP 产品公开研究", "金蝶官网公开展示企业管理云、财务管理与 ERP 相关产品。", ["企业管理云", "财务管理", "ERP", "公开资料"]],
-  ["project-qianxin", "qianxin-cybersecurity", "奇安信：网络安全与安全运营产品公开研究", "奇安信官网公开展示网络安全产品与服务，以及安全运营等相关能力。", ["网络安全", "安全运营", "安全服务", "公开资料"]],
-  ["project-dbapp", "dbappsecurity-data-security", "安恒信息：网络与数据安全产品公开研究", "安恒信息官网公开展示网络安全、数据安全与安全服务相关产品。", ["网络安全", "数据安全", "安全服务", "公开资料"]],
-  ["project-venustech", "venustech-cybersecurity", "启明星辰：网络安全与安全运营产品公开研究", "启明星辰官网公开展示网络安全产品、安全运营与相关服务。", ["网络安全", "安全运营", "安全服务", "公开资料"]],
-  ["project-dingtalk", "dingtalk-collaboration", "钉钉：企业协同与组织管理产品公开研究", "钉钉官网公开展示企业协同办公、组织管理与数字化工作相关产品。", ["协同办公", "组织管理", "企业数字化", "公开资料"]],
-  ["project-lark", "lark-team-collaboration", "Lark：团队协作与沟通产品公开研究", "Lark 官网公开展示团队协作、沟通与工作管理相关产品。", ["团队协作", "沟通", "工作管理", "公开资料"]],
-] as Array<[string, string, string, string, string[]]>).map(([id, slug, title, summary, tags]) => ({
-  id, slug, title, summary: `基于${summary}客户规模、价格、收入、市场份额和效果仍需独立来源核验。`, category: "企业" as const,
-  tags, verification: "needs_verification" as const, verificationNote: "仅含公开官网入口与人工摘要，尚未完成多来源交叉核验。", owner: yu,
-  publishedAt: "2026-09-02T00:00:00.000Z", updatedAt: "2026-09-02T00:00:00.000Z", uniqueReaders: 0, contributors: [yu], sourceCount: 1, openMergeRequests: 0, version: 1,
-  files: sharedFiles, sections: [{ id: `${id}-summary`, heading: "公开摘要与证据边界", paragraphs: [summary], state: "needs_verification" as const, contributor: yu, mergeRequest: 0, reviewer: "待核验", citations: 1 }],
-}));
+/** 已归档企业不再进入无数据库时的公开回退列表，避免旧首发对象重新出现在首页。 */
+const additionalCompanySeeds: SeedProject[] = [];
 
 /** 首发内容仅用于前端信息架构展示；核验标签明确区分已检查材料与待核验结论。 */
 export const seedProjects: SeedProject[] = [

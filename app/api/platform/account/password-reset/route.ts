@@ -5,6 +5,7 @@ import { authErrorResponse } from "@/lib/auth/api-response";
 import { assertTrustedJsonRequest } from "@/lib/auth/request-security";
 import { json } from "@/lib/api/http";
 import { getVerificationService } from "@/lib/services/auth/verification-service-factory";
+import { isPublicAuthEnabled, PUBLIC_AUTH_CLOSED_MESSAGE } from "@/lib/auth/public-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ const schema = z.object({
 /** 通过已消费的 password_reset 挑战更新 Argon2id 密码；成功后旧锁定状态清除。 */
 export async function POST(request: Request): Promise<Response> {
   try {
+    if (!isPublicAuthEnabled()) return json({ error: PUBLIC_AUTH_CLOSED_MESSAGE, code: "AUTH_CLOSED" }, { status: 403 });
     assertTrustedJsonRequest(request);
     const input = schema.parse(await request.json());
     const account = await getVerificationService().resetPassword({ challengeId: input.challengeId, destination: input.destination, code: input.code, newPasswordHash: await argon2idPasswordHasher.hash(input.newPassword) });

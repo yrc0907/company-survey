@@ -6,11 +6,6 @@ import postgres from "postgres";
 const listed = [
   ["project-weaver", "泛微网络", "603039.SH", "1.603039"],
   ["project-sangfor", "深信服", "300454.SZ", "0.300454"],
-  ["project-youzan", "有赞", "08083.HK", "116.08083"],
-  ["project-kingdee", "金蝶国际", "00268.HK", "116.00268"],
-  ["project-qianxin", "奇安信", "688561.SH", "1.688561"],
-  ["project-dbapp", "安恒信息", "688023.SH", "1.688023"],
-  ["project-venustech", "启明星辰", "002439.SZ", "0.002439"],
   ["project-muyuan", "牧原食品", "002714.SZ", "0.002714"],
 ];
 

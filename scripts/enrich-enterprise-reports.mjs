@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 
 import postgres from "postgres";
 
+import { enterpriseResearchProfiles } from "./enterprise-research-profiles.mjs";
+
 /**
  * 从企业公开官网导入可追溯资料快照，并给已有项目文件树补齐研究章节。
  * 输入：服务器 DATABASE_URL 与固定的公开官网 URL；输出：source/source_chunk、Commit、Revision、引用入口。
@@ -11,19 +13,12 @@ const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("DATABASE_URL 未配置，企业资料富化拒绝使用内存模式");
 
 const now = new Date().toISOString();
+const DOSSIER_VERSION = "v3";
 const companies = [
   ["project-huice", "慧策", "https://www.wangdian.cn/", "电商 ERP、订单履约、WMS、跨境经营与业财分析"],
   ["project-weaver", "泛微网络", "https://www.weaver.com.cn/", "协同办公、流程审批、门户与企业数智化运营"],
   ["project-sangfor", "深信服", "https://www.sangfor.com.cn/", "云计算、网络安全、信创适配与技术服务"],
   ["project-sundray", "信锐科技", "https://www.sundray.com/", "企业无线、交换网络、物联网与园区数字化"],
-  ["project-youzan", "有赞", "https://www.youzan.com/", "零售电商、全渠道销售、私域复购与 AI 经营"],
-  ["project-fxiaoke", "纷享销客", "https://www.fxiaoke.com/", "AI 原生 CRM、营销销售服务与行业应用"],
-  ["project-kingdee", "金蝶", "https://www.kingdee.com/", "企业管理云、财务管理、ERP 与 AI 能力"],
-  ["project-qianxin", "奇安信", "https://www.qianxin.com/", "网络安全产品、安全运营、咨询规划与应急响应"],
-  ["project-dbapp", "安恒信息", "https://www.dbappsecurity.com.cn/", "网络安全、数据安全、AI+安全产品与安全服务"],
-  ["project-venustech", "启明星辰", "https://www.venustech.com.cn/", "网络安全防护、检测、安全运营与服务"],
-  ["project-dingtalk", "钉钉", "https://www.dingtalk.com/", "企业协同、组织管理、AI 办公与数字化工作"],
-  ["project-lark", "Lark", "https://www.larksuite.com/en_us", "全球团队协作、沟通、工作管理与原生 AI"],
   ["project-muyuan", "牧原食品", "https://www.muyuanfoods.com/", "生猪养殖、成本控制、生物安全与产业链经营"],
 ];
 
@@ -77,6 +72,9 @@ function sectionContent(company, focus, section, snapshot, url) {
   const excerpt = snapshot.slice(0, 900);
   const boundary = "官网公开文字只证明企业自述的产品或服务范围；客户规模、价格、收入、市场份额、交付效果和竞争优劣需要独立来源，不从本页推断。";
   const lead = `研究对象：${company}\n官方入口：${url}\n抓取时间：${now}\n\n`;
+  const profile = enterpriseResearchProfiles[company];
+  const researched = profile?.sections?.[section];
+  if (researched) return lead + researched + `\n\n证据边界：${boundary}`;
   const specific = {
     "研究结论": `本次快照显示，${company}的公开入口围绕${focus}展开。当前可确认的是产品/服务方向，不能据此确认商业结果。\n\n${boundary}`,
     "公司与产品": `公开页面关键词摘要：${excerpt}\n\n产品范围暂按“${focus}”建立索引，后续需要按产品手册、版本说明和公告拆分为可验证条目。`,
@@ -98,6 +96,13 @@ function documentContent(text) {
 function analystContent(company, focus, snapshot) {
   const market = marketFacts[company] ?? "上市状态和财务口径待核验。";
   const excerpt = snapshot.slice(0, 1_200);
+  const profile = enterpriseResearchProfiles[company];
+  if (profile) return `研究者分析与战略判断（由 Yu 撰写）\n\n` +
+    `一、核心判断（inference）\n${profile.thesis}\n\n` +
+    `二、事实边界（fact）\n${company}官网公开入口围绕“${focus}”展示产品/服务方向。页面快照摘录：${excerpt}\n\n` +
+    `三、财报、收益与股价（needs_verification）\n${market}财务与行情必须按报告期从交易所、公司公告或可靠行情源导入。当前不能从官网页面推出哪个产品收益最高、利润率最高或股价方向；后续数据表至少保存营收、归母净利润、经营现金流、毛利/费用、分部收入（若披露）、52 周区间、回撤和成交量，并保留计算公式。\n\n` +
+    `四、研究者的反方检查（inference / needs_verification）\n如果产品覆盖增长但交付成本、回款或客户留存没有改善，增长质量判断应下调；如果政策方向成立但订单、现金流或合规成本不匹配，不能把政策写成红利。以下开放问题必须用新证据推翻或支持：${profile.questions}\n\n` +
+    `五、合作与资源整合（inference）\n合作建议必须明确资源交换、数据责任、收入归属、交付边界、退出机制和可量化结果；只列合作伙伴名称不算合作方案。正式版本会把上下游、渠道、客户、政策和竞品关系写入关系边，并允许点击回溯来源。`;
   return `研究者分析与战略判断（由 Yu 撰写）\n\n` +
     `一、事实边界（fact）\n${company}官网公开入口围绕“${focus}”展示产品/服务方向。页面快照摘录：${excerpt}\n\n` +
     `二、财报、收益与股价（needs_verification）\n${market}当前快照没有足够的分部财务数据，不能声称哪个产品收益最高、利润率最高或股价上涨/下跌。后续必须逐期导入年报、季报、公告和可靠行情数据，至少计算营收、归母净利润、经营现金流、毛利/费用、分部收入、52 周区间、回撤和成交量，并把计算过程留在数据表。\n\n` +
@@ -115,16 +120,16 @@ async function enrichCompany(tx, [projectId, company, url, focus]) {
     WHERE p.id = ${projectId} AND p.visibility = 'public' AND p.status = 'published' LIMIT 1`;
   const project = projectRows[0];
   if (!project) return { status: "skipped", reason: "project_missing" };
-  const commitId = `${projectId}-official-dossier-v2`;
+  const commitId = `${projectId}-official-dossier-${DOSSIER_VERSION}`;
   const existingCommit = await tx`SELECT id FROM knowledge_commit WHERE id = ${commitId} LIMIT 1`;
   if (existingCommit.length) return { status: "skipped", reason: "already_imported" };
   const snapshot = await fetchSnapshot(url);
   const contentHash = sha256(snapshot);
   const reportRows = await tx`SELECT r.id AS report_id FROM report r JOIN company c ON c.id = r.company_id WHERE c.name = ${company} LIMIT 1`;
   const reportId = reportRows[0]?.report_id ? String(reportRows[0].report_id) : null;
-  const sourceId = `${projectId}-official-dossier-v2`;
-  const sourceNodeId = `${projectId}-node-official-dossier-v2`;
-  const sourceTitle = `${company}官网公开资料快照（v2）`;
+  const sourceId = `${projectId}-official-dossier-${DOSSIER_VERSION}`;
+  const sourceNodeId = `${projectId}-node-official-dossier-${DOSSIER_VERSION}`;
+  const sourceTitle = `${company}官网公开资料（${DOSSIER_VERSION}，仅作事实来源）`;
   let sourceRef = sourceId;
 
   await tx`INSERT INTO knowledge_commit (id, project_id, branch_id, parent_commit_id, author_user_id, message, ai_assisted, idempotency_key, idempotency_fingerprint, change_summary, created_at)
@@ -151,7 +156,7 @@ async function enrichCompany(tx, [projectId, company, url, focus]) {
     const rawName = String(row.name);
     const section = sectionNames.find((name) => rawName.includes(name)) ?? sectionNames[position % sectionNames.length];
     const text = sectionContent(company, focus, section, snapshot, url);
-    const revisionId = `${String(row.node_id)}-official-dossier-v2`;
+    const revisionId = `${String(row.node_id)}-official-dossier-${DOSSIER_VERSION}`;
     const previousRows = await tx`SELECT id FROM document_revision WHERE project_id = ${projectId} AND node_id = ${String(row.node_id)} AND branch_id = ${String(project.branch_id)} ORDER BY created_at DESC LIMIT 1`;
     const previousId = previousRows[0]?.id ? String(previousRows[0].id) : null;
     await tx`INSERT INTO document_revision (id, project_id, node_id, branch_id, commit_id, previous_revision_id, content, content_text, content_hash, created_by_user_id, created_at)
@@ -160,9 +165,9 @@ async function enrichCompany(tx, [projectId, company, url, focus]) {
       VALUES (${`${commitId}:${String(row.node_id)}`}, ${commitId}, ${String(row.node_id)}, 'update_content', ${previousId}, ${revisionId}, ${JSON.stringify({ evidenceState: "needs_verification", sourceId: sourceRef })}::jsonb, ${position}) ON CONFLICT (id) DO NOTHING`;
     position += 1;
   }
-  const analysisNodeId = `${projectId}-node-analysis-v2`;
+  const analysisNodeId = `${projectId}-node-analysis-${DOSSIER_VERSION}`;
   const analysisText = analystContent(company, focus, snapshot);
-  const analysisRevisionId = `${analysisNodeId}-revision-v2`;
+  const analysisRevisionId = `${analysisNodeId}-revision-${DOSSIER_VERSION}`;
   await tx`INSERT INTO knowledge_node (id, project_id, kind, created_by_user_id, created_at)
     VALUES (${analysisNodeId}, ${projectId}, 'document', ${String(project.owner_user_id)}, ${now}) ON CONFLICT (id) DO NOTHING`;
   await tx`INSERT INTO knowledge_node_state (project_id, branch_id, node_id, parent_node_id, name, position, deleted_at, updated_at)

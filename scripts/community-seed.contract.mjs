@@ -23,7 +23,7 @@ for (const token of [
 ]) if (!script.includes(token)) failures.push(`脚本缺少 ${token} 路径`);
 for (const token of [
   "ON CONFLICT (id) DO NOTHING", "ON CONFLICT (project_id, viewer_key_hash) DO NOTHING",
-  "loadRealUsers", "COMMUNITY_SEED_USER_IDS", "--clean", "--check", "rebuildActivityDaily",
+  "loadRealUsers", "COMMUNITY_SEED_USER_IDS", "--clean", "--check", "--retire-legacy-users", "rebuildActivityDaily",
 ]) if (!script.includes(token)) failures.push(`脚本缺少幂等/维护能力：${token}`);
 if (/INSERT\s+INTO\s+platform_(user|profile)/i.test(script)) failures.push("seed 不得创建 platform_user/platform_profile");
 if (script.includes("userEmail") || script.includes("community_user")) failures.push("seed 不得包含 synthetic 用户创建逻辑");

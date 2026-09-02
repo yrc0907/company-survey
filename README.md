@@ -26,6 +26,11 @@
 - 应用内会话认证已实现；旧版 Research API 仍依赖 Caddy Basic Auth，公开平台写操作依赖 Auth.js/RBAC；
 - 备份/发布/健康检查脚本和安全组只读计划已加入；公网 HTTPS 已验收。异机恢复、磁盘/流量告警以及 SSH/RDP 安全组收紧仍待人工变更和演练。
 
+当前公开首发范围已冻结为慧策掌上先机、泛微网络、深信服、信锐科技和牧原食品五家；每家报告独立维护，
+不做默认跨行业排名。登录、注册、上传、创建、编辑和贡献申请暂时关闭，点击后显示“登录功能暂未开放，
+仅对内测用户开放”；公开阅读、搜索和限额 AI 仍可用。实现与回滚说明见
+[企业研究范围冻结](docs/enterprise-scope-freeze.md) 和 [内测认证关闭模式](docs/public-auth-closed-mode.md)。
+
 ## 数据与 AI 边界
 
 - 报告、来源、Chunk、引用、关系和版本是结构化记录；AI 只能在受限证据上下文中回答或提出建议。
@@ -75,6 +80,8 @@ Internet
 - [开放知识协作平台产品与架构规格](docs/open-knowledge-platform-spec.md)
 - [开放知识平台 shadcn/ui 前端与动效规范](docs/open-knowledge-ui-motion.md)
 - [公开企业首发数据包与证据边界](docs/public-company-seed.md)
+- [五家企业研究范围冻结](docs/enterprise-scope-freeze.md)
+- [内测认证关闭模式](docs/public-auth-closed-mode.md)
 - [真实身份认证 Provider 与验收边界](docs/authentication-providers.md)
 - [阿里云认证接入决策](docs/aliyun-auth-integration-decision.md)
 - [阿里云短信认证服务接入](docs/aliyun-sms-authentication.md)

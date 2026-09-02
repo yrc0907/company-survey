@@ -48,6 +48,7 @@ services:
       target: runner
       args:
         NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID: ${NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID:-}
+        NEXT_PUBLIC_PUBLIC_AUTH_ENABLED: ${NEXT_PUBLIC_PUBLIC_AUTH_ENABLED:-false}
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-.env}
@@ -97,6 +98,7 @@ services:
       target: runner
       args:
         NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID: ${NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID:-}
+        NEXT_PUBLIC_PUBLIC_AUTH_ENABLED: ${NEXT_PUBLIC_PUBLIC_AUTH_ENABLED:-false}
     restart: "no"
     env_file:
       - ${ENV_FILE:-.env}

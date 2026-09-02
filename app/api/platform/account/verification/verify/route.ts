@@ -5,6 +5,7 @@ import { assertTrustedJsonRequest } from "@/lib/auth/request-security";
 import { requireAuthenticatedActor } from "@/lib/auth/session";
 import { json } from "@/lib/api/http";
 import { getVerificationService } from "@/lib/services/auth/verification-service-factory";
+import { isPublicAuthEnabled, PUBLIC_AUTH_CLOSED_MESSAGE } from "@/lib/auth/public-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +15,7 @@ const schema = z.object({ challengeId: z.string().uuid(), destination: z.string(
 /** 校验邮箱验证/手机号绑定挑战；登录挑战由 Auth.js Credentials 在同一事务中消费。 */
 export async function POST(request: Request): Promise<Response> {
   try {
+    if (!isPublicAuthEnabled()) return json({ error: PUBLIC_AUTH_CLOSED_MESSAGE, code: "AUTH_CLOSED" }, { status: 403 });
     assertTrustedJsonRequest(request);
     const input = schema.parse(await request.json());
     const actor = await requireAuthenticatedActor();

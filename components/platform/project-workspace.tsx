@@ -145,8 +145,11 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
   const activeNode = useMemo(() => findNode(project.files, activeNodeId), [activeNodeId, project.files]);
 
   useEffect(() => {
-    const firstDocument = project.files.flatMap((node) => node.children ?? [node]).find((node) => node.kind !== "folder");
-    setActiveNodeId(firstDocument?.id ?? project.files[0]?.id ?? "");
+    const documents = project.files.flatMap((node) => node.children ?? [node]).filter((node) => node.kind === "document");
+    // 首屏优先展示研究结论/研究者判断；不能让排序靠前的证据边界占据完整报告入口。
+    const overview = documents.find((node) => /执行摘要|研究结论|研究者分析与战略判断/.test(node.name));
+    const firstDocument = overview ?? documents[0] ?? project.files[0];
+    setActiveNodeId(firstDocument?.id ?? "");
     setTreeQuery("");
     setCommentCount(project.commentCount);
     setCommentAnchor(null);

@@ -19,6 +19,9 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
 # 图形验证 AppId 仅是前端公开标识；通过构建参数注入客户端，AppKey 仍只在运行时环境中。
 ARG NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID
 ENV NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID=${NEXT_PUBLIC_ALIYUN_CAPTCHA_APP_ID}
+# 认证入口开关需要在客户端构建期注入；服务端运行时仍以 PUBLIC_AUTH_ENABLED 为准。
+ARG NEXT_PUBLIC_PUBLIC_AUTH_ENABLED=false
+ENV NEXT_PUBLIC_PUBLIC_AUTH_ENABLED=${NEXT_PUBLIC_PUBLIC_AUTH_ENABLED}
 
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
@@ -45,6 +48,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/scripts/run-migrations.mjs ./scri
 # 社区场景数据必须在迁移后由运维显式运行；将脚本放入 runner，避免生产容器找不到 seed 入口。
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/seed-community.mjs ./scripts/seed-community.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/enrich-enterprise-reports.mjs ./scripts/enrich-enterprise-reports.mjs
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/enterprise-research-profiles.mjs ./scripts/enterprise-research-profiles.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/refresh-market-data.mjs ./scripts/refresh-market-data.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/refresh-analyst-theses.mjs ./scripts/refresh-analyst-theses.mjs
 # 企业首发范围冻结默认只读；运维显式 --apply/--rollback 时使用同一镜像中的脚本。

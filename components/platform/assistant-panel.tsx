@@ -4,6 +4,7 @@ import { Archive, ChevronDown, Clock3, FileText, History, Loader2, LogIn, Messag
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { LoginGateDialog } from "@/components/platform/login-gate-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import type { Conversation, ConversationMessage } from "@/lib/domain/memory";
@@ -19,6 +20,9 @@ interface ConversationListItem { id: string; title: string; projectId: string | 
 const scopeLabels: Record<AssistantScope, string> = { current_file: "当前文件", current_project: "当前项目", all_public: "全站公开知识" };
 interface AssistantPanelProps { project: SeedProject; activeFileName: string; activeFileId?: string; }
 
+/** 发送统一事件，由当前面板展示登录门槛，避免跳转到认证表单。 */
+function callbackToLogin(): void { window.dispatchEvent(new Event("research:login-request")); }
+
 function mapMessage(message: ConversationMessage): AssistantMessage | null {
   if (message.role !== "user" && message.role !== "assistant") return null;
   const citations = Array.isArray(message.metadata.citations) ? message.metadata.citations.flatMap((item) => {
@@ -29,7 +33,6 @@ function mapMessage(message: ConversationMessage): AssistantMessage | null {
   return { id: message.id, role: message.role, content: message.content, citations };
 }
 function mapConversation(item: Conversation): ConversationListItem { return { id: item.id, title: item.title, projectId: item.projectId, updatedAt: item.updatedAt, lastMessageAt: item.lastMessageAt, pinned: item.pinned }; }
-function callbackToLogin(): void { const callback = `${window.location.pathname}${window.location.search}${window.location.hash}`; window.location.assign(`/login?intent=login&callbackUrl=${encodeURIComponent(callback)}`); }
 function flattenFileNames(nodes: SeedProject["files"]): Array<{ id: string; name: string }> {
   return nodes.flatMap((node) => [{ id: node.id, name: node.name }, ...(node.children ? flattenFileNames(node.children) : [])]);
 }
@@ -48,6 +51,13 @@ export function AssistantPanel({ project, activeFileName, activeFileId }: Assist
   const [attachments, setAttachments] = useState<string[]>([]);
   const [referenceOpen, setReferenceOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [loginOpen, setLoginOpen] = useState(false);
+
+  useEffect(() => {
+    const openGate = () => setLoginOpen(true);
+    window.addEventListener("research:login-request", openGate);
+    return () => window.removeEventListener("research:login-request", openGate);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -170,5 +180,6 @@ export function AssistantPanel({ project, activeFileName, activeFileId }: Assist
     <div className="assistant-context-bar"><DropdownMenu><DropdownMenuTrigger asChild><Button variant="subtle" size="sm"><FileText size={14} />范围：{scopeLabels[scope]}<ChevronDown size={13} /></Button></DropdownMenuTrigger><DropdownMenuContent align="start" className="w-64"><DropdownMenuLabel>本轮读取范围</DropdownMenuLabel><DropdownMenuRadioGroup value={scope} onValueChange={(value) => setScope(value as AssistantScope)}><DropdownMenuRadioItem value="current_file">当前文件 · {activeFileName}</DropdownMenuRadioItem><DropdownMenuRadioItem value="current_project">当前项目 · 按需检索</DropdownMenuRadioItem><DropdownMenuRadioItem value="all_public">全站公开知识 · 暂未开放</DropdownMenuRadioItem></DropdownMenuRadioGroup><DropdownMenuSeparator /><p className="menu-help">私人草稿、其他用户对话和越权项目不会进入上下文。</p></DropdownMenuContent></DropdownMenu><span>{conversationId ? `对话 ${conversationId.slice(0, 8)}` : "新对话"}</span></div>
     <div className="assistant-messages" aria-live="polite" aria-busy={state === "loading"}>{messages.length === 0 && state !== "error" ? <div className="assistant-welcome"><span><Sparkles size={19} /></span><h3>从证据开始提问</h3><p>回答只使用当前 Scope 内可访问的资料。登录后原始消息会保存到私人会话。</p><div><button type="button" onClick={() => setQuestion("这份报告的关键结论和证据边界是什么？")}>梳理结论与边界</button><button type="button" onClick={() => setQuestion("哪些判断仍然缺少独立来源？")}>查找证据缺口</button></div></div> : null}{messages.map((message) => <article key={message.id} className={`assistant-message assistant-message--${message.role}`}><span>{message.role === "user" ? "你" : "AI"}</span><div><p>{message.content}</p>{message.citations?.length ? <div className="mt-2 grid gap-1 text-[10px] text-muted-foreground"><span>证据引用</span>{message.citations.map((citation, index) => citation.url ? <a key={citation.id} href={citation.url} target="_blank" rel="noreferrer" className="truncate text-primary hover:underline">[{index + 1}] {citation.title}{citation.page ? ` · 第 ${citation.page} 页` : ""}</a> : <button key={citation.id} type="button" className="truncate text-left text-primary hover:underline" onClick={() => setNotice(`证据 ${citation.id.slice(0, 8)}：${citation.title}${citation.page ? `，第 ${citation.page} 页` : ""}`)}>[{index + 1}] {citation.title}{citation.page ? ` · 第 ${citation.page} 页` : ""}</button>)}</div> : null}</div></article>)}{state === "loading" ? <div className="assistant-stage"><Loader2 className="animate-spin" size={16} /><span><strong>检索并重排证据</strong><small>只读取当前 Scope 的 active 来源</small></span></div> : null}{error ? <div className="assistant-inline-error" role="alert">{error}</div> : null}{notice ? <div className="assistant-inline-notice" role="status">{notice}</div> : null}</div>
     <form className="assistant-input" onSubmit={sendQuestion} onDragOver={(event) => { event.preventDefault(); event.currentTarget.classList.add("is-drop-target"); }} onDragLeave={(event) => event.currentTarget.classList.remove("is-drop-target")} onDrop={(event) => { event.preventDefault(); event.currentTarget.classList.remove("is-drop-target"); acceptDroppedFiles(event.dataTransfer.files); }}><div className="mb-1 flex flex-wrap gap-1">{attachments.map((name) => <span key={name} className="inline-flex max-w-full items-center gap-1 rounded border bg-muted px-1.5 py-1 text-[10px] text-muted-foreground"><Paperclip size={11} /><span className="max-w-40 truncate">{name}</span><button type="button" aria-label={`移除附件${name}`} title="移除附件" onClick={() => setAttachments((current) => current.filter((item) => item !== name))}><X size={11} /></button></span>)}</div><textarea value={question} onChange={(event) => updateQuestion(event.target.value)} onDragOver={(event) => event.preventDefault()} onDrop={onInputDrop} placeholder={`询问“${activeFileName}”或当前项目；可拖入文件，输入 @ 引用`} rows={3} />{referenceOpen ? <div className="relative"><div className="absolute bottom-1 left-0 right-0 z-10 grid max-h-44 gap-0.5 overflow-y-auto rounded-md border bg-background p-1 shadow-lg">{referenceCandidates.map((item) => <button key={item.id} type="button" className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-muted" onClick={() => chooseReference(item.name)}><FileText size={13} className="text-muted-foreground" /><span className="truncate">{item.name}</span></button>)}</div></div> : null}<div><span>{authenticated ? "登录会话 · 私人保存" : "匿名可用 · 不写入公开内容"}</span><Button type="submit" size="icon" disabled={!question.trim() || state === "loading"} aria-label="发送问题"><Send size={16} /></Button></div></form>
+    <LoginGateDialog open={loginOpen} intent="login" onOpenChange={setLoginOpen} />
   </aside>;
 }

@@ -6,6 +6,7 @@ import { assertTrustedJsonRequest } from "@/lib/auth/request-security";
 import { json } from "@/lib/api/http";
 import { getPlatformRepository } from "@/lib/repositories/platform/platform-repository-factory";
 import { AccountService } from "@/lib/services/platform/account-service";
+import { isPublicAuthEnabled, PUBLIC_AUTH_CLOSED_MESSAGE } from "@/lib/auth/public-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ const registerSchema = z.object({
 /** 创建邮箱密码账户；成功只返回安全资料，不自动登录也不返回密码哈希。 */
 export async function POST(request: Request) {
   try {
+    if (!isPublicAuthEnabled()) return json({ error: PUBLIC_AUTH_CLOSED_MESSAGE, code: "AUTH_CLOSED" }, { status: 403 });
     assertTrustedJsonRequest(request);
     const input = registerSchema.parse(await request.json());
     const account = await new AccountService(getPlatformRepository(), argon2idPasswordHasher).register(input);

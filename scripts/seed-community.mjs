@@ -140,11 +140,13 @@ async function seedProjectMembersAndOwners(tx) {
     await markSeed(tx, "project_owner_assignment", projectId, "community_project_owner", { previousOwner: originalOwner, assignedOwner: owner });
     await markSeed(tx, "project_member", `${projectId}:${owner}`, "community_project_member", { projectId, userId: owner, role: "owner" });
 
-    const maintainer = userId((projectIndex + 1) % participants.length);
-    const contributor = userId((projectIndex + 2) % participants.length);
-    if (!maintainer || !contributor || maintainer === owner || contributor === owner || maintainer === contributor) {
+    const collaborators = participants.filter((participant) => participant.id !== owner);
+    if (collaborators.length < 2) {
       throw new Error(`项目 ${projectId} 需要三个不同的真实账号承担 owner/maintainer/contributor。`);
     }
+    const maintainer = collaborators[projectIndex % collaborators.length]?.id;
+    const contributor = collaborators[(projectIndex + 1) % collaborators.length]?.id;
+    if (!maintainer || !contributor || maintainer === contributor) throw new Error(`项目 ${projectId} 无法分配两个不同的真实协作者。`);
     for (const [member, role] of [[maintainer, "maintainer"], [contributor, "contributor"]]) {
       if (member === owner) continue;
       await tx`INSERT INTO project_member (project_id, user_id, role, created_at)
@@ -386,7 +388,7 @@ async function rebuildActivityDaily(tx) {
       FROM activity_event ae
       JOIN platform_user u ON u.id = ae.actor_user_id AND u.status = 'active'
       WHERE ae.actor_user_id IN (SELECT entity_id FROM community_seed_record
-        WHERE seed_batch = ${batch} AND entity_type = 'community_participant' AND retired_at IS NULL)
+        WHERE seed_batch = $1 AND entity_type = 'community_participant' AND retired_at IS NULL)
       GROUP BY actor_user_id, project_id, occurred_at::date
     ), view_daily AS (
       SELECT viewer_user_id AS actor_user_id, project_id, view_date AS day,
@@ -415,7 +417,7 @@ async function rebuildActivityDaily(tx) {
       comment_count = EXCLUDED.comment_count, review_count = EXCLUDED.review_count, star_count = EXCLUDED.star_count,
       follow_count = EXCLUDED.follow_count, view_count = EXCLUDED.view_count, total_count = EXCLUDED.total_count,
       public_event_version = EXCLUDED.public_event_version, updated_at = CURRENT_TIMESTAMP
-  `);
+  `, [batch]);
   const rows = await tx`SELECT id, actor_user_id, project_id, day, total_count FROM activity_daily
     WHERE actor_user_id IN (SELECT entity_id FROM community_seed_record
       WHERE seed_batch = ${batch} AND entity_type = 'community_participant' AND retired_at IS NULL)`;
