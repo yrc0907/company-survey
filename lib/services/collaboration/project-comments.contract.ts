@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 
 import { GET as getComments, POST as postComment } from "@/app/api/platform/projects/[id]/comments/route";
 import { DELETE as deleteComment } from "@/app/api/platform/projects/[id]/comments/[commentId]/route";
+import { GET as getCommentLike, POST as setCommentLike } from "@/app/api/platform/projects/[id]/comments/[commentId]/like/route";
 import { setAuthenticatedActorResolverForTest } from "@/lib/auth/session";
 import { setCollaborationRepositoryForTest } from "@/lib/repositories/collaboration";
 import { setPlatformRepositoryForTest } from "@/lib/repositories/platform/platform-repository-factory";
 import type { CollaborationRepository } from "@/lib/repositories/collaboration/collaboration-repository";
-import { CollaborationInvalidStateError, type CommentAttachmentRecord, type CreateProjectCommentInput, type ProjectCommentSummary } from "@/lib/domain/collaboration";
+import { CollaborationInvalidStateError, type CommentAttachmentRecord, type CreateProjectCommentInput, type ProjectCommentLikeState, type ProjectCommentSummary, type SetProjectCommentLikeInput } from "@/lib/domain/collaboration";
 import type { AuthenticatedActor } from "@/lib/domain/platform";
 import { getOssConfig, OssObjectStorageProvider } from "@/lib/providers/oss";
 import { setAssetsOssProviderForTest } from "@/lib/services/assets/oss-provider-factory";
@@ -18,6 +19,7 @@ function createFakeRepository(): CollaborationRepository {
   const comments = new Map<string, ProjectCommentSummary>();
   const attachments: CommentAttachmentRecord[] = [];
   const idempotency = new Map<string, string>();
+  const likes = new Map<string, Set<string>>();
   let number = 0;
   const withDelete = (comment: ProjectCommentSummary): ProjectCommentSummary => ({ ...comment, canDelete: comment.authorUserId === actor.userId });
   return {
@@ -46,6 +48,18 @@ function createFakeRepository(): CollaborationRepository {
       const value = { ...current, body: null, deleted: true, updatedAt: "2026-09-01T01:00:00.000Z" };
       comments.set(id, value);
       return value;
+    },
+    getProjectCommentLikeState: async (commentId: string, userId: string | null): Promise<ProjectCommentLikeState | null> => {
+      if (!comments.has(commentId)) return null;
+      const users = likes.get(commentId) ?? new Set<string>();
+      return { commentId, liked: userId ? users.has(userId) : false, likeCount: users.size };
+    },
+    setProjectCommentLike: async (input: SetProjectCommentLikeInput): Promise<ProjectCommentLikeState | null> => {
+      if (!comments.has(input.commentId)) return null;
+      const users = likes.get(input.commentId) ?? new Set<string>();
+      if (input.liked) users.add(input.userId); else users.delete(input.userId);
+      likes.set(input.commentId, users);
+      return { commentId: input.commentId, liked: users.has(input.userId), likeCount: users.size };
     },
     listCommentAttachments: async (commentIds: string[]) => attachments.filter((item) => commentIds.includes(item.commentId)),
     assertCommentAttachmentAssets: async (input: { projectId: string; assetIds: string[]; ownerUserId: string }) => {
@@ -82,6 +96,15 @@ async function run(): Promise<void> {
     assert.equal(first.status, 201, "登录用户发布评论必须成功");
     const firstPayload = await first.json() as { comment: ProjectCommentSummary };
     assert.equal(firstPayload.comment.authorUserId, actor.userId, "作者必须来自 Session");
+    const firstLike = await setCommentLike(new Request("http://localhost/api/platform/projects/project-1/comments/comment-1/like", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ liked: true }) }), { params: { id: project.id, commentId: firstPayload.comment.id } });
+    assert.equal(firstLike.status, 200, "登录用户点赞评论必须成功");
+    assert.equal((await firstLike.json() as ProjectCommentLikeState).likeCount, 1, "点赞计数必须由关系集合计算");
+    const repeatedLike = await setCommentLike(new Request("http://localhost/api/platform/projects/project-1/comments/comment-1/like", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ liked: true }) }), { params: { id: project.id, commentId: firstPayload.comment.id } });
+    assert.equal((await repeatedLike.json() as ProjectCommentLikeState).likeCount, 1, "重复点赞必须幂等");
+    setAuthenticatedActorResolverForTest(async () => null);
+    const anonymousLike = await getCommentLike(new Request("http://localhost/api/platform/projects/project-1/comments/comment-1/like"), { params: { id: project.id, commentId: firstPayload.comment.id } });
+    assert.equal((await anonymousLike.json() as ProjectCommentLikeState).likeCount, 1, "匿名读取应看到真实点赞总数");
+    setAuthenticatedActorResolverForTest(async () => actor);
     const withAttachment = await postComment(new Request("http://localhost/api/platform/projects/project-1/comments", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ body: "带 GIF 证据", attachmentAssetIds: ["asset-image-1"] }) }), { params: { id: project.id } });
     assert.equal(withAttachment.status, 201, "登录用户绑定已校验图片附件必须成功");
     const attachmentPayload = await withAttachment.json() as { comment: ProjectCommentSummary };
