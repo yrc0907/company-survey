@@ -109,6 +109,13 @@ pnpm test:e2e:platform
 
 ## 4. 失败记录规则
 
+### 4.1 认证 Provider 最小额度联调（2026-09-02）
+
+| scenario_id | 通道 | 目标 | 结果 | 根因/后续 |
+|---|---|---|---|---|
+| AUTH-PROVIDER-SMS-001 | 阿里云号码认证服务 `Dypnsapi/2017-05-25 SendSmsVerifyCode` | 用户指定手机号 | Provider 接受，返回消息 ID（仅保留存在性） | 短信认证通道可用；验证码内容不写日志 |
+| AUTH-PROVIDER-EMAIL-001 | 阿里云企业邮箱 SMTP TLS 465 | 用户指定 QQ 邮箱 | 失败：SMTP `526 Authentication failure` | 网络/TLS 可达；需在企业邮箱控制台启用 SMTP 客户端服务或创建应用密码并改用专用发件账号后重试 |
+
 每次失败都要记录：
 
 ```text
