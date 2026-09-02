@@ -105,17 +105,23 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
     setQuery("");
     setCategory("全部");
     setSort("recommended");
+    setGlobalResults([]);
+    setGlobalSearchState("idle");
   }
 
   function searchTopic(topic: string): void {
     setCategory("全部");
     setQuery(topic);
+    setGlobalResults([]);
+    setGlobalSearchState("idle");
     document.querySelector(".project-feed")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function searchProject(value: string): void {
     setCategory("全部");
     setQuery(value);
+    setGlobalResults([]);
+    setGlobalSearchState("idle");
     document.querySelector(".project-feed")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -185,7 +191,7 @@ export function PublicHome({ projects, onOpenProject, onRequireLogin, loading = 
         <aside className="explore-sidebar" aria-label="分类筛选">
           <p className="sidebar-label"><Filter size={14} />内容分类</p>
           <div className="category-list">
-            {categories.map((item) => <button type="button" key={item} className={category === item ? "is-active" : undefined} onClick={() => setCategory(item)}><span>{item}</span><span>{item === "全部" ? projects.length : projects.filter((project) => project.category === item).length}</span></button>)}
+            {categories.map((item) => <button type="button" key={item} className={category === item ? "is-active" : undefined} onClick={() => { setCategory(item); setGlobalResults([]); setGlobalSearchState("idle"); }}><span>{item}</span><span>{item === "全部" ? projects.length : projects.filter((project) => project.category === item).length}</span></button>)}
           </div>
           <div className="sidebar-note">
             <Sparkles size={16} aria-hidden="true" />
