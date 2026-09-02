@@ -89,6 +89,7 @@ pnpm exec node scripts/platform-e2e.mjs
 | 2026-09-03 | 香港 ECS `47.57.138.55` | 修复日线刷新幂等跳过导致的空序列，重新执行 `market-data-v3` 后 `/api/platform/projects/project-weaver/market` 返回真实日期序列；项目页质量检查和收盘曲线加载正常，公网 E2E 12/12 通过。 |
 | 2026-09-03 | 香港 ECS `47.57.138.55` | 版本历史 Tab 与 `/api/platform/projects/{id}/history` 已部署；公开项目可读取主分支 Commit、作者、时间和变更文件数，新增 E2E 覆盖版本/历史切换。 |
 | 2026-09-03 | 香港 ECS `47.57.138.55` | 发布提交 `88c50ef`：逐 Commit Diff、公开 PDF、URL 来源刷新路由/Worker、视觉待校对草稿和人工确认 API 已部署；`/healthz`、五项目列表、历史详情、PDF、认证关闭页均返回预期，公网 `pnpm test:e2e:platform` 12/12 通过。 |
+| 2026-09-03 | 香港 ECS `47.57.138.55` | 发布提交 `a08b2d0`：owner-only 当前 HEAD 反向回滚已部署；健康检查、公网版本详情/PDF 和认证边界返回预期，回滚/视觉确认匿名请求均返回 401，公网 `pnpm test:e2e:platform` 12/12 通过。 |
 
 本地 E2E 的剪贴板场景在无头浏览器中会触发权限错误，页面正确显示可读的 Alert；测试将“成功复制”或“权限错误提示”都视为该场景的可验证终态，避免把浏览器能力差异误判为无反馈。
 
