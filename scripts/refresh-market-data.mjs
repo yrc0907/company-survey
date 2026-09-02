@@ -111,8 +111,10 @@ async function refreshOne(tx, [projectId, company, code, secid]) {
   await tx`INSERT INTO document_revision (id,project_id,node_id,branch_id,commit_id,previous_revision_id,content,content_text,content_hash,created_by_user_id,created_at) VALUES (${revisionId},${projectId},${nodeId},${String(project.branch_id)},${commitId},${previousRevisionId},${JSON.stringify({ type: "doc", content: [{ type: "paragraph", attrs: { evidenceState: "inference" }, content: [{ type: "text", text }] }] })}::jsonb,${text},${sha256(text)},${String(project.owner_user_id)},${capturedAt}) ON CONFLICT (id) DO NOTHING`;
   await tx`INSERT INTO commit_change (id,commit_id,node_id,operation,before_revision_id,after_revision_id,metadata,position) VALUES (${`${commitId}:${nodeId}`},${commitId},${nodeId},'update_content',${previousRevisionId},${revisionId},${JSON.stringify({ evidenceState: "inference", sourceId, marketVersion: MARKET_VERSION })}::jsonb,0) ON CONFLICT (id) DO NOTHING`;
   if (reportId) {
-    // position 90 已由历史 v1 快照占用；v2 追加到 91，保留旧版报告可追溯性。
-    await tx`INSERT INTO report_section (id,report_id,parent_section_id,heading,anchor,level,position,content,evidence_state,updated_at) VALUES (${`${projectId}-market-section-${MARKET_VERSION}`},${reportId},NULL,'财报与股价趋势',${`market-trend-${MARKET_VERSION}`},1,91,${text},'inference',${capturedAt}) ON CONFLICT (id) DO NOTHING`;
+    // 报告章节 position 是唯一键；每次刷新追加到末尾，保留所有历史版本。
+    const positionRows = await tx`SELECT COALESCE(MAX(position), 89) + 1 AS next_position FROM report_section WHERE report_id=${reportId}`;
+    const marketPosition = Number(positionRows[0]?.next_position ?? 90);
+    await tx`INSERT INTO report_section (id,report_id,parent_section_id,heading,anchor,level,position,content,evidence_state,updated_at) VALUES (${`${projectId}-market-section-${MARKET_VERSION}`},${reportId},NULL,'财报与股价趋势',${`market-trend-${MARKET_VERSION}`},1,${marketPosition},${text},'inference',${capturedAt}) ON CONFLICT (id) DO NOTHING`;
     await tx`INSERT INTO citation (id,report_id,section_id,source_id,chunk_id,quote,evidence_state,created_at) VALUES (${`${projectId}-market-citation-${MARKET_VERSION}`},${reportId},${`${projectId}-market-section-${MARKET_VERSION}`},${sourceId},${`${sourceId}-chunk-1`},${`公开行情/财报快照（${capturedAt}）`},'needs_verification',${capturedAt}) ON CONFLICT (id) DO NOTHING`;
   }
   await tx`UPDATE knowledge_branch SET head_commit_id=${commitId},version=GREATEST(version,${Number(project.version ?? 1)+1}),updated_at=${capturedAt} WHERE id=${String(project.branch_id)}`;
