@@ -20,6 +20,7 @@ assert.match(script, /if\s*\(!applyMode\)\s*\{[\s\S]*preview\(scope\)/, "默认�
 assert.match(script, /rollbackScope\(sql, rollbackBatch\)/, "必须提供批次回滚入口");
 assert.match(script, /enterprise_scope_retirement/, "必须写入回滚账本");
 assert.match(script, /visibility\s*=\s*'private'[\s\S]*status\s*=\s*'archived'/, "归档必须移出公开查询");
+assert.match(script, /unsafeRetireRows/, "检测到项目转移/改分类时必须 fail closed");
 assert.doesNotMatch(script, /DELETE\s+FROM\s+(knowledge_project|company|report|source|source_chunk|knowledge_node)/i, "范围冻结不得物理删除企业或来源数据");
 assert.match(migration, /CREATE TABLE IF NOT EXISTS enterprise_scope_freeze_batch/);
 assert.match(migration, /CREATE TABLE IF NOT EXISTS enterprise_scope_retirement/);

@@ -31,6 +31,7 @@ const RETIRE_PROJECT_IDS = Object.freeze([
 ]);
 
 const ALL_MANAGED_PROJECT_IDS = Object.freeze([...KEEP_PROJECT_IDS, ...RETIRE_PROJECT_IDS]);
+const SEEDED_OWNER_ID = "u-yu";
 const DEFAULT_BATCH = "enterprise-scope-freeze-2026-09-03";
 const ADVISORY_LOCK_ID = 7916240312;
 
@@ -79,7 +80,9 @@ async function readScope(sql) {
     WHERE p.category = '企业' AND p.visibility = 'public' AND p.status = 'published'
       AND p.id <> ALL(${sql.array(ALL_MANAGED_PROJECT_IDS)}::text[])
     ORDER BY p.id`;
-  return { rows, known, missingKeep, missingRetire, unmanagedRows };
+  const unsafeRetireRows = rows.filter((row) => RETIRE_PROJECT_IDS.includes(String(row.id))
+    && (String(row.owner_user_id) !== SEEDED_OWNER_ID || String(row.category) !== "企业"));
+  return { rows, known, missingKeep, missingRetire, unmanagedRows, unsafeRetireRows };
 }
 
 function preview(scope) {
@@ -94,6 +97,7 @@ function preview(scope) {
     retireFound: RETIRE_PROJECT_IDS.filter((id) => scope.known.has(id)),
     missingKeep: scope.missingKeep,
     missingRetire: scope.missingRetire,
+    unsafeRetire: scope.unsafeRetireRows.map((row) => ({ id: String(row.id), ownerUserId: String(row.owner_user_id), category: String(row.category) })),
     unmanagedPublicEnterpriseProjects: scope.unmanagedRows.map((row) => ({ id: String(row.id), title: String(row.title), ownerUserId: String(row.owner_user_id) })),
     wouldArchive: activeCandidates.map((row) => ({ id: String(row.id), title: String(row.title), visibility: String(row.visibility), status: String(row.status) })),
     alreadyArchived: alreadyArchived.map((row) => String(row.id)),
@@ -104,6 +108,9 @@ function preview(scope) {
 async function applyScope(sql, scope) {
   if (scope.missingKeep.length > 0 || scope.missingRetire.length > 0) {
     throw new Error(`企业 seed 清单不完整，拒绝 apply。缺失保留=${scope.missingKeep.join(",") || "无"}；缺失待归档=${scope.missingRetire.join(",") || "无"}`);
+  }
+  if (scope.unsafeRetireRows.length > 0) {
+    throw new Error(`待归档项目已被转移或改作其他分类，拒绝覆盖：${scope.unsafeRetireRows.map((row) => row.id).join(",")}`);
   }
   if (scope.unmanagedRows.length > 0) {
     throw new Error(`发现未纳入清单的公开企业项目（${scope.unmanagedRows.map((row) => row.id).join(",")}），拒绝自动接管；请先确认其范围。`);
