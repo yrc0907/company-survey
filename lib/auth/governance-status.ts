@@ -12,7 +12,8 @@ export interface AuthGovernanceStatus {
  */
 export function getAuthGovernanceStatus(environment: Record<string, string | undefined> = process.env): AuthGovernanceStatus {
   const githubConfigured = Boolean(environment.GITHUB_CLIENT_ID?.trim() && environment.GITHUB_CLIENT_SECRET?.trim());
-  const emailConfigured = Boolean(environment.EMAIL_PROVIDER && environment.EMAIL_PROVIDER !== "disabled" && environment.SMTP_HOST?.trim() && environment.SMTP_USER?.trim() && environment.SMTP_PASSWORD?.trim());
+  const emailConfigured = environment.EMAIL_PROVIDER?.trim().toLowerCase() === "aliyun_enterprise_mail"
+    && Boolean(environment.SMTP_HOST?.trim() && environment.SMTP_USER?.trim() && environment.SMTP_PASSWORD?.trim());
   const smsConfigured = Boolean(environment.SMS_PROVIDER && environment.SMS_PROVIDER !== "disabled" && environment.ALIYUN_SMS_API_URL?.trim() && environment.ALIYUN_SMS_APP_ID?.trim() && environment.ALIYUN_SMS_APP_KEY?.trim());
   const captchaConfigured = Boolean(environment.CAPTCHA_PROVIDER && environment.CAPTCHA_PROVIDER !== "disabled" && environment.ALIYUN_CAPTCHA_API_URL?.trim() && environment.ALIYUN_CAPTCHA_APP_ID?.trim() && environment.ALIYUN_CAPTCHA_APP_KEY?.trim());
   return {

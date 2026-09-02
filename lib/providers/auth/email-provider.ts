@@ -32,6 +32,9 @@ export class SmtpEmailProvider implements EmailProvider {
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("SMTP_PORT 必须是合法端口");
     const secure = (environment.SMTP_SECURE ?? "true").toLowerCase() !== "false";
     const from = environment.EMAIL_FROM?.trim() || user;
+    const userDomain = user.split("@")[1]?.toLowerCase();
+    const fromDomain = from.split("@")[1]?.toLowerCase();
+    if (!userDomain || !fromDomain || userDomain !== fromDomain) throw new Error("EMAIL_FROM 必须与企业邮箱账号使用同一发信域");
     const connectionTimeout = Number(environment.SMTP_CONNECTION_TIMEOUT_MS ?? 10_000);
     const greetingTimeout = Number(environment.SMTP_GREETING_TIMEOUT_MS ?? 10_000);
     const socketTimeout = Number(environment.SMTP_SOCKET_TIMEOUT_MS ?? 15_000);
@@ -54,6 +57,6 @@ export class SmtpEmailProvider implements EmailProvider {
 export function getEmailProvider(environment: Record<string, string | undefined> = process.env): EmailProvider | null {
   const provider = environment.EMAIL_PROVIDER?.trim().toLowerCase();
   if (!provider || provider === "disabled") return null;
-  if (provider === "smtp" || provider === "aliyun_enterprise_mail") return SmtpEmailProvider.fromEnvironment(environment);
+  if (provider === "aliyun_enterprise_mail") return SmtpEmailProvider.fromEnvironment(environment);
   throw new Error(`不支持的邮件 Provider: ${provider}`);
 }
