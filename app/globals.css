@@ -5,22 +5,22 @@
 @layer base {
   :root {
     --background: 40 20% 99%;
-    --foreground: 150 11% 14%;
+    --foreground: 0 0% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 150 11% 14%;
-    --primary: 157 35% 28%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 145 13% 94%;
-    --secondary-foreground: 150 16% 21%;
-    --muted: 145 10% 95%;
-    --muted-foreground: 150 6% 43%;
-    --accent: 146 15% 92%;
-    --accent-foreground: 157 34% 23%;
+    --popover-foreground: 0 0% 10%;
+    --primary: 0 0% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 94%;
+    --secondary-foreground: 0 0% 15%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 42%;
+    --accent: 0 0% 92%;
+    --accent-foreground: 0 0% 12%;
     --destructive: 0 63% 48%;
     --destructive-foreground: 0 0% 100%;
-    --border: 145 10% 87%;
-    --input: 145 10% 84%;
-    --ring: 157 35% 35%;
+    --border: 0 0% 86%;
+    --input: 0 0% 82%;
+    --ring: 0 0% 20%;
     --radius: 8px;
   }
 
@@ -49,11 +49,11 @@
 .user-avatar--md { @apply size-8 text-xs; }
 .user-avatar--lg { @apply size-10 text-sm; }
 .user-avatar__fallback { @apply flex size-full items-center justify-center font-semibold; }
-.avatar-tone-0 { @apply bg-emerald-100 text-emerald-800; }
-.avatar-tone-1 { @apply bg-sky-100 text-sky-800; }
-.avatar-tone-2 { @apply bg-amber-100 text-amber-800; }
-.avatar-tone-3 { @apply bg-rose-100 text-rose-800; }
-.avatar-tone-4 { @apply bg-violet-100 text-violet-800; }
+.avatar-tone-0 { @apply bg-zinc-100 text-zinc-800; }
+.avatar-tone-1 { @apply bg-stone-100 text-stone-800; }
+.avatar-tone-2 { @apply bg-neutral-100 text-neutral-800; }
+.avatar-tone-3 { @apply bg-slate-100 text-slate-800; }
+.avatar-tone-4 { @apply bg-gray-200 text-gray-800; }
 .avatar-tone-5 { @apply bg-zinc-200 text-zinc-700; }
 
 .menu-content {
