@@ -47,6 +47,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/scripts/seed-community.mjs ./scri
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/enrich-enterprise-reports.mjs ./scripts/enrich-enterprise-reports.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/refresh-market-data.mjs ./scripts/refresh-market-data.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/refresh-analyst-theses.mjs ./scripts/refresh-analyst-theses.mjs
+# 企业首发范围冻结默认只读；运维显式 --apply/--rollback 时使用同一镜像中的脚本。
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/freeze-enterprise-scope.mjs ./scripts/freeze-enterprise-scope.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/db/migrations ./db/migrations
 
 USER nextjs
