@@ -15,6 +15,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from 
 import type { FileCommandId } from "@/lib/ui/file-commands";
 import type { SeedFileNode, SeedProject, SeedSection } from "@/lib/ui/platform-seed";
 import { formatCompactCount } from "@/lib/ui/platform-format";
+import { projectFileView } from "@/lib/ui/project-file-content";
 import type { BranchSummary } from "@/lib/domain/collaboration";
 
 interface ProjectWorkspaceProps {
@@ -50,8 +51,19 @@ function findNode(nodes: SeedFileNode[], nodeId: string): SeedFileNode | undefin
   return undefined;
 }
 
-function ProjectDocument({ project, viewCount, starCount, commentCount, onActivity, onCommentSection }: { project: SeedProject; viewCount: number; starCount: number; commentCount?: number; onActivity?: (message: string) => void; onCommentSection?: (anchor: CommentAnchor) => void }) {
-  const sections = project.sections.length ? project.sections : [{
+function ProjectDocument({ project, activeNodeId, viewCount, starCount, commentCount, onActivity, onCommentSection }: { project: SeedProject; activeNodeId: string; viewCount: number; starCount: number; commentCount?: number; onActivity?: (message: string) => void; onCommentSection?: (anchor: CommentAnchor) => void }) {
+  const activeFile = projectFileView(project, findNode(project.files, activeNodeId));
+  const sections = activeFile ? [{
+    id: activeFile.node.id,
+    nodeId: activeFile.node.id,
+    heading: activeFile.heading,
+    paragraphs: activeFile.body,
+    state: activeFile.evidenceState,
+    contributor: project.owner,
+    mergeRequest: 0,
+    reviewer: "待核验",
+    citations: activeFile.citations,
+  }] : project.sections.length ? project.sections : [{
     id: "seed-boundary",
     heading: "Seed 展示边界",
     paragraphs: ["该项目已进入首发内容目录，但正文与引用仍在迁移核验中。当前页面只展示信息架构，不生成未核验事实。"],
@@ -66,11 +78,11 @@ function ProjectDocument({ project, viewCount, starCount, commentCount, onActivi
     <article className="knowledge-document">
       <header className="document-heading">
         <div className="document-status-line"><span className={project.verification === "verified" ? "verification verification--verified" : "verification verification--pending"}>{project.verification === "verified" ? "Seed 已核验" : "Seed 待核验"}</span><span>公开 · main@v{project.version}</span></div>
-        <h1>{project.title}</h1>
-        <p>{project.summary}</p>
+        <h1>{activeFile ? activeFile.heading : project.title}</h1>
+        <p>{activeFile && activeFile.node.id !== "" ? activeFile.body.join(" ") : project.summary}</p>
         <div className="document-byline"><UserAvatar name={project.owner.displayName} size="sm" /><span>由 <strong>{project.owner.displayName}</strong> 维护</span><span>·</span><span>{project.contributorCount ?? project.contributors.length} 位贡献者</span><span>·</span><span>{project.sourceCount} 个来源</span><span>·</span><span><Eye size={13} aria-hidden="true" /> {viewCount} 位读者</span><span>·</span><span><Star size={13} aria-hidden="true" /> {starCount} Star</span>{commentCount !== undefined ? <><span>·</span><span><MessageCircle size={13} aria-hidden="true" /> {commentCount} 评论</span></> : null}</div>
       </header>
-      <nav className="document-toc" aria-label="本文目录"><span>本文目录</span>{sections.map((section) => <a key={section.id} href={`#${section.id}`}>{section.heading}</a>)}</nav>
+      <nav className="document-toc" aria-label="本文目录"><span>{activeFile ? "当前文件" : "本文目录"}</span>{sections.map((section) => <a key={section.id} href={`#${section.id}`}>{section.heading}</a>)}</nav>
       <div className="document-body">
         {sections.map((section, index) => <section key={section.id} id={section.id} className="knowledge-section">
           <div className="section-gutter"><span>{String(index + 1).padStart(2, "0")}</span><span className={`evidence-state evidence-state--${section.state}`}>{section.state === "fact" ? <CheckCircle2 size={12} /> : <CircleAlert size={12} />}{evidenceCopy[section.state]}</span></div>
@@ -361,7 +373,7 @@ export function ProjectWorkspace({ project, onBack, onRequireLogin }: ProjectWor
       </aside>
 
       {treeCollapsed ? <Button className="tree-reopen" size="icon" variant="outline" onClick={() => setTreeCollapsed(false)} aria-label="展开文件树"><ChevronRight size={17} /></Button> : null}
-      <main className="document-pane">{activeTab === "content" ? <><ProjectDocument project={project} viewCount={viewCount} starCount={starCount} commentCount={commentCount} onActivity={setActivity} onCommentSection={(anchor) => { setCommentAnchor(anchor); window.setTimeout(() => document.getElementById("project-comments-title")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0); }} /><ProjectComments projectId={project.id} authenticated={authenticated} onRequireLogin={() => onRequireLogin("login")} onCountChange={setCommentCount} initialAnchor={commentAnchor} /></> : activeTab === "activity" ? <ProjectActivity projectId={project.id} onSelect={(event) => setActivity(`${event.actor.displayName}：${activityEventCopy[event.eventType] ?? event.eventType}`)} /> : <CollaborationPanel projectId={project.id} authenticated={authenticated} canReview={canReview} onRequireLogin={() => onRequireLogin("login")} refreshToken={collaborationRefresh} />}{viewState === "loading" || starState === "loading" ? <div className="workspace-activity" role="status" aria-live="polite" aria-busy="true"><span>{viewState === "loading" ? "正在记录阅读…" : "正在读取 Star 状态…"}</span></div> : null}{viewState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>阅读统计暂不可用，正文仍可继续浏览。</span></div> : null}{starState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>Star 服务暂不可用，正文仍可继续浏览。</span></div> : null}{viewState === "ready" ? <div className="workspace-activity" role="status" aria-live="polite"><span>阅读已记录 · 去重读者 {viewCount}</span><button type="button" onClick={() => setViewState("ignored")}>关闭</button></div> : null}{exportState === "error" ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{exportError || "Markdown 导出失败"}</span><button type="button" onClick={() => { setExportState("idle"); setExportError(""); }}>关闭</button></div> : null}{collaborationError ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{collaborationError}</span><button type="button" onClick={() => setCollaborationError("")}>关闭</button></div> : null}{dropNotice ? <div className="workspace-activity" role="status"><span>{dropNotice}</span><button type="button" onClick={() => setDropNotice("")}>关闭</button></div> : null}{activity ? <div className="workspace-activity" role="status"><span>{activity}</span><button type="button" onClick={() => setActivity("")}>关闭</button></div> : null}</main>
+      <main className="document-pane">{activeTab === "content" ? <><ProjectDocument project={project} activeNodeId={activeNodeId} viewCount={viewCount} starCount={starCount} commentCount={commentCount} onActivity={setActivity} onCommentSection={(anchor) => { setCommentAnchor(anchor); window.setTimeout(() => document.getElementById("project-comments-title")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0); }} /><ProjectComments projectId={project.id} authenticated={authenticated} onRequireLogin={() => onRequireLogin("login")} onCountChange={setCommentCount} initialAnchor={commentAnchor} /></> : activeTab === "activity" ? <ProjectActivity projectId={project.id} onSelect={(event) => setActivity(`${event.actor.displayName}：${activityEventCopy[event.eventType] ?? event.eventType}`)} /> : <CollaborationPanel projectId={project.id} authenticated={authenticated} canReview={canReview} onRequireLogin={() => onRequireLogin("login")} refreshToken={collaborationRefresh} />}{viewState === "loading" || starState === "loading" ? <div className="workspace-activity" role="status" aria-live="polite" aria-busy="true"><span>{viewState === "loading" ? "正在记录阅读…" : "正在读取 Star 状态…"}</span></div> : null}{viewState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>阅读统计暂不可用，正文仍可继续浏览。</span></div> : null}{starState === "error" ? <div className="workspace-activity workspace-activity--error" role="status"><span>Star 服务暂不可用，正文仍可继续浏览。</span></div> : null}{viewState === "ready" ? <div className="workspace-activity" role="status" aria-live="polite"><span>阅读已记录 · 去重读者 {viewCount}</span><button type="button" onClick={() => setViewState("ignored")}>关闭</button></div> : null}{exportState === "error" ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{exportError || "Markdown 导出失败"}</span><button type="button" onClick={() => { setExportState("idle"); setExportError(""); }}>关闭</button></div> : null}{collaborationError ? <div className="workspace-activity workspace-activity--error" role="alert"><span>{collaborationError}</span><button type="button" onClick={() => setCollaborationError("")}>关闭</button></div> : null}{dropNotice ? <div className="workspace-activity" role="status"><span>{dropNotice}</span><button type="button" onClick={() => setDropNotice("")}>关闭</button></div> : null}{activity ? <div className="workspace-activity" role="status"><span>{activity}</span><button type="button" onClick={() => setActivity("")}>关闭</button></div> : null}</main>
       <AssistantPanel project={project} activeFileName={activeNode?.name ?? "研究结论"} activeFileId={activeNode?.id} />
     </div>
   );

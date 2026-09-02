@@ -29,12 +29,14 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     // 本地无数据库时只读 typed seed，保证公开首页可预览且明确标识来源。
-    if (!process.env.DATABASE_URL?.trim()) {
-      const result = await new PublicProjectService().list({ query: url.searchParams.get("q") ?? undefined, category: (url.searchParams.get("category") as "企业" | "政策" | "行业" | "技术" | null) ?? undefined, sort: (url.searchParams.get("sort") as "recommended" | "latest" | "read" | null) ?? "recommended" });
-      return json({ projects: result.data, source: result.source });
-    }
-    const search = url.searchParams.get("q") ?? undefined;
-    return json({ projects: await service().listPublicProjects(search), source: "postgres" });
+    const result = await new PublicProjectService().list({
+      query: url.searchParams.get("q") ?? undefined,
+      category: (url.searchParams.get("category") as "企业" | "政策" | "行业" | "技术" | null) ?? undefined,
+      sort: (url.searchParams.get("sort") as "recommended" | "latest" | "read" | null) ?? "recommended",
+      limit: Number(url.searchParams.get("limit") ?? 100),
+    });
+    // 列表和详情统一走 PublicProjectRecord 投影，避免旧协作摘要丢失分类、标签和真实统计。
+    return json({ projects: result.data, source: result.source });
   }
   catch (error) { return collaborationErrorResponse(error) ?? authErrorResponse(error); }
 }
