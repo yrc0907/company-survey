@@ -136,11 +136,15 @@ export class PostgresCollaborationRepository implements CollaborationRepository 
           AND (project_id IS NULL OR project_id = ${input.projectId})
         FOR SHARE`;
       if (assets.length !== assetIds.length) throw new CollaborationInvalidStateError("附件不存在、未完成校验或不属于当前用户");
-      for (let position = 0; position < assetIds.length; position += 1) {
-        const assetId = assetIds[position]!;
+      const existing = await tx<Row[]>`SELECT asset_id, position FROM project_comment_attachment WHERE comment_id = ${input.commentId} FOR UPDATE`;
+      const existingIds = new Set(existing.map((row) => text(row.asset_id)));
+      const missing = assetIds.filter((assetId) => !existingIds.has(assetId));
+      if (existing.length + missing.length > 4) throw new CollaborationInvalidStateError("一条评论最多添加 4 个图片或 GIF 附件");
+      let position = existing.reduce((max, row) => Math.max(max, Number(row.position ?? 0)), -1) + 1;
+      for (const assetId of missing) {
         await tx`INSERT INTO project_comment_attachment (id, project_id, comment_id, asset_id, position)
-          VALUES (${randomUUID()}, ${input.projectId}, ${input.commentId}, ${assetId}, ${position})
-          ON CONFLICT (comment_id, asset_id) DO NOTHING`;
+          VALUES (${randomUUID()}, ${input.projectId}, ${input.commentId}, ${assetId}, ${position})`;
+        position += 1;
       }
       const rows = await tx<Row[]>`SELECT pca.id, pca.comment_id, pca.asset_id, ua.filename, ua.mime_type, ua.actual_size, ua.expected_size, ua.object_key
         FROM project_comment_attachment pca JOIN uploaded_asset ua ON ua.id = pca.asset_id
