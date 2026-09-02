@@ -45,6 +45,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/scripts/run-migrations.mjs ./scri
 # 社区场景数据必须在迁移后由运维显式运行；将脚本放入 runner，避免生产容器找不到 seed 入口。
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/seed-community.mjs ./scripts/seed-community.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/enrich-enterprise-reports.mjs ./scripts/enrich-enterprise-reports.mjs
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/refresh-market-data.mjs ./scripts/refresh-market-data.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/db/migrations ./db/migrations
 
 USER nextjs
