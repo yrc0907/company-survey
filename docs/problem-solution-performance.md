@@ -2,6 +2,16 @@
 
 > 每个已复现异常使用稳定 `scenario_id`。本文只记录实际观察、根因、修复提交和复验结果；目标指标未实测前不写成 SLA。
 
+## PUBLIC-EXPORT-001：Markdown 导出穿透草稿或泄露私有存储地址
+
+- **场景**：匿名读者从项目详情下载 Markdown，或攻击者把私有项目/草稿 ID 替换到导出 URL。
+- **现象**：若路由直接读取文件原件或只按 ID 查询，可能把未发布正文、OSS `object_key` 或签名 URL 写入下载文件；浏览器也无法区分导出失败和成功。
+- **根因**：导出边界与项目详情公开投影分离，且下载响应没有稳定的 UTF-8 Content-Disposition。
+- **方案**：`PublicProjectService.exportMarkdown` 先调用公开详情投影，并在服务层再次要求 `visibility=public`、`status=published`；纯函数序列化标题、元数据、文件目录和公开正文，不查询私有表或 OSS。路由只接受 `format=markdown`，返回 `text/markdown; charset=utf-8`、ASCII 回退文件名与 RFC 5987 `filename*`，失败返回稳定 JSON 错误。详情按钮在请求期间显示加载，成功/失败分别反馈。
+- **实现**：`lib/services/platform/public-project-markdown.ts`、`PublicProjectService.exportMarkdown`、`GET /api/platform/projects/:id/export?format=markdown`、`ProjectWorkspace` 导出按钮；契约测试覆盖公开 seed、私有草稿、非法格式和敏感字段排除；`E2E-PROJECT-005` 验证浏览器下载。
+- **复验**：运行 `pnpm typecheck`、`pnpm lint`、`pnpm test` 与 `pnpm test:e2e:platform`；下载内容只包含公开投影，响应不包含 OSS 签名信息。
+- **性能影响**：导出复用详情的一次受限查询，序列化只按公开文件/章节线性遍历；不读取二进制原件、不调用模型，响应使用 `no-store` 避免缓存用户可见状态。
+
 ## PUBLIC-VIEW-001：阅读量被重复刷新或爬虫放大
 
 - **场景**：读者打开公开项目详情、刷新页面，或健康检查/搜索爬虫访问详情 URL。

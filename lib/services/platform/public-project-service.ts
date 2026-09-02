@@ -5,6 +5,7 @@ import { NotFoundError, PersistenceRequiredError, ValidationError } from "@/lib/
 import { seedProjects, type SeedFileNode, type SeedProject } from "@/lib/ui/platform-seed";
 import { getPlatformRepository } from "@/lib/repositories/platform/platform-repository-factory";
 import type { PlatformRepository, PublicProjectFileRecord, PublicProjectListInput, PublicProjectRecord, PublicProjectStarState, PublicProjectViewResult } from "@/lib/repositories/platform/platform-repository";
+import { formatPublicProjectMarkdown, type PublicProjectMarkdownExport } from "@/lib/services/platform/public-project-markdown";
 
 export interface PublicProjectQuery extends PublicProjectListInput {
   category?: "企业" | "政策" | "行业" | "技术";
@@ -86,7 +87,15 @@ export class PublicProjectService {
       const seed = seedProjects.find((project) => project.id === normalized || project.slug === normalized);
       return { data: seed ? fromSeed(seed) : null, source: "typed_seed" };
     }
-    return { data: await this.configuredRepository.getPublicProject(normalized), source: "postgres" };
+    const project = await this.configuredRepository.getPublicProject(normalized);
+    // Repository 必须执行公开过滤，服务层再校验一次，防止替换实现误把草稿投影到下载边界。
+    return { data: project && project.visibility === "public" && project.status === "published" ? project : null, source: "postgres" };
+  }
+
+  /** 只从已公开发布投影生成 Markdown；私有项目、草稿和 OSS 原件永远不会进入导出。 */
+  public async exportMarkdown(projectIdOrSlug: string): Promise<ProjectServiceResult<PublicProjectMarkdownExport | null>> {
+    const result = await this.get(projectIdOrSlug);
+    return { data: result.data ? formatPublicProjectMarkdown(result.data) : null, source: result.source };
   }
 
   /**

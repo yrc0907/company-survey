@@ -51,6 +51,14 @@ try {
     await page.getByRole("region", { name: "修改申请" }).waitFor();
   });
 
+  await check("E2E-PROJECT-005", async () => {
+    await page.getByRole("button", { name: "内容", exact: true }).click();
+    const downloadPromise = page.waitForEvent("download");
+    await page.getByRole("button", { name: "导出 Markdown", exact: true }).click();
+    const download = await downloadPromise;
+    assert.match(download.suggestedFilename(), /\.md$/i);
+  });
+
   await check("E2E-PROJECT-002", async () => {
     await page.getByRole("textbox", { name: "搜索当前项目文件" }).fill("官方");
     await page.getByRole("button", { name: "官方资料.pdf", exact: true }).waitFor();
