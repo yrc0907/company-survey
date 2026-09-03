@@ -65,6 +65,8 @@ async function ensureIcourtProject(tx) {
     ON CONFLICT (id) DO NOTHING`;
   await tx`INSERT INTO source_chunk (id, source_id, parent_section_id, heading_path, position, page, start_offset, end_offset, text, contextual_prefix, content_hash)
     VALUES ('chunk-icourt-official-v1', 'source-icourt-official-v1', NULL, ARRAY['iCourt 官网','公开资料']::TEXT[], 1, NULL, 0, ${snapshot.length}, ${snapshot}, '企业官网快照；事实状态 needs_verification。', ${sourceHash}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO citation (id, report_id, section_id, source_id, chunk_id, quote, evidence_state, created_at)
+    VALUES ('citation-icourt-official-v1', 'report-icourt', NULL, 'source-icourt-official-v1', 'chunk-icourt-official-v1', 'iCourt 官网公开资料入口与主体说明。', 'needs_verification', ${createdAt}) ON CONFLICT (id) DO NOTHING`;
   await tx`INSERT INTO project_stats (project_id, unique_readers, updated_at)
     VALUES ('project-icourt', 0, ${createdAt}) ON CONFLICT (project_id) DO NOTHING`;
 }
@@ -91,6 +93,15 @@ async function importDossier(tx, [projectId, company, fileName]) {
   await tx`UPDATE knowledge_project
     SET visibility='public', status='published', published_at=COALESCE(published_at, ${now}), updated_at=${now}
     WHERE id=${projectId}`;
+
+  // 来源节点保留在数据库以便首页统计和后续检索，但不出现在“单文件”公开文件树中。
+  if (projectId === "project-icourt") {
+    await tx`INSERT INTO knowledge_node (id, project_id, kind, created_by_user_id, created_at)
+      VALUES ('source-node-icourt-official', ${projectId}, 'source', ${String(project.owner_user_id)}, ${now}) ON CONFLICT (id) DO NOTHING`;
+    await tx`INSERT INTO knowledge_node_state (project_id, branch_id, node_id, parent_node_id, name, position, deleted_at, updated_at)
+      VALUES (${projectId}, ${String(branch.id)}, 'source-node-icourt-official', NULL, 'iCourt 官网公开资料', 20, ${now}, ${now})
+      ON CONFLICT (branch_id, node_id) DO UPDATE SET deleted_at=EXCLUDED.deleted_at, updated_at=EXCLUDED.updated_at`;
+  }
 
   if (existingCommit.length) {
     const existingNode = await tx`SELECT id FROM knowledge_node WHERE id=${nodeId} LIMIT 1`;
