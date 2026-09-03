@@ -120,7 +120,7 @@ DEEPSEEK_API_KEY=<rotated-optional-key>
 docker run --rm caddy:2.8.4-alpine caddy hash-password --plaintext 'choose-a-long-unique-password'
 ```
 
-公开平台上线后，Caddy 只对旧版 `/api/research/*` 个人接口保留 Basic Auth；首页、公开项目、Auth.js 和平台 API 由应用层 Session/RBAC 判权。应用与数据库仅在 Compose 内部网络可见。公开 AI 目前是单实例 IP 限流，规模增大后必须迁移到 Redis/网关限流。
+公开平台上线后，Caddy 只对旧版 `/api/research/*` 个人接口保留 Basic Auth；首页、公开项目、Auth.js 和平台 API 由应用层 Session/RBAC 判权。应用与数据库仅在 Compose 内部网络可见。AI 助手当前必须登录，`/api/research/assistant` 未登录返回 `401 AUTH_REQUIRED`；认证开放和规模扩大后再评估 Redis/网关限流。
 
 ## 4. 构建与启动
 

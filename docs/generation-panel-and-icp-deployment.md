@@ -246,7 +246,7 @@ ExposeHeader: ETag
 5. 在香港服务器启动 PostgreSQL，恢复数据库并运行迁移
 6. 复制/迁移 uploads_data，或确认原件均在 OSS
 7. 构建并启动 app、migrate、postgres、caddy
-8. 验证 /api/healthz、公开项目、匿名 AI、登录、上传和私有权限
+8. 验证 /api/healthz、公开项目、登录门槛、上传和私有权限；AI 未登录必须返回 401 AUTH_REQUIRED
 9. 修改 DNS A 记录到香港 IPv4
 10. 等证书签发后做手机 4G、手机 Wi-Fi 和电脑公网验收
 11. 保留旧上海 ECS 和数据库备份至少 7 天，再决定是否释放
@@ -260,7 +260,7 @@ ExposeHeader: ETag
 - [ ] 手机 Wi-Fi 和电脑公网访问结果一致
 - [ ] HTTPS 证书域名、有效期和自动续期正常
 - [ ] `/api/healthz` 返回应用健康和 PostgreSQL 持久化状态
-- [ ] 匿名只能读取公开项目和有限 AI，不能读取私有项目
+- [ ] 匿名只能读取公开项目，AI 必须登录且不能读取私有项目
 - [ ] 登录后创建项目、拖动上传、OSS ETag 校验、解析重试正常
 - [ ] 文件、评论图片/GIF、AI 生成物均能从 OSS 受控读取
 - [ ] 80/443 对公网，22 仅管理 IP，3000/5432/3389 不可公网访问

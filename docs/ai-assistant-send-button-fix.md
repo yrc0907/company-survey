@@ -24,7 +24,7 @@ assistant_report.id = 'report-' || substring(p.id from 9)
 
 ## 当前策略
 
-匿名 AI 继续可用，不改成强制登录。登录只负责保存会话历史；AI 回答仍只能使用当前报告的 active 来源和受限上下文。认证关闭、模型未配置、无证据和限流状态分别返回明确提示。
+根据内测阶段的产品决策，AI 助手现在必须登录后才能使用。未登录用户看到“AI 助手暂仅对内测用户开放”占位，点击入口打开登录门槛；服务端 `/api/research/assistant` 同时校验 Auth.js Session 并返回 `401 AUTH_REQUIRED`，不会创建会话、消耗模型额度或设置匿名 AI Cookie。登录后的回答仍只能使用当前报告的 active 来源和受限上下文。
 
 ## 验收
 

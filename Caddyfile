@@ -23,7 +23,7 @@
         respond "ok" 200
     }
 
-    # 公开 AI 只读入口使用应用内输入限制与单实例限流；其余旧版个人 Research API 仍由 Basic Auth 保护。
+    # AI 入口由应用层 Auth.js Session 保护；其余旧版个人 Research API 仍由 Basic Auth 保护。
     @publicResearchAssistant path /api/research/assistant
     handle @publicResearchAssistant {
         reverse_proxy app:3000 {

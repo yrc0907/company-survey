@@ -22,7 +22,7 @@
 - 列表查询使用 `LIMIT/OFFSET` 和固定索引；项目详情按主分支和节点索引读取，不做 N+1 查询。
 - 写请求使用事务、乐观版本号和幂等键；重试不会重复创建 Commit、MR 或上传任务。
 - 上传使用短期 OSS 签名 URL，应用不代理大文件；完成时校验 ETag、大小和 SHA-256。
-- AI 请求只接收受限 Context Projection；匿名入口使用输入上限、单实例限流和 `no-store`。
+- AI 请求只接收受限 Context Projection；当前入口必须通过 Auth.js Session，未登录请求返回 `401 AUTH_REQUIRED`，响应使用 `no-store`。
 - 失败和降级状态保留错误码、request ID、scope 和可恢复动作，不能用静态成功响应掩盖 Provider/数据库故障。
 
 ### 1.3 目标指标（未测量前不作为 SLA）
@@ -57,7 +57,7 @@ pnpm exec node scripts/platform-e2e.mjs
 | `E2E-PROJECT-004` | 活动时间线 | 历史 Tab、活动加载/错误状态与返回内容 |
 | `E2E-PROJECT-005` | 公开导出 | 导出按钮加载/下载与错误状态 |
 | `E2E-ASSISTANT-001` | 助手输入交互 | `@` 文件候选、附件拖放/移除、新对话反馈 |
-| `E2E-ASSISTANT-002` | 历史会话入口 | 历史 Sheet 打开，匿名登录提示可见 |
+| `E2E-ASSISTANT-002` | 历史会话入口 | 历史 Sheet 打开，未登录显示“仅对内测用户开放”登录提示 |
 | `EDITOR-KEYBOARD-001` | 报告编辑器保存快捷键 | 契约验证 `Ctrl/Cmd+S` 只在允许组合键命中；公开平台正文编辑器尚未挂载，暂不声称浏览器 E2E |
 | `E2E-AUTHOR-001` | 作者主页与关注入口 | 项目卡作者跳转、主页项目回链、匿名关注状态和登录门槛 |
 | `E2E-MOBILE-001` | 移动端 | 390px 视口无横向溢出 |
