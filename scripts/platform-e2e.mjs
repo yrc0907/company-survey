@@ -188,26 +188,17 @@ try {
 
   await check("E2E-ASSISTANT-001", async () => {
     const composer = page.locator(".assistant-input textarea");
-    await composer.fill("@");
-    await page.getByRole("button", { name: "官方资料.pdf", exact: true }).last().waitFor();
-    await page.getByRole("button", { name: "官方资料.pdf", exact: true }).last().click();
-    assert.match(await composer.inputValue(), /@官方资料\.pdf/);
-    const dropTarget = page.locator(".assistant-input");
-    await dropTarget.evaluate((element) => {
-      const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(new File(["e2e"], "notes.txt", { type: "text/plain" }));
-      element.dispatchEvent(new DragEvent("drop", { bubbles: true, dataTransfer }));
-    });
-    await page.getByText("notes.txt", { exact: true }).waitFor();
-    await page.getByRole("button", { name: "移除附件notes.txt" }).click();
-    await page.getByRole("button", { name: "新对话" }).click();
-    await page.getByRole("status").filter({ hasText: "已新建空白对话" }).waitFor();
+    await page.getByRole("heading", { name: "AI 助手暂仅对内测用户开放" }).waitFor();
+    assert.equal(await composer.isDisabled(), true, "未登录时 AI 输入框必须禁用");
+    await page.getByRole("button", { name: "登录后使用", exact: true }).click();
+    await page.getByRole("heading", { name: "登录功能暂未开放，仅对内测用户开放" }).waitFor();
+    await page.keyboard.press("Escape");
   });
 
   await check("E2E-ASSISTANT-002", async () => {
     await page.getByRole("button", { name: "历史对话" }).click();
     await page.getByRole("heading", { name: "历史对话" }).waitFor();
-    await page.getByText("登录后可在这里搜索历史对话。", { exact: true }).waitFor();
+    await page.getByText("AI 助手暂仅对内测用户开放。", { exact: true }).waitFor();
   });
 
   await check("E2E-AUTHOR-001", async () => {
