@@ -109,9 +109,20 @@ async function importDossier(tx, [projectId, company, fileName]) {
   if (!branch) return { projectId, status: "skipped", reason: "main_branch_missing" };
 
   const nodeId = `${projectId}-dossier-markdown-v1`;
-  const commitId = `${projectId}-dossier-markdown-v1`;
-  const revisionId = `${nodeId}-revision-v1`;
+  let commitId = `${projectId}-dossier-markdown-v1`;
+  let revisionId = `${nodeId}-revision-v1`;
+  let previousRevisionId = null;
+  let parentCommitId = branch.head_commit_id ? String(branch.head_commit_id) : null;
   const existingCommit = await tx`SELECT id FROM knowledge_commit WHERE id=${commitId} LIMIT 1`;
+  const existingNode = await tx`SELECT id FROM knowledge_node WHERE id=${nodeId} LIMIT 1`;
+  if (existingCommit.length && existingNode.length) {
+    const latest = await tx`SELECT id, content_hash FROM document_revision WHERE project_id=${projectId} AND node_id=${nodeId} AND branch_id=${String(branch.id)} ORDER BY created_at DESC LIMIT 1`;
+    if (String(latest[0]?.content_hash ?? "") === contentHash) return { projectId, status: "skipped", reason: "already_imported", contentHash };
+    // 报告正文变化时追加不可变版本，不覆盖原始 Revision；哈希后缀保证幂等。
+    commitId = `${projectId}-dossier-markdown-${contentHash.slice(0, 12)}`;
+    revisionId = `${nodeId}-revision-${contentHash.slice(0, 12)}`;
+    previousRevisionId = latest[0]?.id ? String(latest[0].id) : null;
+  }
 
   // 恢复公开状态是用户刚刚明确确认的动作；不改写 owner、许可证或统计事实。
   await tx`UPDATE knowledge_project
@@ -129,10 +140,7 @@ async function importDossier(tx, [projectId, company, fileName]) {
       ON CONFLICT (branch_id, node_id) DO UPDATE SET deleted_at=EXCLUDED.deleted_at, updated_at=EXCLUDED.updated_at`;
   }
 
-  if (existingCommit.length) {
-    const existingNode = await tx`SELECT id FROM knowledge_node WHERE id=${nodeId} LIMIT 1`;
-    if (existingNode.length) return { projectId, status: "skipped", reason: "already_imported", contentHash };
-  }
+  if (existingCommit.length && existingNode.length && commitId === `${projectId}-dossier-markdown-v1`) return { projectId, status: "skipped", reason: "already_imported", contentHash };
 
   // 旧版文件夹、章节、来源节点仍保留在审计账本中，但从公开文件树隐藏，避免出现重复目录。
   await tx`UPDATE knowledge_node_state
@@ -149,15 +157,15 @@ async function importDossier(tx, [projectId, company, fileName]) {
 
   await tx`INSERT INTO knowledge_commit
     (id, project_id, branch_id, parent_commit_id, author_user_id, message, ai_assisted, created_at)
-    VALUES (${commitId}, ${projectId}, ${String(branch.id)}, ${branch.head_commit_id ? String(branch.head_commit_id) : null}, ${String(project.owner_user_id)}, ${`导入${company}完整 Markdown 研究报告`}, FALSE, ${now})
+    VALUES (${commitId}, ${projectId}, ${String(branch.id)}, ${parentCommitId}, ${String(project.owner_user_id)}, ${`导入${company}完整 Markdown 研究报告`}, FALSE, ${now})
     ON CONFLICT (id) DO NOTHING`;
   await tx`INSERT INTO document_revision
     (id, project_id, node_id, branch_id, commit_id, previous_revision_id, content, content_text, content_hash, created_by_user_id, created_at)
-    VALUES (${revisionId}, ${projectId}, ${nodeId}, ${String(branch.id)}, ${commitId}, NULL, ${JSON.stringify(tiptapDocument(markdown, nodeId))}::jsonb, ${markdown}, ${contentHash}, ${String(project.owner_user_id)}, ${now})
+    VALUES (${revisionId}, ${projectId}, ${nodeId}, ${String(branch.id)}, ${commitId}, ${previousRevisionId}, ${JSON.stringify(tiptapDocument(markdown, nodeId))}::jsonb, ${markdown}, ${contentHash}, ${String(project.owner_user_id)}, ${now})
     ON CONFLICT (id) DO NOTHING`;
   await tx`INSERT INTO commit_change
     (id, commit_id, node_id, operation, before_revision_id, after_revision_id, metadata, position)
-    VALUES (${`${commitId}:create:${nodeId}`}, ${commitId}, ${nodeId}, 'create_node', NULL, ${revisionId}, ${JSON.stringify({ kind: "markdown", name: fileName, contentHash, source: "repository_dossier" })}::jsonb, 0)
+    VALUES (${`${commitId}:create:${nodeId}`}, ${commitId}, ${nodeId}, ${previousRevisionId ? 'update_content' : 'create_node'}, ${previousRevisionId}, ${revisionId}, ${JSON.stringify({ kind: "markdown", name: fileName, contentHash, source: "repository_dossier" })}::jsonb, 0)
     ON CONFLICT (id) DO NOTHING`;
   await tx`INSERT INTO content_attribution
     (id, project_id, node_id, block_id, origin_commit_id, last_touch_commit_id, contributor_user_id, reviewer_user_id, merge_request_id, active, created_at, updated_at)
