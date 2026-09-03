@@ -10,9 +10,14 @@ import { MemoryPlatformRepository } from "@/lib/repositories/platform/memory-pla
 import { AccountService } from "@/lib/services/platform/account-service";
 import { PublicProjectService } from "@/lib/services/platform/public-project-service";
 import { setPlatformRepositoryForTest } from "@/lib/repositories/platform/platform-repository-factory";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 /** 公开项目 API 最小契约：匿名 seed 读取、未知项目 404、创建必须有签名 actor。 */
 async function run(): Promise<void> {
+  const platformRepositorySource = readFileSync(resolve(process.cwd(), "lib", "repositories", "platform", "postgres-platform-repository.ts"), "utf8");
+  assert.match(platformRepositorySource, /assistant_report\.id AS assistant_report_id/);
+  assert.match(platformRepositorySource, /assistant_report\.id = 'report-' \|\| substring\(p\.id from 9\)/);
   const list = await getProjects(new Request("http://localhost/api/platform/projects?q=慧策"));
   assert.equal(list.status, 200);
   const listBody = await list.json() as { projects: Array<{ id: string }>; source: string };

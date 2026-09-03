@@ -86,6 +86,7 @@ Internet
 - [公开版本历史与逐段 Diff](docs/public-version-history-diff.md)
 - [URL 来源刷新实现](docs/source-refresh-implementation.md)
 - [信锐科技 2026 独立研究](docs/enterprise-research/信锐科技-2026独立研究.md)
+- [AI 助手发送按钮故障说明](docs/ai-assistant-send-button-fix.md)
 - [内测认证关闭模式](docs/public-auth-closed-mode.md)
 - [真实身份认证 Provider 与验收边界](docs/authentication-providers.md)
 - [阿里云认证接入决策](docs/aliyun-auth-integration-decision.md)

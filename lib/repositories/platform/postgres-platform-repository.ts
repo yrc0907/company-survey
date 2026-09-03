@@ -115,6 +115,7 @@ function mapPublicProject(row: DatabaseRow): PublicProjectRecord {
     tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
     verification: row.verification === "verified" ? "verified" : "needs_verification",
     verificationNote: row.verification_note ? String(row.verification_note) : "数据库项目的核验状态由维护者在公开版本中维护。",
+    ...(row.assistant_report_id ? { assistantReportId: String(row.assistant_report_id) } : {}),
   };
 }
 
@@ -122,6 +123,7 @@ const PUBLIC_PROJECT_SELECT = `
   SELECT p.id, p.slug, p.title, p.summary, p.visibility, p.status, p.license,
          p.category, p.tags, p.verification, p.verification_note,
          p.published_at, p.updated_at,
+         assistant_report.id AS assistant_report_id,
          u.id AS owner_id, pr.username AS owner_username, pr.display_name AS owner_display_name,
          pr.avatar_asset_id AS owner_avatar,
          COALESCE((SELECT ps.unique_readers FROM project_stats ps WHERE ps.project_id = p.id), 0)::bigint AS unique_readers,
@@ -136,6 +138,7 @@ const PUBLIC_PROJECT_SELECT = `
          (SELECT COUNT(*) FROM knowledge_commit kc
             WHERE kc.project_id = p.id AND kc.branch_id = main_branch.id) AS version
     FROM knowledge_project p
+    LEFT JOIN report assistant_report ON assistant_report.id = 'report-' || substring(p.id from 9)
     JOIN platform_user u ON u.id = p.owner_user_id
     JOIN platform_profile pr ON pr.user_id = u.id
     LEFT JOIN knowledge_branch main_branch ON main_branch.project_id = p.id AND main_branch.name = p.default_branch_name`;
