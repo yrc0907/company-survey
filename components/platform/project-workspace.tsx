@@ -2,8 +2,8 @@
 
 import { ArrowLeft, BookOpen, Bot, CheckCircle2, ChevronRight, CircleAlert, Download, Eye, Files, GitBranch, GitMerge, GitPullRequest, History, Loader2, LogIn, MessageCircle, Network, PanelLeftClose, Search, Share2, Star, Users } from "lucide-react";
 import { getSession } from "next-auth/react";
-import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useEffect, useMemo, useState } from "react";
 
 import { CollaborationPanel } from "@/components/platform/collaboration-panel";
@@ -23,7 +23,6 @@ import type { FileCommandId } from "@/lib/ui/file-commands";
 import type { SeedFileNode, SeedProject, SeedSection } from "@/lib/ui/platform-seed";
 import { formatCompactCount } from "@/lib/ui/platform-format";
 import { projectFileView } from "@/lib/ui/project-file-content";
-import { contentToTiptap } from "@/lib/services/tiptap-document";
 import type { BranchSummary } from "@/lib/domain/collaboration";
 
 interface ProjectWorkspaceProps {
@@ -64,15 +63,14 @@ function findNode(nodes: SeedFileNode[], nodeId: string): SeedFileNode | undefin
   return undefined;
 }
 
-/** 将根级 Markdown 文件转换为只读 TipTap 文档，保留标题、列表、引用和代码块结构。 */
+/** 只读渲染根级 Markdown 文件，禁止原始 HTML，避免报告内容注入页面。 */
 function MarkdownFileContent({ content, nodeId }: { content: string; nodeId: string }) {
-  const editor = useEditor({ extensions: [StarterKit], content: contentToTiptap(content, nodeId), editable: false, immediatelyRender: false });
-  if (!editor) return <div className="markdown-file-content" aria-busy="true">正在加载 Markdown…</div>;
-  return <div className="markdown-file-content"><EditorContent editor={editor} aria-label="Markdown 报告正文" /></div>;
+  return <div className="markdown-file-content" data-node-id={nodeId} aria-label="Markdown 报告正文"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ href, children, ...props }) => <a {...props} href={href} target="_blank" rel="noreferrer">{children}</a> }}>{content}</ReactMarkdown></div>;
 }
 
 function ProjectDocument({ project, activeNodeId, viewCount, starCount, commentCount, onActivity, onCommentSection, onSelectNode }: { project: SeedProject; activeNodeId: string; viewCount: number; starCount: number; commentCount?: number; onActivity?: (message: string) => void; onCommentSection?: (anchor: CommentAnchor) => void; onSelectNode?: (nodeId: string) => void }) {
   const activeFile = projectFileView(project, findNode(project.files, activeNodeId));
+  const isMarkdownFile = Boolean(activeFile && /\.(md|markdown)$/i.test(activeFile.node.name));
   const isOverview = Boolean(activeFile && /执行摘要|研究结论|研究者分析与战略判断/.test(activeFile.heading));
   const overviewItems = isOverview ? project.sections.filter((section) => section.nodeId && section.nodeId !== activeFile?.node.id).slice(0, 8) : [];
   const sections = activeFile ? [{
@@ -100,8 +98,8 @@ function ProjectDocument({ project, activeNodeId, viewCount, starCount, commentC
     <article className="knowledge-document">
       <header className="document-heading">
         <div className="document-status-line"><span className={project.verification === "verified" ? "verification verification--verified" : "verification verification--pending"}>{project.verification === "verified" ? "来源已核验" : "来源待核验"}</span><span>公开 · main@v{project.version}</span></div>
-        <h1>{activeFile ? activeFile.heading : project.title}</h1>
-        <p>{activeFile && activeFile.node.id !== "" ? activeFile.body.join(" ") : project.summary}</p>
+        <h1>{isMarkdownFile ? project.title : activeFile ? activeFile.heading : project.title}</h1>
+        <p>{isMarkdownFile ? project.summary : activeFile && activeFile.node.id !== "" ? activeFile.body.join(" ") : project.summary}</p>
         <div className="document-byline"><UserAvatar name={project.owner.displayName} size="sm" /><span>由 <strong>{project.owner.displayName}</strong> 维护</span><span>·</span><span>{project.contributorCount ?? project.contributors.length} 位贡献者</span><span>·</span><span>{project.sourceCount} 个来源</span><span>·</span><span><Eye size={13} aria-hidden="true" /> {viewCount} 位读者</span><span>·</span><span><Star size={13} aria-hidden="true" /> {starCount} Star</span>{commentCount !== undefined ? <><span>·</span><span><MessageCircle size={13} aria-hidden="true" /> {commentCount} 评论</span></> : null}</div>
         <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="项目概览统计">
           <div className="rounded-lg border bg-muted/35 px-3 py-2.5"><span className="block text-[10px] uppercase tracking-wide text-muted-foreground">公开版本</span><strong className="mt-1 block font-mono text-sm tabular-nums">main · v{project.version}</strong></div>
@@ -116,7 +114,7 @@ function ProjectDocument({ project, activeNodeId, viewCount, starCount, commentC
       {activeFile && /研究结论|研究者分析与战略判断|执行摘要/.test(activeFile.heading) ? <div className="mx-auto w-full max-w-[860px] px-5 sm:px-14"><ResearchQualitySummary sections={project.sections} sourceCount={project.sourceCount} /></div> : null}
       {activeFile?.preview && activeFile.node.kind !== "document" ? <div className="mx-auto w-full max-w-[860px] px-14 pt-6 sm:px-14"><FilePreview preview={activeFile.preview} /></div> : null}
       <div className="document-body">
-        {sections.map((section, index) => <section key={section.id} id={section.id} className="knowledge-section">
+        {isMarkdownFile ? <section key={activeFile!.node.id} id={activeFile!.node.id} className="knowledge-section knowledge-section--markdown"><div className="section-copy"><MarkdownFileContent content={activeFile!.body.join("\n\n")} nodeId={activeFile!.node.id} /><div className="section-attribution"><UserAvatar name={project.owner.displayName} size="sm" /><span><strong>{project.owner.displayName}</strong> 维护 · 来源状态：{project.verification === "verified" ? "已核验" : "待核验"}</span><span>{activeFile!.citations} 条引用</span></div></div></section> : sections.map((section, index) => <section key={section.id} id={section.id} className="knowledge-section">
           <div className="section-gutter"><span>{String(index + 1).padStart(2, "0")}</span><span className={`evidence-state evidence-state--${section.state}`}>{section.state === "fact" ? <CheckCircle2 size={12} /> : <CircleAlert size={12} />}{evidenceCopy[section.state]}</span></div>
           <div className="section-copy">
             <h2>{section.heading}</h2>
