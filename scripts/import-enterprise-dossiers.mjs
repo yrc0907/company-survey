@@ -22,6 +22,7 @@ const dossiers = [
   ["project-sundray", "信锐科技", "信锐科技-2026独立研究.md"],
   ["project-muyuan", "牧原食品", "牧原食品-2026独立研究.md"],
   ["project-icourt", "北京新橙科技（iCourt）", "北京新橙科技（iCourt）-2026独立研究.md"],
+  ["project-yuhe", "语核（上海）科技有限公司", "语核（上海）科技-2026独立研究.md"],
 ];
 
 const now = new Date().toISOString();
@@ -71,6 +72,29 @@ async function ensureIcourtProject(tx) {
     VALUES ('project-icourt', 0, ${createdAt}) ON CONFLICT (project_id) DO NOTHING`;
 }
 
+/** 为用户提供的招聘截图主体建立最小公开项目；未把岗位文案升级为经营事实。 */
+async function ensureYuheProject(tx) {
+  const projectId = "project-yuhe";
+  if ((await tx`SELECT id FROM knowledge_project WHERE id=${projectId} LIMIT 1`).length) return;
+  const createdAt = "2026-09-03T00:00:00Z";
+  await tx`INSERT INTO company (id,name,kind,summary,tags,created_at,updated_at)
+    VALUES ('company-yuhe','语核（上海）科技有限公司','company','企业 Agent 与人工智能应用招聘线索研究对象。',ARRAY['人工智能','Agent','ToB']::TEXT[],${createdAt},${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO report (id,company_id,title,status,current_version,created_at,updated_at)
+    VALUES ('report-yuhe','company-yuhe','语核（上海）科技有限公司：企业 Agent 与 ToB 应用研究','draft',1,${createdAt},${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO knowledge_project (id,owner_user_id,slug,title,summary,visibility,status,license,default_branch_name,published_at,created_at,updated_at,category,tags,verification,verification_note)
+    VALUES ('project-yuhe','u-yu','yuhe-ai','语核（上海）科技有限公司：企业 Agent 与 ToB 应用研究','基于招聘材料研究语核的主体、Agent 产品假设、ToB 商业化和销售工程师/FDE 组织；产品、客户、财务和收入保持待核验。','public','published','cc-by-4.0','main',${createdAt},${createdAt},${createdAt},'企业',ARRAY['人工智能','Agent','ToB 商业化','销售工程师']::TEXT[],'needs_verification','主体与岗位信息来自用户提供招聘截图；官网、产品、客户、财务和合同证据待核验。') ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO project_member(project_id,user_id,role,created_at) VALUES ('project-yuhe','u-yu','owner',${createdAt}) ON CONFLICT (project_id,user_id) DO NOTHING`;
+  await tx`INSERT INTO knowledge_branch(id,project_id,name,owner_user_id,is_protected,status,version,created_at,updated_at) VALUES ('branch-yuhe-main','project-yuhe','main',NULL,TRUE,'active',1,${createdAt},${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO knowledge_commit(id,project_id,branch_id,parent_commit_id,author_user_id,message,ai_assisted,created_at) VALUES ('commit-yuhe-public-v1','project-yuhe','branch-yuhe-main',NULL,'u-yu','建立语核公开研究项目与证据边界',FALSE,${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`UPDATE knowledge_branch SET head_commit_id='commit-yuhe-public-v1',version=GREATEST(version,1),updated_at=${createdAt} WHERE id='branch-yuhe-main'`;
+  const snapshot='用户提供的语核（上海）科技有限公司招聘截图：人工智能方向，强调 Agent 团队、ToB 商业体系、业务导师与技术导师、销售工程师到区域销售负责人的培养路径；办公地点为上海市徐汇区古美路1528号。原始招聘链接尚未取得，主体、产品和客户数据需继续核验。';
+  const sourceHash=hash(snapshot);
+  await tx`INSERT INTO source(id,report_id,title,kind,url,language,state,captured_at,content_hash,snapshot,evidence_state,metadata) VALUES ('source-yuhe-recruitment-v1','report-yuhe','语核招聘截图（用户提供）','image',NULL,'zh','active',${createdAt},${sourceHash},${snapshot},'needs_verification',${JSON.stringify({sourceType:'user_provided_screenshot',capturedAt:createdAt})}::jsonb) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO source_chunk(id,source_id,parent_section_id,heading_path,position,page,start_offset,end_offset,text,contextual_prefix,content_hash) VALUES ('chunk-yuhe-recruitment-v1','source-yuhe-recruitment-v1',NULL,ARRAY['招聘截图','岗位与培养']::TEXT[],1,NULL,0,${snapshot.length},${snapshot},'用户提供截图；证据状态 needs_verification。',${sourceHash}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO citation(id,report_id,section_id,source_id,chunk_id,quote,evidence_state,created_at) VALUES ('citation-yuhe-recruitment-v1','report-yuhe',NULL,'source-yuhe-recruitment-v1','chunk-yuhe-recruitment-v1','用户提供的语核招聘截图。','needs_verification',${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO project_stats(project_id,unique_readers,updated_at) VALUES ('project-yuhe',0,${createdAt}) ON CONFLICT (project_id) DO NOTHING`;
+}
+
 async function importDossier(tx, [projectId, company, fileName]) {
   const markdown = await readFile(join(dossierDir, fileName), "utf8");
   const contentHash = hash(markdown);
@@ -95,11 +119,13 @@ async function importDossier(tx, [projectId, company, fileName]) {
     WHERE id=${projectId}`;
 
   // 来源节点保留在数据库以便首页统计和后续检索，但不出现在“单文件”公开文件树中。
-  if (projectId === "project-icourt") {
+  if (projectId === "project-icourt" || projectId === "project-yuhe") {
+    const sourceNodeId = projectId === "project-icourt" ? "source-node-icourt-official" : "source-node-yuhe-recruitment";
+    const sourceName = projectId === "project-icourt" ? "iCourt 官网公开资料" : "语核招聘截图（用户提供）";
     await tx`INSERT INTO knowledge_node (id, project_id, kind, created_by_user_id, created_at)
-      VALUES ('source-node-icourt-official', ${projectId}, 'source', ${String(project.owner_user_id)}, ${now}) ON CONFLICT (id) DO NOTHING`;
+      VALUES (${sourceNodeId}, ${projectId}, 'source', ${String(project.owner_user_id)}, ${now}) ON CONFLICT (id) DO NOTHING`;
     await tx`INSERT INTO knowledge_node_state (project_id, branch_id, node_id, parent_node_id, name, position, deleted_at, updated_at)
-      VALUES (${projectId}, ${String(branch.id)}, 'source-node-icourt-official', NULL, 'iCourt 官网公开资料', 20, ${now}, ${now})
+      VALUES (${projectId}, ${String(branch.id)}, ${sourceNodeId}, NULL, ${sourceName}, 20, ${now}, ${now})
       ON CONFLICT (branch_id, node_id) DO UPDATE SET deleted_at=EXCLUDED.deleted_at, updated_at=EXCLUDED.updated_at`;
   }
 
@@ -147,6 +173,7 @@ async function main() {
   try {
     await sql.begin(async (tx) => {
       await ensureIcourtProject(tx);
+      await ensureYuheProject(tx);
       for (const dossier of dossiers) {
         try {
           const outcome = await importDossier(tx, dossier);
