@@ -28,7 +28,7 @@ assistant_report.id = 'report-' || substring(p.id from 9)
 
 ## 验收
 
-- 直接调用公网 `/api/research/assistant`（有效 `reportId`）返回 `context_ready`；
+- 未登录直接调用公网 `/api/research/assistant`（即使携带有效 `reportId`）返回 `401 AUTH_REQUIRED`；登录后的受控请求才允许进入 `context_ready` 或明确降级；
 - 公开项目投影契约检查 `assistant_report_id` 查询和稳定映射；
 - `pnpm typecheck`、`pnpm lint`、`pnpm test`、`pnpm build` 通过后再发布；
-- 发布后打开项目，发送按钮应能进入“检索并重排证据”状态；无可用项目时不会误显示旧企业报告。
+- 发布后登录内测账号打开项目，发送按钮应能进入“检索并重排证据”状态；未登录显示内测占位；无可用项目时不会误显示旧企业报告。
