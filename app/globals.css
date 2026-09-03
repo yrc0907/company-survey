@@ -260,6 +260,7 @@
 .document-toc a { @apply text-muted-foreground hover:text-primary; }
 .document-body { @apply divide-y; }
 .knowledge-section { @apply grid scroll-mt-12 grid-cols-[106px_minmax(0,1fr)] py-9; }
+.knowledge-section--markdown .section-copy { grid-column: 1 / -1; }
 .markdown-file-content { @apply min-w-0 text-sm leading-7; }
 .markdown-file-content .ProseMirror { @apply min-h-0 outline-none; }
 .markdown-file-content h1 { @apply mb-5 mt-0 text-2xl font-semibold tracking-tight; }
