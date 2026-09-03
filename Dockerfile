@@ -51,6 +51,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/scripts/enrich-enterprise-reports
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/enterprise-research-profiles.mjs ./scripts/enterprise-research-profiles.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/refresh-market-data.mjs ./scripts/refresh-market-data.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/refresh-analyst-theses.mjs ./scripts/refresh-analyst-theses.mjs
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/import-enterprise-dossiers.mjs ./scripts/import-enterprise-dossiers.mjs
+# 完整企业报告作为公开内容随镜像版本化；不包含凭据或服务器环境文件。
+COPY --from=builder --chown=nextjs:nodejs /app/docs/enterprise-research ./docs/enterprise-research
 # 企业首发范围冻结默认只读；运维显式 --apply/--rollback 时使用同一镜像中的脚本。
 COPY --from=builder --chown=nextjs:nodejs /app/scripts/freeze-enterprise-scope.mjs ./scripts/freeze-enterprise-scope.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/db/migrations ./db/migrations
