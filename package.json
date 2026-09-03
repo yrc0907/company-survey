@@ -18,6 +18,7 @@
     "community-seed": "node scripts/seed-community.mjs",
     "community-seed:contract": "node scripts/community-seed.contract.mjs",
     "enterprise-enrich": "node scripts/enrich-enterprise-reports.mjs",
+    "enterprise:dossier-import": "node scripts/import-enterprise-dossiers.mjs",
     "enterprise-enrich:contract": "node scripts/enterprise-enrichment.contract.mjs",
     "market-refresh": "node scripts/refresh-market-data.mjs",
     "analyst-theses-refresh": "node scripts/refresh-analyst-theses.mjs",

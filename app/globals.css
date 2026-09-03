@@ -260,6 +260,17 @@
 .document-toc a { @apply text-muted-foreground hover:text-primary; }
 .document-body { @apply divide-y; }
 .knowledge-section { @apply grid scroll-mt-12 grid-cols-[106px_minmax(0,1fr)] py-9; }
+.markdown-file-content { @apply min-w-0 text-sm leading-7; }
+.markdown-file-content .ProseMirror { @apply min-h-0 outline-none; }
+.markdown-file-content h1 { @apply mb-5 mt-0 text-2xl font-semibold tracking-tight; }
+.markdown-file-content h2 { @apply mb-3 mt-8 text-xl font-semibold tracking-tight; }
+.markdown-file-content h3 { @apply mb-2 mt-6 text-base font-semibold; }
+.markdown-file-content p { @apply my-3; }
+.markdown-file-content ul, .markdown-file-content ol { @apply my-3 pl-6; }
+.markdown-file-content ul { @apply list-disc; }
+.markdown-file-content ol { @apply list-decimal; }
+.markdown-file-content blockquote { @apply my-4 border-l-2 pl-4 text-muted-foreground; }
+.markdown-file-content pre { @apply my-4 overflow-x-auto rounded-md bg-muted p-4 font-mono text-xs leading-5; }
 .section-gutter { @apply flex flex-col items-start gap-2 pr-5 font-mono text-[10px] text-muted-foreground; }
 .evidence-state { @apply inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-sans text-[10px]; }
 .evidence-state--fact { @apply border-emerald-200 bg-emerald-50 text-emerald-700; }

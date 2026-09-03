@@ -2,6 +2,8 @@
 
 import { ArrowLeft, BookOpen, Bot, CheckCircle2, ChevronRight, CircleAlert, Download, Eye, Files, GitBranch, GitMerge, GitPullRequest, History, Loader2, LogIn, MessageCircle, Network, PanelLeftClose, Search, Share2, Star, Users } from "lucide-react";
 import { getSession } from "next-auth/react";
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useMemo, useState } from "react";
 
 import { CollaborationPanel } from "@/components/platform/collaboration-panel";
@@ -21,6 +23,7 @@ import type { FileCommandId } from "@/lib/ui/file-commands";
 import type { SeedFileNode, SeedProject, SeedSection } from "@/lib/ui/platform-seed";
 import { formatCompactCount } from "@/lib/ui/platform-format";
 import { projectFileView } from "@/lib/ui/project-file-content";
+import { contentToTiptap } from "@/lib/services/tiptap-document";
 import type { BranchSummary } from "@/lib/domain/collaboration";
 
 interface ProjectWorkspaceProps {
@@ -59,6 +62,13 @@ function findNode(nodes: SeedFileNode[], nodeId: string): SeedFileNode | undefin
     if (nested) return nested;
   }
   return undefined;
+}
+
+/** 将根级 Markdown 文件转换为只读 TipTap 文档，保留标题、列表、引用和代码块结构。 */
+function MarkdownFileContent({ content, nodeId }: { content: string; nodeId: string }) {
+  const editor = useEditor({ extensions: [StarterKit], content: contentToTiptap(content, nodeId), editable: false, immediatelyRender: false });
+  if (!editor) return <div className="markdown-file-content" aria-busy="true">正在加载 Markdown…</div>;
+  return <div className="markdown-file-content"><EditorContent editor={editor} aria-label="Markdown 报告正文" /></div>;
 }
 
 function ProjectDocument({ project, activeNodeId, viewCount, starCount, commentCount, onActivity, onCommentSection, onSelectNode }: { project: SeedProject; activeNodeId: string; viewCount: number; starCount: number; commentCount?: number; onActivity?: (message: string) => void; onCommentSection?: (anchor: CommentAnchor) => void; onSelectNode?: (nodeId: string) => void }) {
@@ -110,7 +120,7 @@ function ProjectDocument({ project, activeNodeId, viewCount, starCount, commentC
           <div className="section-gutter"><span>{String(index + 1).padStart(2, "0")}</span><span className={`evidence-state evidence-state--${section.state}`}>{section.state === "fact" ? <CheckCircle2 size={12} /> : <CircleAlert size={12} />}{evidenceCopy[section.state]}</span></div>
           <div className="section-copy">
             <h2>{section.heading}</h2>
-            {section.paragraphs.map((paragraph, paragraphIndex) => <p key={paragraphIndex}>{paragraph}</p>)}
+            {activeFile?.node.id === section.id && /\.(md|markdown)$/i.test(activeFile.node.name) ? <MarkdownFileContent content={section.paragraphs.join("\n\n")} nodeId={section.nodeId ?? section.id} /> : section.paragraphs.map((paragraph, paragraphIndex) => <p key={paragraphIndex}>{paragraph}</p>)}
             <div className="section-attribution" title={`${section.contributor.displayName} 提交，通过 MR #${section.mergeRequest}，由 ${section.reviewer} 审核`}>
               <UserAvatar name={section.contributor.displayName} size="sm" />
               <span><strong>{section.contributor.displayName}</strong> 贡献{section.mergeRequest ? <> · MR #{section.mergeRequest}</> : null} · {section.reviewer}审核</span>
