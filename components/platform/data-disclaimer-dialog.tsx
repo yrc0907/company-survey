@@ -20,7 +20,7 @@ export function DataDisclaimerDialog({ open, onOpenChange }: DataDisclaimerDialo
           </div>
           <DialogTitle className="text-xl">数据采集与使用说明</DialogTitle>
           <DialogDescription className="mt-2 leading-6">
-            所有数据来自 BOSS 公开可访问范围内的销售职位联网采集与 AI 自动比对，优先选取高净值职位。服务器在香港，更新会有延迟，欢迎各位联系增加岗位信息，具体岗位细节请各位自行判断。
+            所有数据来自 AI 自动爬取 BOSS 公开可访问范围内的销售职位，并进行联网采集与比对，不涉及任何对企业的评价或判断。服务器在香港，更新会有延迟，欢迎各位联系增加岗位信息，具体岗位细节请各位自行判断。
           </DialogDescription>
         </div>
         <div className="flex items-start gap-3 px-6 py-5 text-sm leading-6 text-muted-foreground">
