@@ -24,6 +24,7 @@ const dossiers = [
   ["project-icourt", "北京新橙科技（iCourt）", "北京新橙科技（iCourt）-2026独立研究.md"],
   ["project-yuhe", "语核（上海）科技有限公司", "语核（上海）科技-2026独立研究.md"],
   ["project-digitalchina", "神州数码", "神州数码-2026独立研究.md"],
+  ["project-bytedance-food-sales", "字节跳动抖音生活服务餐饮大客户销售", "字节跳动抖音生活服务餐饮大客户销售-2026独立研究.md"],
 ];
 
 const now = new Date().toISOString();
@@ -123,6 +124,62 @@ async function ensureDigitalChinaProject(tx) {
   await tx`INSERT INTO project_stats(project_id,unique_readers,updated_at) VALUES ('project-digitalchina',0,${createdAt}) ON CONFLICT (project_id) DO NOTHING`;
 }
 
+/** 为字节跳动餐饮大客户销售研究建立公开项目；岗位和平台能力按证据等级保留，未披露经营数据不作编造。 */
+async function ensureByteDanceFoodSalesProject(tx) {
+  const projectId = "project-bytedance-food-sales";
+  if ((await tx`SELECT id FROM knowledge_project WHERE id=${projectId} LIMIT 1`).length) return;
+  const createdAt = "2026-09-04T00:00:00Z";
+  await tx`INSERT INTO company (id,name,kind,summary,tags,created_at,updated_at)
+    VALUES ('company-bytedance-food-sales','字节跳动抖音生活服务餐饮大客户销售','company','基于字节跳动官方招聘页、抖音来客官方商家平台和公开企业资料，研究餐饮到店服务大客户销售、全国连锁品牌经营、平台广告与交易协同及行业解决方案能力。',ARRAY['字节跳动','抖音生活服务','餐饮','大客户销售','本地生活']::TEXT[],${createdAt},${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO report (id,company_id,title,status,current_version,created_at,updated_at)
+    VALUES ('report-bytedance-food-sales','company-bytedance-food-sales','字节跳动抖音生活服务餐饮大客户销售：2026 独立研究','draft',1,${createdAt},${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO knowledge_project (id,owner_user_id,slug,title,summary,visibility,status,license,default_branch_name,published_at,created_at,updated_at,category,tags,verification,verification_note)
+    VALUES ('project-bytedance-food-sales','u-yu','bytedance-food-sales','字节跳动抖音生活服务餐饮大客户销售：2026 独立研究','基于字节跳动官方招聘页、抖音来客官方商家平台和公开企业资料，研究餐饮到店服务大客户销售、全国连锁品牌经营、平台广告与交易协同及行业解决方案能力。','public','published','cc-by-4.0','main',${createdAt},${createdAt},${createdAt},'企业',ARRAY['字节跳动','抖音生活服务','餐饮','大客户销售','本地生活']::TEXT[],'needs_verification','岗位职责和平台工具来自官方公开资料；薪酬、提成、KPI、客户合同、实际 GMV、续投率、数据权限和团队组织结构未公开，需面试或原始业务材料核验。') ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO project_member(project_id,user_id,role,created_at) VALUES ('project-bytedance-food-sales','u-yu','owner',${createdAt}) ON CONFLICT (project_id,user_id) DO NOTHING`;
+  await tx`INSERT INTO knowledge_branch(id,project_id,name,owner_user_id,is_protected,status,version,created_at,updated_at) VALUES ('branch-bytedance-food-sales-main','project-bytedance-food-sales','main',NULL,TRUE,'active',1,${createdAt},${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO knowledge_commit(id,project_id,branch_id,parent_commit_id,author_user_id,message,ai_assisted,created_at) VALUES ('commit-bytedance-food-sales-public-v1','project-bytedance-food-sales','branch-bytedance-food-sales-main',NULL,'u-yu','建立字节跳动抖音生活服务餐饮大客户销售公开研究项目与证据边界',FALSE,${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`UPDATE knowledge_branch SET head_commit_id='commit-bytedance-food-sales-public-v1',version=GREATEST(version,1),updated_at=${createdAt} WHERE id='branch-bytedance-food-sales-main'`;
+  const sources = [
+    {
+      id: 'source-bytedance-food-sales-job-v1',
+      title: '字节跳动官方招聘：大客户销售-抖音生活服务（A117919）',
+      kind: 'web',
+      url: 'https://jobs.bytedance.com/experienced/position/7670012668195588357/detail',
+      snapshot: '字节跳动官方招聘页岗位“大客户销售-抖音生活服务”，地点广州，正式岗位，职位 ID A117919。职责涉及到店服务大客户、营销策略和广告方案、商品与门店经营效果、全国综合连锁品牌规划及资源整合；任职要求包括大客户销售或相关行业经验、客户开拓服务、谈判、表达和市场洞察。岗位收入、提成、客户名单和 KPI 权重未公开。',
+      evidence: 'fact',
+      type: 'official_recruitment',
+    },
+    {
+      id: 'source-bytedance-food-sales-life-v1',
+      title: '抖音来客官方商家平台',
+      kind: 'web',
+      url: 'https://life.douyin.com/',
+      snapshot: '抖音生活服务官方商家经营平台页面描述商家可免费入驻开店，并提供上品、经营、履约、促活、营销等工具，支持达人推广、商家直播、抖音本地推、商家优惠券和服务团队运营指导。平台流量、订单和收益效果属于企业自述，不等同于独立审计结果。',
+      evidence: 'company_claim',
+      type: 'official_product_page',
+    },
+    {
+      id: 'source-bytedance-company-v1',
+      title: '字节跳动官方企业站',
+      kind: 'web',
+      url: 'https://www.bytedance.com/zh/',
+      snapshot: '字节跳动官方企业站介绍公司成立于 2012 年，产品与服务覆盖抖音、今日头条、西瓜视频、飞书等，并面向多个国家和地区提供产品与服务。该描述为企业官网内容。',
+      evidence: 'company_claim',
+      type: 'official_company_site',
+    },
+  ];
+  for (const source of sources) {
+    const sourceHash = hash(source.snapshot);
+    await tx`INSERT INTO source (id,report_id,title,kind,url,language,state,captured_at,content_hash,snapshot,evidence_state,metadata)
+      VALUES (${source.id},'report-bytedance-food-sales',${source.title},${source.kind},${source.url},'zh','active',${createdAt},${sourceHash},${source.snapshot},${source.evidence},${JSON.stringify({ sourceType: source.type, publisher: '字节跳动', capturedAt: createdAt })}::jsonb) ON CONFLICT (id) DO NOTHING`;
+    await tx`INSERT INTO source_chunk (id,source_id,parent_section_id,heading_path,position,page,start_offset,end_offset,text,contextual_prefix,content_hash)
+      VALUES (${`${source.id}-chunk`},${source.id},NULL,ARRAY['字节跳动餐饮销售研究','官方来源']::TEXT[],1,NULL,0,${source.snapshot.length},${source.snapshot},${`官方来源快照；证据状态 ${source.evidence}。`},${sourceHash}) ON CONFLICT (id) DO NOTHING`;
+    await tx`INSERT INTO citation (id,report_id,section_id,source_id,chunk_id,quote,evidence_state,created_at)
+      VALUES (${`${source.id}-citation`},'report-bytedance-food-sales',NULL,${source.id},${`${source.id}-chunk`},${source.title},${source.evidence},${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  }
+  await tx`INSERT INTO project_stats(project_id,unique_readers,updated_at) VALUES ('project-bytedance-food-sales',0,${createdAt}) ON CONFLICT (project_id) DO NOTHING`;
+}
+
 async function importDossier(tx, [projectId, company, fileName]) {
   const markdown = await readFile(join(dossierDir, fileName), "utf8");
   const contentHash = hash(markdown);
@@ -211,6 +268,7 @@ async function main() {
       await ensureIcourtProject(tx);
       await ensureYuheProject(tx);
       await ensureDigitalChinaProject(tx);
+      await ensureByteDanceFoodSalesProject(tx);
       for (const dossier of dossiers) {
         try {
           const outcome = await importDossier(tx, dossier);
