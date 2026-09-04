@@ -23,6 +23,7 @@ const dossiers = [
   ["project-muyuan", "牧原食品", "牧原食品-2026独立研究.md"],
   ["project-icourt", "北京新橙科技（iCourt）", "北京新橙科技（iCourt）-2026独立研究.md"],
   ["project-yuhe", "语核（上海）科技有限公司", "语核（上海）科技-2026独立研究.md"],
+  ["project-digitalchina", "神州数码", "神州数码-2026独立研究.md"],
 ];
 
 const now = new Date().toISOString();
@@ -93,6 +94,33 @@ async function ensureYuheProject(tx) {
   await tx`INSERT INTO source_chunk(id,source_id,parent_section_id,heading_path,position,page,start_offset,end_offset,text,contextual_prefix,content_hash) VALUES ('chunk-yuhe-recruitment-v1','source-yuhe-recruitment-v1',NULL,ARRAY['招聘截图','岗位与培养']::TEXT[],1,NULL,0,${snapshot.length},${snapshot},'用户提供截图；证据状态 needs_verification。',${sourceHash}) ON CONFLICT (id) DO NOTHING`;
   await tx`INSERT INTO citation(id,report_id,section_id,source_id,chunk_id,quote,evidence_state,created_at) VALUES ('citation-yuhe-recruitment-v1','report-yuhe',NULL,'source-yuhe-recruitment-v1','chunk-yuhe-recruitment-v1','用户提供的语核招聘截图。','needs_verification',${createdAt}) ON CONFLICT (id) DO NOTHING`;
   await tx`INSERT INTO project_stats(project_id,unique_readers,updated_at) VALUES ('project-yuhe',0,${createdAt}) ON CONFLICT (project_id) DO NOTHING`;
+}
+
+/** 为神州数码建立公开研究项目；金额和经营事实以报告来源为准，不在此处伪造统计。 */
+async function ensureDigitalChinaProject(tx) {
+  const projectId = "project-digitalchina";
+  if ((await tx`SELECT id FROM knowledge_project WHERE id=${projectId} LIMIT 1`).length) return;
+  const createdAt = "2026-09-04T00:00:00Z";
+  await tx`INSERT INTO company (id,name,kind,summary,tags,created_at,updated_at)
+    VALUES ('company-digitalchina','神州数码集团股份有限公司','company','基于 2025 年更正年报与 2026 年半年度报告研究其 IT 分销、国产算力、数云服务、企业 Agent 和 FDE 交付模式。',ARRAY['神州数码','IT分销','国产算力','企业AI','FDE']::TEXT[],${createdAt},${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO report (id,company_id,title,status,current_version,created_at,updated_at)
+    VALUES ('report-digitalchina','company-digitalchina','神州数码：AI 基础设施、数云服务与 FDE 交付研究','draft',1,${createdAt},${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO knowledge_project (id,owner_user_id,slug,title,summary,visibility,status,license,default_branch_name,published_at,created_at,updated_at,category,tags,verification,verification_note)
+    VALUES ('project-digitalchina','u-yu','digital-china-group','神州数码：AI 基础设施、数云服务与 FDE 交付研究','基于神州数码 2025 年更正年报、2026 年半年度报告和公开公告，研究其分销底座、鲲泰算力、神州问学、AI Factory 2.0 与 FDE 模式；宣传效果、合同验收和续费仍按证据等级标注。','public','published','cc-by-4.0','main',${createdAt},${createdAt},${createdAt},'企业',ARRAY['神州数码','IT分销','国产算力','AI Agent','FDE']::TEXT[],'needs_verification','财务和分部数据来自上市公司报告；产品效果、客户验收、续费、底层 RAG 组件和岗位细节仍需第三方或原始合同核验。') ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO project_member(project_id,user_id,role,created_at) VALUES ('project-digitalchina','u-yu','owner',${createdAt}) ON CONFLICT (project_id,user_id) DO NOTHING`;
+  await tx`INSERT INTO knowledge_branch(id,project_id,name,owner_user_id,is_protected,status,version,created_at,updated_at) VALUES ('branch-digitalchina-main','project-digitalchina','main',NULL,TRUE,'active',1,${createdAt},${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO knowledge_commit(id,project_id,branch_id,parent_commit_id,author_user_id,message,ai_assisted,created_at) VALUES ('commit-digitalchina-public-v1','project-digitalchina','branch-digitalchina-main',NULL,'u-yu','建立神州数码公开研究项目与证据边界',FALSE,${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`UPDATE knowledge_branch SET head_commit_id='commit-digitalchina-public-v1',version=GREATEST(version,1),updated_at=${createdAt} WHERE id='branch-digitalchina-main'`;
+  const snapshot = '神州数码 2025 年更正年报与 2026 年半年度报告：上市公司 000034.SZ；披露 IT 分销及增值服务、数云服务及软件、自有品牌算力基础设施产品三类业务，并在 2026 年半年报中明确 AI Factory 2.0 与 FDE（Forward Deployed Engineer）交付模式。金额、日期和业务描述以原始报告为准，产品效果和客户验收按 company_claim 或 needs_verification 处理。';
+  const sourceHash = hash(snapshot);
+  await tx`INSERT INTO source (id,report_id,title,kind,url,language,state,captured_at,content_hash,snapshot,evidence_state,metadata)
+    VALUES ('source-digitalchina-reports-v1','report-digitalchina','神州数码 2025 年更正年报与 2026 年半年度报告','pdf','https://pdf.dfcfw.com/pdf/H2_AN202608280006758525_1.pdf','zh','active',${createdAt},${sourceHash},${snapshot},'fact',${JSON.stringify({ sourceType: 'listed_company_annual_and_interim_reports', annualUrl: 'https://pdf.dfcfw.com/pdf/H2_AN202606121823514897_1.pdf', interimUrl: 'https://pdf.dfcfw.com/pdf/H2_AN202608280006758525_1.pdf', capturedAt: createdAt })}::jsonb)
+    ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO source_chunk (id,source_id,parent_section_id,heading_path,position,page,start_offset,end_offset,text,contextual_prefix,content_hash)
+    VALUES ('chunk-digitalchina-reports-v1','source-digitalchina-reports-v1',NULL,ARRAY['神州数码报告','财务与 FDE']::TEXT[],1,NULL,0,${snapshot.length},${snapshot},'上市公司年报/半年报快照；财务字段为 fact，宣传效果和未披露合同字段保持分层。',${sourceHash}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO citation (id,report_id,section_id,source_id,chunk_id,quote,evidence_state,created_at)
+    VALUES ('citation-digitalchina-reports-v1','report-digitalchina',NULL,'source-digitalchina-reports-v1','chunk-digitalchina-reports-v1','2025 年更正年报与 2026 年半年度报告中的分部财务、AI 基础设施和 FDE 公开披露。','fact',${createdAt}) ON CONFLICT (id) DO NOTHING`;
+  await tx`INSERT INTO project_stats(project_id,unique_readers,updated_at) VALUES ('project-digitalchina',0,${createdAt}) ON CONFLICT (project_id) DO NOTHING`;
 }
 
 async function importDossier(tx, [projectId, company, fileName]) {
@@ -182,6 +210,7 @@ async function main() {
     await sql.begin(async (tx) => {
       await ensureIcourtProject(tx);
       await ensureYuheProject(tx);
+      await ensureDigitalChinaProject(tx);
       for (const dossier of dossiers) {
         try {
           const outcome = await importDossier(tx, dossier);
