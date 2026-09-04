@@ -182,6 +182,29 @@ async function ensureByteDanceFoodSalesProject(tx) {
   await tx`INSERT INTO project_stats(project_id,unique_readers,updated_at) VALUES ('project-bytedance-food-sales',0,${createdAt}) ON CONFLICT (project_id) DO NOTHING`;
 }
 
+/** 将字节跳动报告的官方来源投影到公开文件树，保证来源可点击且与单文件正文并列。 */
+async function ensureByteDanceFoodSalesSourceNodes(tx) {
+  const projectId = "project-bytedance-food-sales";
+  const rows = await tx`SELECT id, owner_user_id FROM knowledge_project WHERE id=${projectId} LIMIT 1`;
+  const project = rows[0];
+  if (!project) return;
+  const branchRows = await tx`SELECT id FROM knowledge_branch WHERE project_id=${projectId} AND name='main' LIMIT 1`;
+  const branch = branchRows[0];
+  if (!branch) return;
+  const sourceNodes = [
+    ["source-bytedance-food-sales-job-v1-node", "字节跳动官方招聘：大客户销售-抖音生活服务（A117919）"],
+    ["source-bytedance-food-sales-life-v1-node", "抖音来客官方商家平台"],
+    ["source-bytedance-company-v1-node", "字节跳动官方企业站"],
+  ];
+  for (const [index, [nodeId, name]] of sourceNodes.entries()) {
+    await tx`INSERT INTO knowledge_node (id,project_id,kind,created_by_user_id,created_at)
+      VALUES (${nodeId},${projectId},'source',${String(project.owner_user_id)},${now}) ON CONFLICT (id) DO NOTHING`;
+    await tx`INSERT INTO knowledge_node_state (project_id,branch_id,node_id,parent_node_id,name,position,deleted_at,updated_at)
+      VALUES (${projectId},${String(branch.id)},${nodeId},NULL,${name},${index + 10},NULL,${now})
+      ON CONFLICT (branch_id,node_id) DO UPDATE SET name=EXCLUDED.name, parent_node_id=NULL, position=EXCLUDED.position, deleted_at=NULL, updated_at=EXCLUDED.updated_at`;
+  }
+}
+
 async function importDossier(tx, [projectId, company, fileName]) {
   const markdown = await readFile(join(dossierDir, fileName), "utf8");
   const contentHash = hash(markdown);
@@ -282,6 +305,7 @@ async function main() {
           result.details.push({ projectId: dossier[0], status: "failed", reason: error instanceof Error ? error.message : "unknown" });
         }
       }
+      await ensureByteDanceFoodSalesSourceNodes(tx);
       if (result.failed) throw new Error(`企业报告导入失败 ${result.failed} 个项目`);
     });
   } finally {
