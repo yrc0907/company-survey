@@ -170,12 +170,14 @@ async function ensureByteDanceFoodSalesProject(tx) {
   ];
   for (const source of sources) {
     const sourceHash = hash(source.snapshot);
+    // 数据库只接受 fact/inference/needs_verification/conflict；企业自述保留在元数据，状态落为待核验。
+    const evidenceState = source.evidence === 'fact' ? 'fact' : 'needs_verification';
     await tx`INSERT INTO source (id,report_id,title,kind,url,language,state,captured_at,content_hash,snapshot,evidence_state,metadata)
-      VALUES (${source.id},'report-bytedance-food-sales',${source.title},${source.kind},${source.url},'zh','active',${createdAt},${sourceHash},${source.snapshot},${source.evidence},${JSON.stringify({ sourceType: source.type, publisher: '字节跳动', capturedAt: createdAt })}::jsonb) ON CONFLICT (id) DO NOTHING`;
+      VALUES (${source.id},'report-bytedance-food-sales',${source.title},${source.kind},${source.url},'zh','active',${createdAt},${sourceHash},${source.snapshot},${evidenceState},${JSON.stringify({ sourceType: source.type, publisher: '字节跳动', capturedAt: createdAt, evidenceLabel: source.evidence })}::jsonb) ON CONFLICT (id) DO NOTHING`;
     await tx`INSERT INTO source_chunk (id,source_id,parent_section_id,heading_path,position,page,start_offset,end_offset,text,contextual_prefix,content_hash)
-      VALUES (${`${source.id}-chunk`},${source.id},NULL,ARRAY['字节跳动餐饮销售研究','官方来源']::TEXT[],1,NULL,0,${source.snapshot.length},${source.snapshot},${`官方来源快照；证据状态 ${source.evidence}。`},${sourceHash}) ON CONFLICT (id) DO NOTHING`;
+      VALUES (${`${source.id}-chunk`},${source.id},NULL,ARRAY['字节跳动餐饮销售研究','官方来源']::TEXT[],1,NULL,0,${source.snapshot.length},${source.snapshot},${`官方来源快照；证据状态 ${evidenceState}（来源标签 ${source.evidence}）。`},${sourceHash}) ON CONFLICT (id) DO NOTHING`;
     await tx`INSERT INTO citation (id,report_id,section_id,source_id,chunk_id,quote,evidence_state,created_at)
-      VALUES (${`${source.id}-citation`},'report-bytedance-food-sales',NULL,${source.id},${`${source.id}-chunk`},${source.title},${source.evidence},${createdAt}) ON CONFLICT (id) DO NOTHING`;
+      VALUES (${`${source.id}-citation`},'report-bytedance-food-sales',NULL,${source.id},${`${source.id}-chunk`},${source.title},${evidenceState},${createdAt}) ON CONFLICT (id) DO NOTHING`;
   }
   await tx`INSERT INTO project_stats(project_id,unique_readers,updated_at) VALUES ('project-bytedance-food-sales',0,${createdAt}) ON CONFLICT (project_id) DO NOTHING`;
 }
