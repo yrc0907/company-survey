@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { LoginGateDialog } from "@/components/platform/login-gate-dialog";
+import { DataDisclaimerDialog } from "@/components/platform/data-disclaimer-dialog";
 import { ProjectWorkspace } from "@/components/platform/project-workspace";
 import { PublicHome } from "@/components/platform/public-home";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ export default function HomePage() {
   const [projectState, setProjectState] = useState<RequestState>("idle");
   const [projectError, setProjectError] = useState("");
   const [loginDialog, setLoginDialog] = useState<{ open: boolean; intent: LoginIntent }>({ open: false, intent: "login" });
+  const [dataDisclaimerOpen, setDataDisclaimerOpen] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,6 +121,7 @@ export default function HomePage() {
     <>
       {projectId && (projectState === "loading" || project) ? project ? <ProjectWorkspace project={project} onBack={closeProject} onRequireLogin={requireLogin} initialCommentId={commentId} initialTab={initialTab} initialChangeId={changeId} /> : <main className="route-state route-state--loading" aria-live="polite" aria-busy="true"><Skeleton className="h-3 w-72" /><Skeleton className="h-3 w-48" /><p>正在读取公开项目…</p></main> : projectId ? <main className="route-state" role="alert"><h1>无法打开这个项目</h1><p>{projectError || "公开项目不存在或已下架。"}</p><Button variant="outline" onClick={closeProject}>返回项目列表</Button></main> : <PublicHome projects={projects} loading={listState === "loading"} error={listError} onRetry={() => window.location.reload()} onOpenProject={openProject} onRequireLogin={requireLogin} />}
       <LoginGateDialog open={loginDialog.open} intent={loginDialog.intent} onOpenChange={(open) => setLoginDialog((current) => ({ ...current, open }))} />
+      <DataDisclaimerDialog open={dataDisclaimerOpen} onOpenChange={setDataDisclaimerOpen} />
     </>
   );
 }
