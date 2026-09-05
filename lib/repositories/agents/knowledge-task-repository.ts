@@ -8,4 +8,6 @@ export interface KnowledgeTaskRepository {
   updateTask(task: KnowledgeTask): Promise<void>;
   appendEvent(event: KnowledgeTaskEvent): Promise<void>;
   listEvents(taskId: string, ownerUserId: string): Promise<KnowledgeTaskEvent[]>;
+  claimTask(taskId: string, ownerUserId: string, leaseOwner: string, leaseMs: number): Promise<KnowledgeTask | null>;
+  claimNextQueued(leaseOwner: string, leaseMs: number): Promise<KnowledgeTask | null>;
 }

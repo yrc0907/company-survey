@@ -306,7 +306,7 @@
 .project-activity-event__target { @apply shrink-0 pt-1 font-mono text-[10px] text-muted-foreground; }
 
 /* AI assistant */
-.project-assistant { grid-area: assistant; @apply grid min-h-0 grid-rows-[56px_42px_minmax(0,1fr)_auto] border-l bg-muted/20; }
+.project-assistant { grid-area: assistant; @apply grid min-h-0 grid-rows-[56px_42px_auto_minmax(0,1fr)_auto] border-l bg-muted/20; }
 .assistant-header { @apply flex items-center justify-between border-b px-3; }
 .assistant-title { @apply grid gap-0.5; }
 .assistant-title > span { @apply flex items-center gap-1.5 text-sm font-semibold; }

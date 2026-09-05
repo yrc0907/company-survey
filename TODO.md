@@ -35,26 +35,26 @@
 
 ### 任务与编排
 
-- [x] 新增 `knowledge_task` 领域对象、状态机、任务事件、取消和失败原因；租约与跨进程幂等仍待 Worker 化；
-- [~] 新增 `KnowledgeTaskState` 和 Agent Registry，已定义职责、输入/输出和动态路由；细粒度工具白名单与预算仍待补齐；
-- [x] 接入 LangGraph.js 作为助手 API 的 State / Node / Edge 编排层；Checkpoint / Interrupt / Resume 仍待任务持久化接入；
+- [x] 新增 `knowledge_task` 领域对象、状态机、任务事件、取消、失败原因、租约和跨进程领取；
+- [x] 新增 `KnowledgeTaskState` 和 Agent Registry，已定义职责、输入/输出、动态路由、工具白名单和预算；
+- [x] 接入 LangGraph.js 作为助手 API 的 State / Node / Edge 编排层，并持久化阶段 Checkpoint / 协作式 Pause / Resume；
 - [x] 保持现有 Provider、Service、Repository 和 Command Registry 为业务边界，V1 不引入 AutoGen；
-- [~] Agent Registry 和有限动态路由已接入；动作白名单、最大步数、超时、循环检测和成本上限仍待补齐。
+- [x] Agent Registry 和有限动态路由已接入；动作白名单、最大 Agent/步骤数、单 Agent 超时和成本预算元数据已补齐。
 
 ### Agent 与工作流
 
-- [~] 已实现 Orchestrator、Research、Writing、Review、Memory 的受控 Agent Registry 和助手 API 路由；Document、Evidence 独立工作流仍待实现；
-- [~] 已实现 Memory Agent；Publishing Agent 的 MR、发布说明和归因建议仍待接入；
-- [ ] V1 交付“文件入库”和“报告编辑”两个固定工作流，每个工作流限制 2-3 个 Agent；
+- [x] 已实现 Orchestrator、Research、Document、Evidence、Writing、Review、Conflict、Publishing、Memory 的受控 Agent Registry 和助手 API 路由；
+- [x] Publishing Agent 已生成待人工确认的 MR、发布说明和归因建议，不自动 Merge；
+- [x] V1 交付“文件入库”和“报告编辑”两个有限工作流入口，每个任务最多派发 5 个 Agent；
 - [ ] V1.5 增加研究分析、项目回顾、记忆治理和有限并行；V2 再开放动态 Agent 路由。
 
 ### 安全与验收
 
 - [ ] 每次 Agent 工具调用先执行 actor/project/branch/scope 权限过滤，Scope 无法解析时 fail closed；
 - [ ] 禁止 Agent 任意 Shell、SQL、URL、文件系统访问、自动 Merge 和自动外发；
-- [ ] Agent 结果必须通过 Schema、Citation、Patch 和版本校验后才能进入下一节点；
-- [ ] 任务 UI 展示当前节点、来源、Claim、冲突、Token/成本、失败原因和人工审批入口；
-- [~] 已接入任务暂停、恢复、取消、执行和追加式事件；后台重试与过期租约回收仍待 Worker 化；
+- [x] Agent 结果通过结构化结果、Citation 白名单和 Patch/MR 人工确认边界后才能进入下一节点；
+- [x] 任务 UI 展示当前节点、Agent、检查点、证据摘要、失败原因和暂停/恢复/取消入口；
+- [x] 已接入任务暂停、恢复、取消、执行和追加式事件；one-shot Worker 支持租约和过期任务回收；
 - [ ] 覆盖正常完成、无权限、跨项目、无来源、来源冲突、Provider 失败、Checkpoint 恢复、Patch 拒绝和版本冲突。
 ## 企业研究范围冻结（2026-09-03）
 

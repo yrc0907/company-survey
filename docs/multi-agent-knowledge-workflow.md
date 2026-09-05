@@ -1,6 +1,6 @@
 # Multi-Agent Knowledge Workflow
 
-> 版本：0.1；状态：Multi-Agent 编排 MVP 已接入助手 API，任务持久化、人工中断和完整工作流仍在后续交付。
+> 版本：0.2；状态：受控 Multi-Agent、持久化任务、租约 Worker、检查点和任务面板已接入；正式写入仍必须人工确认。
 
 ## 1. 目标
 
@@ -66,7 +66,10 @@ Workflow State 只保存任务运行状态和领域对象引用；正式事实�
 - Agent 默认不共享完整上下文，只传结构化 State 和引用 ID。
 - Agent 不得任意 Shell、SQL、URL、文件系统访问、自动 Merge 或自动外发。
 - 所有写入通过统一 Command Registry、权限服务和追加式审计执行。
-- 当前已交付助手 API 的 LangGraph StateGraph、Agent Registry、有限动态路由、并行子 Agent 发现结果，以及 `KnowledgeTask` 的创建、查询、执行、暂停、恢复、取消和事件记录；文件入库、报告编辑的完整固定工作流仍按后续阶段扩展。
+- 当前已交付助手 API 的 LangGraph StateGraph、Agent Registry、有限动态路由、并行子 Agent 发现结果，以及 `KnowledgeTask` 的创建、查询、执行、暂停、恢复、取消和事件记录；文档、证据、冲突和发布 Agent 会按目标加入对应工作流。
+- 后台执行使用 PostgreSQL `FOR UPDATE SKIP LOCKED` + 任务租约；`pnpm ai:tasks` 是 one-shot Worker。租约过期可重新领取，重复领取和晚到结果不会覆盖任务终态。
+- 任务状态保存 `project_context`、`dispatch_agents`、`synthesize` 和 `human_approval` 检查点；暂停采用协作式中断，恢复仍只能从服务端保存的结构化状态继续，不接受客户端伪造节点。
+- 每个 Agent 只能使用 Registry 声明的工具白名单，并受最大 Agent 数、最大步骤数和单 Agent 超时约束；模型只接收 Context Projection 和结构化发现。
 - 验收覆盖正常完成、无权限、跨项目、无来源、来源冲突、Provider 失败、Checkpoint 恢复、Patch 拒绝和版本冲突。
 
 ## 7. 明确不做

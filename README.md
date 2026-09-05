@@ -15,7 +15,7 @@
 - 基于 active 来源的 PostgreSQL FTS + 可选 pgvector Dense RRF 检索，返回父章节、相邻 Chunk 和显式词法/语义降级状态；无扩展、未迁移或能力探测失败时仍使用确定性关键词降级；
 - 有界 GraphRAG-lite 查询：关系边必须来自 active 来源，深度与返回路径数受限；
 - Context Projection：选区只传选区，检索问题只传当前报告的精简证据和规则；
-- LangGraph.js 驱动的受控 Multi-Agent 助手与持久化 Knowledge Task API，支持动态 Agent 路由、任务事件、暂停/恢复/取消和 owner 隔离；
+- LangGraph.js 驱动的受控 Multi-Agent 助手与持久化 Knowledge Task API，支持 Research/Document/Evidence/Writing/Review/Conflict/Publishing/Memory 动态路由、检查点、租约 Worker、暂停/恢复/取消和 owner 隔离；
 - 模型未配置或请求失败时显式降级，不伪造回答；
 - Docker Compose、Caddy Basic Auth、HTTPS 配置和香港 ECS 4C8G 资源限制。
 - 五家冻结企业的独立研究档案：每家均有 Yu 的核心判断、事实/推断/待核验分层、产品/客户/商业模式、竞争、政策、风险、合作与下一步核验问题；研究正文不是单段官网摘要，缺少可靠证据的数值不会被补造。
@@ -23,7 +23,7 @@
 尚未实现或未验证：
 
 - URL 来源刷新已接入 owner 鉴权路由和 one-shot Worker；私有文件上传与解析 Worker 已支持 Markdown/TXT、原生文字 PDF、DOCX，图片在显式开启视觉 Provider 后可生成 `needs_review` 待校对草稿，扫描 PDF 仍安全降级；
-- pgvector 持久化已提供可选迁移、能力探测、版本/哈希校验、权限过滤和确定性降级；大规模 ANN 索引重建、后台 Worker 与 Golden Set 检索评测仍未完成；
+- pgvector 持久化已提供可选迁移、能力探测、版本/哈希校验、权限过滤和确定性降级；知识任务 Worker 使用 PostgreSQL 租约领取，不引入 AutoGen、RabbitMQ 或 Temporal；
 - 企业 CRUD、图谱写入（公开关系图 API/UI 已实现）、版本 Diff/回滚、Markdown/PDF 导出；
 - 应用内会话认证已实现；旧版 Research API 仍依赖 Caddy Basic Auth，公开平台写操作依赖 Auth.js/RBAC；
 - 备份/发布/健康检查脚本和安全组只读计划已加入；公网 HTTPS 已验收。异机恢复、磁盘/流量告警以及 SSH/RDP 安全组收紧仍待人工变更和演练。

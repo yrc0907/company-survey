@@ -378,3 +378,14 @@ ASSET_INGESTION_DRAIN=true ASSET_INGESTION_MAX_JOBS=100 \
 ```
 
 该镜像使用与仓库一致的 `tsx` 运行时和 `scripts/run-asset-ingestion-worker.ts`，通过 Compose 内网访问 PostgreSQL，并以 ECS RAM Role 读取私有 OSS；无任务时正常退出，不监听端口。默认 `docker compose up -d` 不构建、不启动此服务，不增加应用常驻内存。Worker 会在迁移 `008_asset_ingestion_worker.sql` 成功后才可运行。
+
+### 知识任务 Worker
+
+Multi-Agent 任务可先以 `execution=queue` 创建，再由受控 one-shot Worker 领取：
+
+```bash
+pnpm db:migrate
+pnpm ai:tasks
+```
+
+`035_ai_knowledge_task_workflow.sql` 为任务增加 workflow、checkpoint 和 lease 字段；多个 Worker 使用 PostgreSQL `FOR UPDATE SKIP LOCKED`，过期租约可重试，不能重复领取同一任务。建议使用 cron/systemd timer 调度，不将 Worker 暴露为 HTTP 接口。任务 Agent 只返回结构化建议，Patch、MR、合并和发布仍需当前用户/维护者通过既有权限与审核流程确认。

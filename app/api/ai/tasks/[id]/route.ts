@@ -48,7 +48,7 @@ export async function PATCH(request: Request, context: { params: { id: string } 
         : body.action === "execute"
           ? await service.execute(context.params.id, actor.userId)
           : null;
-    if (!task && body.action !== "execute") return json({ error: "任务不存在", code: "NOT_FOUND" }, { status: 404 });
+    if (!task) return json({ error: "任务不存在或当前状态不可执行", code: "NOT_FOUND" }, { status: 404 });
     return json({ task }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     if (error instanceof AuthenticationRequiredError) return authErrorResponse(error);

@@ -40,4 +40,25 @@ export class InMemoryKnowledgeTaskRepository implements KnowledgeTaskRepository 
     if (!(await this.getTask(taskId, ownerUserId))) return [];
     return structuredClone(this.events.get(taskId) ?? []);
   }
+
+  public async claimTask(taskId: string, ownerUserId: string, leaseOwner: string, leaseMs: number): Promise<KnowledgeTask | null> {
+    const task = await this.getTask(taskId, ownerUserId);
+    if (!task || !isClaimable(task)) return null;
+    return this.claim(task, leaseOwner, leaseMs);
+  }
+
+  public async claimNextQueued(leaseOwner: string, leaseMs: number): Promise<KnowledgeTask | null> {
+    const task = Array.from(this.tasks.values()).sort((left, right) => left.createdAt.localeCompare(right.createdAt)).find(isClaimable);
+    return task ? this.claim(task, leaseOwner, leaseMs) : null;
+  }
+
+  private claim(task: KnowledgeTask, leaseOwner: string, leaseMs: number): KnowledgeTask {
+    const claimed = structuredClone({ ...task, status: "running" as const, currentNode: "project_context" as const, leaseOwner, leaseExpiresAt: new Date(Date.now() + leaseMs).toISOString(), updatedAt: new Date().toISOString() });
+    this.tasks.set(task.id, claimed);
+    return structuredClone(claimed);
+  }
+}
+
+function isClaimable(task: KnowledgeTask): boolean {
+  return (task.status === "queued" || task.status === "paused") || (task.status === "running" && Boolean(task.leaseExpiresAt && Date.parse(task.leaseExpiresAt) <= Date.now()));
 }
