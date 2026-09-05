@@ -35,16 +35,16 @@
 
 ### 任务与编排
 
-- [ ] 新增 `knowledge_task` 领域对象、状态机、幂等键、租约、重试、取消和失败原因；
-- [ ] 新增 `KnowledgeTaskState` 和 Agent Registry，定义职责、输入/输出 Schema、工具白名单、Scope 和预算；
+- [x] 新增 `knowledge_task` 领域对象、状态机、任务事件、取消和失败原因；租约与跨进程幂等仍待 Worker 化；
+- [~] 新增 `KnowledgeTaskState` 和 Agent Registry，已定义职责、输入/输出和动态路由；细粒度工具白名单与预算仍待补齐；
 - [x] 接入 LangGraph.js 作为助手 API 的 State / Node / Edge 编排层；Checkpoint / Interrupt / Resume 仍待任务持久化接入；
-- [ ] 保持现有 Provider、Service、Repository 和 Command Registry 为业务边界，V1 不引入 AutoGen；
+- [x] 保持现有 Provider、Service、Repository 和 Command Registry 为业务边界，V1 不引入 AutoGen；
 - [~] Agent Registry 和有限动态路由已接入；动作白名单、最大步数、超时、循环检测和成本上限仍待补齐。
 
 ### Agent 与工作流
 
 - [~] 已实现 Orchestrator、Research、Writing、Review、Memory 的受控 Agent Registry 和助手 API 路由；Document、Evidence 独立工作流仍待实现；
-- [ ] 实现 `Memory Agent` 和 `Publishing Agent`，输出记忆建议、MR、发布说明和归因建议；
+- [~] 已实现 Memory Agent；Publishing Agent 的 MR、发布说明和归因建议仍待接入；
 - [ ] V1 交付“文件入库”和“报告编辑”两个固定工作流，每个工作流限制 2-3 个 Agent；
 - [ ] V1.5 增加研究分析、项目回顾、记忆治理和有限并行；V2 再开放动态 Agent 路由。
 
@@ -54,7 +54,7 @@
 - [ ] 禁止 Agent 任意 Shell、SQL、URL、文件系统访问、自动 Merge 和自动外发；
 - [ ] Agent 结果必须通过 Schema、Citation、Patch 和版本校验后才能进入下一节点；
 - [ ] 任务 UI 展示当前节点、来源、Claim、冲突、Token/成本、失败原因和人工审批入口；
-- [ ] 接入暂停、恢复、取消、重试和过期租约回收；
+- [~] 已接入任务暂停、恢复、取消、执行和追加式事件；后台重试与过期租约回收仍待 Worker 化；
 - [ ] 覆盖正常完成、无权限、跨项目、无来源、来源冲突、Provider 失败、Checkpoint 恢复、Patch 拒绝和版本冲突。
 ## 企业研究范围冻结（2026-09-03）
 

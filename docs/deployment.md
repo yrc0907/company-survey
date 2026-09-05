@@ -1,6 +1,6 @@
 # 个人服务器部署
 
-> 当前实例：Ubuntu 22.04、4 vCPU、8 GiB 内存、40 GiB SSD、100 Mbps 峰值带宽。本文只覆盖个人调研工作台，不部署本地大模型、OCR、Neo4j、Redis、RabbitMQ、Temporal、Kubernetes 或多 Agent。
+> 当前实例：Ubuntu 22.04、4 vCPU、8 GiB 内存、40 GiB SSD、100 Mbps 峰值带宽。本文只覆盖个人调研工作台；Multi-Agent 编排运行在 Next.js 应用内，不部署本地大模型、OCR、Neo4j、Redis、RabbitMQ、Temporal 或 Kubernetes。
 
 ## 1. 部署结构与资源边界
 

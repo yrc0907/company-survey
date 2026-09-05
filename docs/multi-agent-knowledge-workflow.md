@@ -66,7 +66,7 @@ Workflow State 只保存任务运行状态和领域对象引用；正式事实�
 - Agent 默认不共享完整上下文，只传结构化 State 和引用 ID。
 - Agent 不得任意 Shell、SQL、URL、文件系统访问、自动 Merge 或自动外发。
 - 所有写入通过统一 Command Registry、权限服务和追加式审计执行。
-- 当前已交付助手 API 的 LangGraph StateGraph、Agent Registry、有限动态路由和并行子 Agent 发现结果；下一步交付持久化 `KnowledgeTask`，再扩展“文件入库”和“报告编辑”两个固定工作流；V1.5 增加研究分析、项目回顾和记忆治理；V2 再开放更强的动态 Orchestrator。
+- 当前已交付助手 API 的 LangGraph StateGraph、Agent Registry、有限动态路由、并行子 Agent 发现结果，以及 `KnowledgeTask` 的创建、查询、执行、暂停、恢复、取消和事件记录；文件入库、报告编辑的完整固定工作流仍按后续阶段扩展。
 - 验收覆盖正常完成、无权限、跨项目、无来源、来源冲突、Provider 失败、Checkpoint 恢复、Patch 拒绝和版本冲突。
 
 ## 7. 明确不做
