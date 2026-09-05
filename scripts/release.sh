@@ -51,6 +51,8 @@ fi
 cd "$PROJECT_DIR"
 [[ -f "$ENV_FILE" ]] || { echo "缺少环境文件：$ENV_FILE" >&2; exit 1; }
 command -v docker >/dev/null 2>&1 || { echo "未找到 Docker CLI。" >&2; exit 1; }
+# 仅注入已检出的提交哈希，不读取 .env 内容；公网 healthz 可据此证明流量已切换到本次发布。
+export APP_REVISION="$(git rev-parse --verify HEAD 2>/dev/null || echo unknown)"
 
 # .env 可能含数据库和模型密钥；拒绝组/其他用户可读写，避免发布时读取被篡改的配置。
 if command -v stat >/dev/null 2>&1; then
@@ -102,7 +104,7 @@ fi
 
 bash "${PROJECT_DIR}/scripts/health-check.sh" --project-dir "$PROJECT_DIR" --env-file "$ENV_FILE" --skip-external
 if [[ -n "$PUBLIC_URL" ]]; then
-  bash "${PROJECT_DIR}/scripts/health-check.sh" --project-dir "$PROJECT_DIR" --env-file "$ENV_FILE" --url "$PUBLIC_URL"
+  bash "${PROJECT_DIR}/scripts/health-check.sh" --project-dir "$PROJECT_DIR" --env-file "$ENV_FILE" --url "$PUBLIC_URL" --expected-revision "$APP_REVISION"
 fi
 
 printf 'completed_at_utc=%s\n' "$(date -u +%Y%m%dT%H%M%SZ)" >> "$release_record"

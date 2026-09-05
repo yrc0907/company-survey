@@ -56,6 +56,8 @@ services:
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
       PORT: "3000"
+      # 发布脚本从当前 Git 提交注入；健康检查可验证公网流量是否已切到新镜像。
+      APP_REVISION: ${APP_REVISION:-unknown}
       # 限制 Node 堆，给 PostgreSQL、Caddy 与系统保留内存。
       NODE_OPTIONS: --max-old-space-size=384
       UPLOAD_DIR: ${UPLOAD_DIR:-/app/data/uploads}

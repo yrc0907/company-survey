@@ -9,6 +9,7 @@ PROJECT_DIR="$(pwd)"
 ENV_FILE=".env"
 PUBLIC_URL=""
 SKIP_EXTERNAL=false
+EXPECTED_REVISION=""
 
 usage() {
   cat <<'USAGE'
@@ -18,6 +19,8 @@ usage() {
   --project-dir DIR   Compose 项目目录（默认当前目录）
   --env-file FILE     环境文件路径（默认 .env）
   --url URL           公网基址，例如 https://research.webyrc.com
+  --expected-revision SHA
+                      验证 /healthz 的 revision；仅接受 Git 十六进制提交号
   --skip-external     只检查容器内服务
   -h, --help          显示帮助
 USAGE
@@ -28,11 +31,17 @@ while [[ $# -gt 0 ]]; do
     --project-dir) PROJECT_DIR="$2"; shift 2 ;;
     --env-file) ENV_FILE="$2"; shift 2 ;;
     --url) PUBLIC_URL="$2"; shift 2 ;;
+    --expected-revision) EXPECTED_REVISION="$2"; shift 2 ;;
     --skip-external) SKIP_EXTERNAL=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "未知参数：$1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+if [[ -n "$EXPECTED_REVISION" && ! "$EXPECTED_REVISION" =~ ^[0-9a-fA-F]{7,64}$ ]]; then
+  echo "--expected-revision 必须是 Git 十六进制提交号。" >&2
+  exit 2
+fi
 
 cd "$PROJECT_DIR"
 [[ -f "$ENV_FILE" ]] || { echo "缺少环境文件：$ENV_FILE" >&2; exit 1; }
@@ -98,7 +107,11 @@ if [[ "$PUBLIC_URL" != https://* ]]; then
   exit 1
 fi
 PUBLIC_URL="${PUBLIC_URL%/}"
-curl --fail --silent --show-error --max-time 15 \
+health_payload="$(curl --fail --silent --show-error --max-time 15 \
   --proto '=https' --proto-redir '=https' \
-  "$PUBLIC_URL/healthz" >/dev/null
+  "$PUBLIC_URL/healthz")"
+if [[ -n "$EXPECTED_REVISION" && "$health_payload" != *"\"revision\":\"$EXPECTED_REVISION\""* ]]; then
+  echo "FAIL external revision: 期望 $EXPECTED_REVISION，healthz 未返回匹配 revision" >&2
+  exit 1
+fi
 echo "PASS external HTTPS $PUBLIC_URL/healthz"
