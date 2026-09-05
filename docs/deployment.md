@@ -385,7 +385,8 @@ Multi-Agent 任务可先以 `execution=queue` 创建，再由受控 one-shot Wor
 
 ```bash
 pnpm db:migrate
-pnpm ai:tasks
+docker compose --profile knowledge-tasks run --build --rm knowledge-tasks
 ```
 
 `035_ai_knowledge_task_workflow.sql` 为任务增加 workflow、checkpoint 和 lease 字段；多个 Worker 使用 PostgreSQL `FOR UPDATE SKIP LOCKED`，过期租约可重试，不能重复领取同一任务。建议使用 cron/systemd timer 调度，不将 Worker 暴露为 HTTP 接口。任务 Agent 只返回结构化建议，Patch、MR、合并和发布仍需当前用户/维护者通过既有权限与审核流程确认。
+本地源码环境也可直接执行 `pnpm ai:tasks`；生产镜像通过 `knowledge-tasks` profile 使用带 `tsx` 的受控 Worker target，不能在精简 `runner` 容器中直接猜测执行路径。

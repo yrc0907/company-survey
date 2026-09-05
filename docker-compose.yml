@@ -185,6 +185,37 @@ services:
           cpus: "0.35"
           memory: 384M
 
+  knowledge-tasks:
+    # Multi-Agent 任务使用同一受控源码/tsx Worker target；默认不常驻，交由 cron/systemd 触发。
+    profiles: ["knowledge-tasks"]
+    image: ${KNOWLEDGE_TASKS_IMAGE:-research-workbench:knowledge-tasks}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ingestion
+    restart: "no"
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=384
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: ["node_modules/.bin/tsx", "scripts/run-knowledge-task-worker.ts"]
+    logging:
+      driver: local
+      options:
+        max-size: "5m"
+        max-file: "2"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+
   postgres:
     image: postgres:16.4-alpine
     restart: unless-stopped
