@@ -70,6 +70,7 @@ Workflow State 只保存任务运行状态和领域对象引用；正式事实�
 - 后台执行使用 PostgreSQL `FOR UPDATE SKIP LOCKED` + 任务租约；`pnpm ai:tasks` 是 one-shot Worker。租约过期可重新领取，重复领取和晚到结果不会覆盖任务终态。
 - 任务状态保存 `project_context`、`dispatch_agents`、`synthesize` 和 `human_approval` 检查点；暂停采用协作式中断，恢复仍只能从服务端保存的结构化状态继续，不接受客户端伪造节点。
 - 每个 Agent 只能使用 Registry 声明的工具白名单，并受最大 Agent 数、最大步骤数和单 Agent 超时约束；模型只接收 Context Projection 和结构化发现。
+- `/api/ai/tasks/[id]/publish` 是 Publishing Agent 的人工确认出口：它复用分支/MR 权限、幂等键和版本边界创建真实 MR，但永远不自动审核、合并或外发。
 - 验收覆盖正常完成、无权限、跨项目、无来源、来源冲突、Provider 失败、Checkpoint 恢复、Patch 拒绝和版本冲突。
 
 ## 7. 明确不做
