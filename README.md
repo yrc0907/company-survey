@@ -95,6 +95,7 @@ Internet
 - [阿里云企业邮箱接入](docs/aliyun-enterprise-email.md)
 - [2026-09-02 验证记录](docs/verification-log-2026-09-02.md)
 - [AI 助手记忆、上下文压缩与会话架构](docs/ai-memory-context-architecture.md)
+- [Multi-Agent 知识工作流](docs/multi-agent-knowledge-workflow.md)
 - [私有 OSS 上传与解析实现边界](docs/assets-upload-implementation.md)
 - [产品规格与当前范围](docs/product-spec.md)
 - [检索、GraphRAG-lite 与上下文投影](docs/retrieval-architecture.md)

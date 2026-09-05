@@ -3,9 +3,8 @@ import { z } from "zod";
 import { errorResponse, json } from "@/lib/api/http";
 import { getAuthenticatedActor } from "@/lib/auth/session";
 import { getResearchRepository } from "@/lib/providers/repository-factory";
-import { getModelProvider } from "@/lib/providers/model-provider";
 import { getAiConfigurationStatus } from "@/lib/services/ai-configuration";
-import { ContextProjectionService } from "@/lib/services/context-projection-service";
+import { KnowledgeAgentService } from "@/lib/services/agents/knowledge-agent-service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,20 +17,20 @@ const assistantSchema = z.object({
   selectedSectionId: z.string().optional(),
 });
 
-/** 返回引用型 AI 回答；必须登录，未配置或无证据时明确降级，且 AI 永远不会直接保存报告。 */
+/** 返回 Multi-Agent 协作后的引用型回答；必须登录，且 AI 永远不会直接保存报告。 */
 export async function POST(request: Request) {
   try {
     if (!await getAuthenticatedActor()) return json({ error: "AI 助手暂仅对内测用户开放，请先登录", code: "AUTH_REQUIRED" }, { status: 401 });
     const input = assistantSchema.parse(await request.json());
     const configuration = getAiConfigurationStatus();
-    const context = await new ContextProjectionService(getResearchRepository()).project(input);
-    const completion = await getModelProvider().complete(context);
+    const workflow = await new KnowledgeAgentService(getResearchRepository()).run(input);
     return json({
-      status: completion.status === "completed" ? "context_ready" : "degraded",
-      reason: completion.reason,
+      status: workflow.completion.status === "completed" ? "context_ready" : "degraded",
+      reason: workflow.completion.reason,
       configuration,
-      context,
-      answer: completion.answer,
+      context: workflow.context,
+      answer: workflow.answer,
+      workflow: workflow.workflow,
     }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     return errorResponse(error);

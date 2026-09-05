@@ -206,7 +206,7 @@ Internet
 
 ### 8.2 暂缓组件
 
-LangGraph 仅在 V2 的受控研究 Agent 出现多步检索、暂停确认和可恢复任务时启用。Redis、RabbitMQ、Temporal、Kubernetes、Neo4j 和本地 GPU 模型均不属于初版依赖。
+平台级 Multi-Agent 方案、动态派发边界和 LangGraph.js 采用决策见 [Multi-Agent Knowledge Workflow](multi-agent-knowledge-workflow.md)。LangGraph.js 只负责受控任务的状态编排、暂停与恢复，不负责权限或正式数据写入；Redis、RabbitMQ、Temporal、Kubernetes、Neo4j 和本地 GPU 模型均不属于当前初版依赖。
 
 ### 8.3 资源建议
 
