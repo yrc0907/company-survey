@@ -16,6 +16,7 @@
 - 有界 GraphRAG-lite 查询：关系边必须来自 active 来源，深度与返回路径数受限；
 - Context Projection：选区只传选区，检索问题只传当前报告的精简证据和规则；
 - LangGraph.js 驱动的受控 Multi-Agent 助手与持久化 Knowledge Task API，支持 Research/Document/Evidence/Writing/Review/Conflict/Publishing/Memory 动态路由、检查点、租约 Worker、暂停/恢复/取消和 owner 隔离；
+- Publishing Agent 的结果只有在用户显式确认并提供源/目标分支后，才通过 `/api/ai/tasks/[id]/publish` 创建真实 MR；不会自动 Merge。
 - 模型未配置或请求失败时显式降级，不伪造回答；
 - Docker Compose、Caddy Basic Auth、HTTPS 配置和香港 ECS 4C8G 资源限制。
 - 五家冻结企业的独立研究档案：每家均有 Yu 的核心判断、事实/推断/待核验分层、产品/客户/商业模式、竞争、政策、风险、合作与下一步核验问题；研究正文不是单段官网摘要，缺少可靠证据的数值不会被补造。

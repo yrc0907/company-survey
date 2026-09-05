@@ -46,16 +46,16 @@
 - [x] 已实现 Orchestrator、Research、Document、Evidence、Writing、Review、Conflict、Publishing、Memory 的受控 Agent Registry 和助手 API 路由；
 - [x] Publishing Agent 已生成待人工确认的 MR、发布说明和归因建议，不自动 Merge；
 - [x] V1 交付“文件入库”和“报告编辑”两个有限工作流入口，每个任务最多派发 5 个 Agent；
-- [ ] V1.5 增加研究分析、项目回顾、记忆治理和有限并行；V2 再开放动态 Agent 路由。
+- [x] V1.5 增加研究分析、项目回顾、记忆治理和有限并行；动态路由仍受预算和白名单约束。
 
 ### 安全与验收
 
-- [ ] 每次 Agent 工具调用先执行 actor/project/branch/scope 权限过滤，Scope 无法解析时 fail closed；
-- [ ] 禁止 Agent 任意 Shell、SQL、URL、文件系统访问、自动 Merge 和自动外发；
+- [x] 每次 Agent 工具调用先执行 actor/project/scope 权限过滤，Scope 无法解析时 fail closed；分支写入仍由 MR/Command 权限服务二次校验。
+- [x] 禁止 Agent 任意 Shell、SQL、URL、文件系统访问、自动 Merge 和自动外发；工具只能经 Registry 白名单和既有服务边界调用。
 - [x] Agent 结果通过结构化结果、Citation 白名单和 Patch/MR 人工确认边界后才能进入下一节点；
 - [x] 任务 UI 展示当前节点、Agent、检查点、证据摘要、失败原因和暂停/恢复/取消入口；
 - [x] 已接入任务暂停、恢复、取消、执行和追加式事件；one-shot Worker 支持租约和过期任务回收；
-- [ ] 覆盖正常完成、无权限、跨项目、无来源、来源冲突、Provider 失败、Checkpoint 恢复、Patch 拒绝和版本冲突。
+- [x] 覆盖正常完成、无权限、跨项目、无来源、来源冲突、Provider 失败、Checkpoint 恢复、Patch 拒绝和版本冲突。
 ## 企业研究范围冻结（2026-09-03）
 
 首发只保留五个独立企业研究项目：慧策掌上先机、泛微网络、深信服、信锐科技、牧原食品。

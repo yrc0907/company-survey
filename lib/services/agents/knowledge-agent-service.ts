@@ -10,6 +10,12 @@ import { ContextProjectionService } from "@/lib/services/context-projection-serv
 export type KnowledgeAgentName = "research" | "document" | "evidence" | "writing" | "review" | "conflict" | "publishing" | "memory";
 export type KnowledgeToolName = "search_sources" | "read_source" | "query_graph" | "extract_claims" | "validate_citations" | "propose_patch" | "propose_merge_request" | "propose_memory";
 
+export interface KnowledgeAgentAuthorization {
+  actorUserId: string;
+  projectId: string;
+  scope: "current_file" | "current_project";
+}
+
 export interface KnowledgeAgentFinding {
   agent: KnowledgeAgentName;
   status: "completed" | "degraded";
@@ -189,7 +195,8 @@ export class KnowledgeAgentService {
   }
 
   /** 运行一次受限 Multi-Agent 任务，Agent 只产出结构化发现，最终副作用仍由现有领域服务负责。 */
-  public async run(input: KnowledgeAgentInput): Promise<KnowledgeAgentResult> {
+  public async run(input: KnowledgeAgentInput, authorization: KnowledgeAgentAuthorization): Promise<KnowledgeAgentResult> {
+    assertAgentScope(input, authorization);
     const graph = new StateGraph(KnowledgeState)
       .addNode("route", (state: KnowledgeStateValue) => ({ selectedAgents: routeKnowledgeAgents(state.input.question) }))
       .addNode("project_context", async (state: KnowledgeStateValue) => ({ context: await this.projection.project(state.input) }))
@@ -248,4 +255,9 @@ export class KnowledgeAgentService {
     const task = `${state.context.task}\n\n本轮由以下受控 Agent 协作：${JSON.stringify(findings).slice(0, 6_000)}\n请仅基于 evidence、selectedContext 和 graphPaths 作答；需要修改内容时只提出建议，不直接写入。`;
     return this.modelProvider.complete({ ...state.context, task });
   }
+}
+
+function assertAgentScope(input: KnowledgeAgentInput, authorization: KnowledgeAgentAuthorization): void {
+  if (!authorization.actorUserId.trim() || !authorization.projectId.trim() || !input.projectId || input.projectId !== authorization.projectId) throw new Error("Agent Scope 无法确认，已拒绝检索");
+  if (input.scope !== authorization.scope) throw new Error("Agent Scope 与请求范围不一致，已拒绝检索");
 }

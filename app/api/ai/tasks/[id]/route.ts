@@ -5,6 +5,7 @@ import { AuthenticationRequiredError } from "@/lib/domain/platform";
 import { getResearchRepository } from "@/lib/providers/repository-factory";
 import { getKnowledgeTaskRepository } from "@/lib/repositories/agents/repository-factory";
 import { KnowledgeTaskService } from "@/lib/services/agents/knowledge-task-service";
+import { getPlatformRepository } from "@/lib/repositories/platform/platform-repository-factory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 export async function GET(_request: Request, context: { params: { id: string } }) {
   try {
     const actor = await requireAuthenticatedActor();
-    const result = await new KnowledgeTaskService(getKnowledgeTaskRepository(), getResearchRepository()).get(context.params.id, actor.userId);
+    const result = await new KnowledgeTaskService(getKnowledgeTaskRepository(), getResearchRepository(), undefined, getPlatformRepository()).get(context.params.id, actor.userId);
     if (!result) return json({ error: "任务不存在", code: "NOT_FOUND" }, { status: 404 });
     return json(result, { headers: { "cache-control": "no-store" } });
   } catch (error) {
@@ -26,7 +27,7 @@ export async function GET(_request: Request, context: { params: { id: string } }
 export async function DELETE(_request: Request, context: { params: { id: string } }) {
   try {
     const actor = await requireAuthenticatedActor();
-    const task = await new KnowledgeTaskService(getKnowledgeTaskRepository(), getResearchRepository()).cancel(context.params.id, actor.userId);
+    const task = await new KnowledgeTaskService(getKnowledgeTaskRepository(), getResearchRepository(), undefined, getPlatformRepository()).cancel(context.params.id, actor.userId);
     if (!task) return json({ error: "任务不存在", code: "NOT_FOUND" }, { status: 404 });
     return json({ task }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
@@ -40,7 +41,7 @@ export async function PATCH(request: Request, context: { params: { id: string } 
   try {
     const actor = await requireAuthenticatedActor();
     const body = await request.json() as { action?: unknown };
-    const service = new KnowledgeTaskService(getKnowledgeTaskRepository(), getResearchRepository());
+    const service = new KnowledgeTaskService(getKnowledgeTaskRepository(), getResearchRepository(), undefined, getPlatformRepository());
     const task = body.action === "pause"
       ? await service.pause(context.params.id, actor.userId)
       : body.action === "resume"

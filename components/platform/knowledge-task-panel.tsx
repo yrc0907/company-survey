@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import type { KnowledgeTask, KnowledgeTaskEvent } from "@/lib/domain/agents";
 
 interface TaskDetail { task: KnowledgeTask; events: KnowledgeTaskEvent[] }
-interface KnowledgeTaskPanelProps { reportId: string; question: string; authenticated: boolean | null; onRequireLogin: () => void; }
+interface KnowledgeTaskPanelProps { projectId: string; reportId: string; question: string; authenticated: boolean | null; onRequireLogin: () => void; }
 
 /** 任务面板只消费 owner 过滤后的 API；它展示检查点和建议，不把 Agent 结果当成正式知识。 */
-export function KnowledgeTaskPanel({ reportId, question, authenticated, onRequireLogin }: KnowledgeTaskPanelProps) {
+export function KnowledgeTaskPanel({ projectId, reportId, question, authenticated, onRequireLogin }: KnowledgeTaskPanelProps) {
   const [tasks, setTasks] = useState<KnowledgeTask[]>([]);
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -27,7 +27,7 @@ export function KnowledgeTaskPanel({ reportId, question, authenticated, onRequir
     if (!question.trim()) return;
     setLoading(true);
     try {
-      const response = await fetch("/api/ai/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reportId, question, execution: "queue" }) });
+      const response = await fetch("/api/ai/tasks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reportId, projectId, scope: "current_project", question, execution: "queue" }) });
       if (response.ok) { const payload = await response.json() as { task?: KnowledgeTask }; if (payload.task) setTasks((current) => [payload.task!, ...current]); }
     } finally { setLoading(false); }
   }

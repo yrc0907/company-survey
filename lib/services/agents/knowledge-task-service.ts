@@ -6,13 +6,19 @@ import type { KnowledgeTaskRepository } from "@/lib/repositories/agents/knowledg
 import { classifyKnowledgeWorkflow, KnowledgeAgentService, routeKnowledgeAgents } from "@/lib/services/agents/knowledge-agent-service";
 import type { ResearchRepository } from "@/lib/providers/research-repository";
 import type { ModelProvider } from "@/lib/providers/model-provider";
+import type { PlatformRepository } from "@/lib/repositories/platform/platform-repository";
+import { AuthorizationService } from "@/lib/services/platform/authorization-service";
 
 /** 持久化并运行一次知识任务；状态变化和结果都记录为可恢复的任务事件。 */
 export class KnowledgeTaskService {
   private readonly agents: KnowledgeAgentService;
+  private readonly authorization: AuthorizationService | null;
+  private readonly platformRepository: PlatformRepository | null;
 
-  public constructor(private readonly repository: KnowledgeTaskRepository, researchRepository: ResearchRepository, modelProvider?: ModelProvider) {
+  public constructor(private readonly repository: KnowledgeTaskRepository, researchRepository: ResearchRepository, modelProvider?: ModelProvider, platformRepository?: PlatformRepository) {
     this.agents = new KnowledgeAgentService(researchRepository, modelProvider);
+    this.authorization = platformRepository ? new AuthorizationService(platformRepository) : null;
+    this.platformRepository = platformRepository ?? null;
   }
 
   public async createAndRun(input: ContextProjectionInput, ownerUserId: string): Promise<KnowledgeTask> {
@@ -21,6 +27,7 @@ export class KnowledgeTaskService {
   }
 
   public async create(input: ContextProjectionInput, ownerUserId: string): Promise<KnowledgeTask> {
+    await this.assertScope(input, ownerUserId);
     const now = new Date().toISOString();
     const task: KnowledgeTask = {
       id: randomUUID(), ownerUserId, reportId: input.reportId, objective: input.question.trim(), selectedAgents: routeKnowledgeAgents(input.question),
@@ -86,6 +93,7 @@ export class KnowledgeTaskService {
   public async executeClaimed(task: KnowledgeTask, workerId: string): Promise<KnowledgeTask> {
     const input = task.state.input;
     if (task.status !== "running" || task.leaseOwner !== workerId || !input || typeof input !== "object") throw new Error("任务租约或输入状态无效");
+    await this.assertScope(input as ContextProjectionInput, task.ownerUserId);
     if (task.checkpoint?.node === "human_approval" && task.result) return this.resumeFromCheckpoint(task);
     return this.run(task, input as ContextProjectionInput, workerId);
   }
@@ -102,8 +110,9 @@ export class KnowledgeTaskService {
     await this.repository.updateTask(running);
     await this.record(running, "running", { node: running.currentNode, workerId });
     try {
+      await this.assertScope(input, task.ownerUserId);
       await this.saveCheckpoint(running, "project_context", []);
-      const result = await this.agents.run(input);
+      const result = await this.agents.run(input, { actorUserId: task.ownerUserId, projectId: input.projectId ?? "", scope: input.scope ?? "current_project" });
       const latest = await this.repository.getTask(task.id, task.ownerUserId);
       if (latest?.state.control && (latest.state.control as Record<string, unknown>).pauseRequested === true) {
         const paused = { ...latest, status: "paused" as const, currentNode: "human_approval" as const, state: { input, workflow: result.workflow, control: { pauseRequested: false, resumedFrom: "synthesize" } }, checkpoint: { node: "human_approval" as const, completedAgents: result.workflow.selectedAgents, stateVersion: 1, savedAt: new Date().toISOString() }, result: { answer: result.answer, context: result.context }, updatedAt: new Date().toISOString(), leaseOwner: null, leaseExpiresAt: null };
@@ -121,6 +130,14 @@ export class KnowledgeTaskService {
       await this.record(failed, "failed", { error: failed.error });
       return failed;
     }
+  }
+
+  private async assertScope(input: ContextProjectionInput, ownerUserId: string): Promise<void> {
+    if (!this.authorization || !this.platformRepository) return;
+    if (!input.projectId || !input.scope) throw new Error("任务 Scope 无法确认，已拒绝执行");
+    await this.authorization.assertProjectAction({ userId: ownerUserId, role: "user" }, input.projectId, "read_published");
+    const project = await this.platformRepository.getPublicProject(input.projectId);
+    if (!project || project.assistantReportId !== input.reportId) throw new Error("项目与报告 Scope 不匹配，已拒绝执行");
   }
 
   private async saveCheckpoint(task: KnowledgeTask, node: "project_context" | "dispatch_agents" | "synthesize", completedAgents: string[]): Promise<void> {

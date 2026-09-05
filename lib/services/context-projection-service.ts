@@ -7,6 +7,9 @@ import { findReportSnapshot, SearchService } from "@/lib/services/search-service
 /** 允许投影给模型的输入；选区路径永远不做全库检索。 */
 export interface ContextProjectionInput {
   reportId: string;
+  /** AI 任务必须同时携带项目边界；检索实现仍只使用服务端解析后的 reportId。 */
+  projectId?: string;
+  scope?: "current_file" | "current_project";
   question: string;
   selectedText?: string;
   selectedSectionId?: string;
