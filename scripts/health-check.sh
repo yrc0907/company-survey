@@ -20,7 +20,7 @@ usage() {
   --env-file FILE     环境文件路径（默认 .env）
   --url URL           公网基址，例如 https://research.webyrc.com
   --expected-revision SHA
-                      验证 /healthz 的 revision；仅接受 Git 十六进制提交号
+                      验证 /api/healthz 的 revision；仅接受 Git 十六进制提交号
   --skip-external     只检查容器内服务
   -h, --help          显示帮助
 USAGE
@@ -109,9 +109,9 @@ fi
 PUBLIC_URL="${PUBLIC_URL%/}"
 health_payload="$(curl --fail --silent --show-error --max-time 15 \
   --proto '=https' --proto-redir '=https' \
-  "$PUBLIC_URL/healthz")"
+  "$PUBLIC_URL/api/healthz")"
 if [[ -n "$EXPECTED_REVISION" && "$health_payload" != *"\"revision\":\"$EXPECTED_REVISION\""* ]]; then
-  echo "FAIL external revision: 期望 $EXPECTED_REVISION，healthz 未返回匹配 revision" >&2
+  echo "FAIL external revision: 期望 $EXPECTED_REVISION，/api/healthz 未返回匹配 revision" >&2
   exit 1
 fi
-echo "PASS external HTTPS $PUBLIC_URL/healthz"
+echo "PASS external HTTPS $PUBLIC_URL/api/healthz"
